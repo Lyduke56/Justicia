@@ -30,17 +30,17 @@ export function FeaturesSection() {
   ];
 
   return (
-    <section id="features" className="relative py-24 sm:py-32 px-4 sm:px-6 lg:px-12 z-10">
+    <section id="features" className="relative py-24 sm:py-32 px-6 sm:px-8 lg:px-12 bg-[#0d0705] z-10">
       <div className="max-w-7xl mx-auto">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
-          <div className="inline-block px-3 py-1 rounded border border-[#c59341]/40 bg-[#c59341]/10 text-[#c59341] font-cinzel text-xs tracking-[0.2em] uppercase">
+          <div className="inline-block px-3 py-1 rounded border border-[#c5944e]/40 bg-[#c5944e]/10 text-[#c5944e] font-cinzel text-xs tracking-[0.2em] uppercase">
             Platform Capabilities
           </div>
           <h2 className="font-cinzel text-3xl sm:text-4xl md:text-5xl font-bold text-[#ded7cb] tracking-wide">
-            ELEVATING ACCESS TO <span className="text-[#c59341]">JUSTICE</span>
+            ELEVATING ACCESS TO <span className="text-[#c5944e]">JUSTICE</span>
           </h2>
-          <p className="text-[#a49a8d] text-sm sm:text-base font-sans max-w-xl mx-auto">
+          <p className="text-[#a69c8f] text-sm sm:text-base font-sans max-w-xl mx-auto">
             Combining modern artificial intelligence with verified legal authority to protect your constitutional rights.
           </p>
         </div>
@@ -52,17 +52,17 @@ export function FeaturesSection() {
             return (
               <div
                 key={index}
-                className="group relative p-6 sm:p-7 rounded-lg border border-[#3b2a1c]/80 bg-[#120b07]/80 hover:bg-[#1a110a] hover:border-[#c59341]/60 transition-all duration-300 backdrop-blur-sm shadow-xl flex flex-col justify-between"
+                className="group relative p-6 sm:p-7 rounded-lg border border-[#3b2a1c]/80 bg-[#160c0d]/90 hover:bg-[#1f1214] hover:border-[#c5944e]/60 transition-all duration-300 backdrop-blur-sm shadow-2xl flex flex-col justify-between"
               >
                 {/* Corner accent */}
-                <div className="absolute top-2 right-2 w-2 h-2 border-t border-r border-[#c59341]/40 group-hover:border-[#c59341] transition-colors" />
+                <div className="absolute top-2 right-2 w-2 h-2 border-t border-r border-[#c5944e]/40 group-hover:border-[#c5944e] transition-colors" />
 
                 <div>
-                  <div className="w-12 h-12 rounded bg-[#24170d] border border-[#4a3422] flex items-center justify-center text-[#c59341] mb-5 group-hover:scale-110 group-hover:bg-[#c59341]/10 transition-all duration-300">
+                  <div className="w-12 h-12 rounded bg-[#241315] border border-[#4a2b2f] flex items-center justify-center text-[#c5944e] mb-5 group-hover:scale-110 group-hover:bg-[#c5944e]/15 transition-all duration-300">
                     <Icon className="w-6 h-6" />
                   </div>
 
-                  <span className="font-cinzel text-[11px] text-[#c59341] tracking-widest uppercase block mb-1">
+                  <span className="font-cinzel text-[11px] text-[#c5944e] tracking-widest uppercase block mb-1">
                     {feat.latinTag}
                   </span>
 
@@ -75,7 +75,7 @@ export function FeaturesSection() {
                   </p>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-[#291c13] flex items-center justify-between text-xs text-[#c59341] font-cinzel">
+                <div className="mt-6 pt-4 border-t border-[#291719] flex items-center justify-between text-xs text-[#c5944e] font-cinzel">
                   <span className="tracking-wider">Explore</span>
                   <span className="transform group-hover:translate-x-1 transition-transform">→</span>
                 </div>
