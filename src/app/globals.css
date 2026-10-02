@@ -1,8 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0d0805;
+  --foreground: #ded6cb;
+  --gold-primary: #c59341;
+  --gold-light: #dfa856;
+  --gold-dark: #8c6020;
+  --ivory: #ded7cb;
+  --muted-text: #9e9386;
 }
 
 @theme inline {
@@ -10,17 +15,42 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-cinzel: var(--font-cinzel);
+  --font-cormorant: var(--font-cormorant);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #0c0805;
+  color: #ded7cb;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+
+.font-cinzel {
+  font-family: var(--font-cinzel), 'Times New Roman', Georgia, serif;
+}
+
+.font-cormorant {
+  font-family: var(--font-cormorant), 'Times New Roman', Georgia, serif;
+}
+
+/* Custom Scrollbar for luxurious dark aesthetic */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0e0906;
+}
+::-webkit-scrollbar-thumb {
+  background: #35261b;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c59341;
+}
+
+/* Subtle gold text selection */
+::selection {
+  background-color: rgba(197, 147, 65, 0.35);
+  color: #ffffff;
 }
