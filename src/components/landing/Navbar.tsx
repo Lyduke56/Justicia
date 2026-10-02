@@ -7,9 +7,10 @@ import { ScalesLogo } from './LawIcons';
 interface NavbarProps {
   onToggleAssetMode?: () => void;
   isSvgMode?: boolean;
+  onOpenSignIn?: () => void;
 }
 
-export function Navbar({ onToggleAssetMode, isSvgMode }: NavbarProps) {
+export function Navbar({ onToggleAssetMode, isSvgMode, onOpenSignIn }: NavbarProps) {
   const [activeSection, setActiveSection] = useState<'home' | 'features' | 'about'>('home');
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -127,23 +128,25 @@ export function Navbar({ onToggleAssetMode, isSvgMode }: NavbarProps) {
             SIGN UP
           </Link>
 
-          {/* LOG IN Button (Gold Outlined) */}
-          <Link
-            href="/login"
+          {/* LOG IN Button (Gold Outlined) — opens sign-in modal */}
+          <button
+            onClick={onOpenSignIn}
+            id="navbar-login-btn"
             className="font-cinzel text-xs font-bold tracking-[0.15em] border border-[#c59341] text-[#c59341] hover:bg-[#c59341]/10 bg-black/25 backdrop-blur-sm px-5 py-2 rounded transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0 text-center"
           >
             LOG IN
-          </Link>
+          </button>
         </div>
 
         {/* Mobile Hamburger Button */}
         <div className="flex md:hidden items-center gap-2">
-          <Link
-            href="/login"
+          <button
+            onClick={onOpenSignIn}
+            id="navbar-mobile-login-btn"
             className="font-cinzel text-[11px] font-bold tracking-wider border border-[#c59341] text-[#c59341] px-3 py-1.5 rounded"
           >
             LOG IN
-          </Link>
+          </button>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="text-[#c59341] p-2 focus:outline-none"

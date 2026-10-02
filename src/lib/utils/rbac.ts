@@ -10,7 +10,7 @@ export type UserRole = 'client' | 'lawyer' | 'admin';
 
 /** Dashboard routes by role */
 export const ROLE_DASHBOARDS: Record<UserRole, string> = {
-  client: '/dashboard',
+  client: '/client/dashboard',
   lawyer: '/lawyer/dashboard',
   admin: '/admin/dashboard',
 };
@@ -20,7 +20,7 @@ export const PUBLIC_ROUTES = ['/', '/login', '/register', '/verify-email', '/for
 
 /** Route prefixes that require a specific role */
 export const ROLE_ROUTE_PREFIXES: Record<UserRole, string[]> = {
-  client: ['/dashboard', '/ai-assistant', '/legal-research', '/lawyers', '/consultations', '/cases', '/documents', '/messages', '/profile', '/settings'],
+  client: ['/client', '/ai-assistant', '/legal-research', '/lawyers', '/consultations', '/cases', '/documents', '/messages', '/profile', '/settings'],
   lawyer: ['/lawyer'],
   admin: ['/admin'],
 };

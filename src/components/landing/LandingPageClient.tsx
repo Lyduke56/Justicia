@@ -9,9 +9,11 @@ import { FeaturesSection } from './FeaturesSection';
 import { AboutSection } from './AboutSection';
 import { Footer } from './Footer';
 import { BookshelfSvg } from './BookshelfSvg';
+import { SignInModal } from '@/components/auth/SignInModal';
 
 export function LandingPageClient() {
   const [isSvgMode, setIsSvgMode] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
 
   return (
     <div className="relative min-h-screen bg-[#0c0805] text-[#ded7cb] selection:bg-[#c59341]/30 selection:text-white">
@@ -19,6 +21,7 @@ export function LandingPageClient() {
       <Navbar
         isSvgMode={isSvgMode}
         onToggleAssetMode={() => setIsSvgMode(prev => !prev)}
+        onOpenSignIn={() => setSignInOpen(true)}
       />
 
       {/* UPPER SECTION: Bookshelf Library Background (Hero + Motto) */}
@@ -66,6 +69,9 @@ export function LandingPageClient() {
 
       {/* Footer */}
       <Footer />
+
+      {/* Sign In Modal */}
+      <SignInModal isOpen={signInOpen} onClose={() => setSignInOpen(false)} />
     </div>
   );
 }
