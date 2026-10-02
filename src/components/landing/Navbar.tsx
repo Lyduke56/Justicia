@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 interface NavbarProps {
   onOpenSignIn?: () => void;
+  onOpenSignUp?: () => void;
 }
 
 export function Navbar({ onOpenSignIn }: NavbarProps) {

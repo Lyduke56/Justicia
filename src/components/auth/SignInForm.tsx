@@ -33,19 +33,30 @@ function FieldError({ message }: { message?: string }) {
 
 const initialState: AuthState = null;
 
-interface SignInFormProps {
+export interface SignInFormProps {
   /** Called when the modal should close */
   onClose?: () => void;
   /** Called to switch to sign-up flow */
   onSwitchToSignUp?: () => void;
+  /** Called to switch to forgot-password flow */
+  onSwitchToForgotPassword?: () => void;
+  /** Optional redirect URL after sign in */
+  redirectTo?: string;
 }
 
-export function SignInForm({ onClose, onSwitchToSignUp }: SignInFormProps) {
+export function SignInForm({
+  onClose,
+  onSwitchToSignUp,
+  onSwitchToForgotPassword,
+  redirectTo,
+}: SignInFormProps) {
   const [state, formAction, isPending] = useActionState(signInAction, initialState);
   const [showPassword, setShowPassword] = useState(false);
 
   return (
     <form action={formAction} className="space-y-5" noValidate>
+      {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
+
       {/* Global error */}
       {state?.error && !state.field && (
         <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2" role="alert">
@@ -79,13 +90,23 @@ export function SignInForm({ onClose, onSwitchToSignUp }: SignInFormProps) {
           <label htmlFor="password_signin" className="block text-[11px] font-semibold tracking-[0.15em] uppercase text-[#a89a8c]">
             Password
           </label>
-          <Link
-            href="/forgot-password"
-            onClick={onClose}
-            className="text-[11px] text-[#c59341] hover:text-[#d6a54f] transition-colors"
-          >
-            Forgot password?
-          </Link>
+          {onSwitchToForgotPassword ? (
+            <button
+              type="button"
+              onClick={onSwitchToForgotPassword}
+              className="text-[11px] text-[#c59341] hover:text-[#d6a54f] transition-colors"
+            >
+              Forgot password?
+            </button>
+          ) : (
+            <Link
+              href="/forgot-password"
+              onClick={onClose}
+              className="text-[11px] text-[#c59341] hover:text-[#d6a54f] transition-colors"
+            >
+              Forgot password?
+            </Link>
+          )}
         </div>
         <div className="relative">
           <input
