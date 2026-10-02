@@ -19,12 +19,10 @@ export async function proxy(request: NextRequest) {
   if (isPublicRoute(pathname)) {
     // If already authenticated, redirect away from auth pages to their dashboard
     if (user && (pathname === '/login' || pathname === '/register')) {
-      const role = await getUserRole(request, user.id);
-      if (role) {
-        const dashboardUrl = request.nextUrl.clone();
-        dashboardUrl.pathname = getDashboardForRole(role);
-        return NextResponse.redirect(dashboardUrl);
-      }
+      const role = resolveRole(user);
+      const dashboardUrl = request.nextUrl.clone();
+      dashboardUrl.pathname = getDashboardForRole(role);
+      return NextResponse.redirect(dashboardUrl);
     }
     return supabaseResponse;
   }
@@ -37,19 +35,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 4. Fetch the user's role from user_accounts table
-  const role = await getUserRole(request, user.id);
-
-  if (!role) {
-    // Role not found — force logout and redirect to login
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = '/login';
-    return NextResponse.redirect(loginUrl);
-  }
+  // 4. Resolve role: user_accounts table → user_metadata fallback → 'client' default
+  const role = await getUserRole(request, user);
 
   // 5. Check route authorization
   if (!isAuthorizedForRoute(role, pathname)) {
-    // Redirect unauthorized user to their own dashboard
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = getDashboardForRole(role);
     return NextResponse.redirect(dashboardUrl);
@@ -59,13 +49,25 @@ export async function proxy(request: NextRequest) {
 }
 
 /**
- * Fetches the user's role from the user_accounts table.
- * NOTE: This uses a Supabase query inside middleware — keep it lightweight.
+ * Extracts role from JWT user_metadata (no DB call).
+ * Safe because user_metadata is signed by Supabase.
+ */
+function resolveRole(user: { user_metadata?: Record<string, unknown> }): UserRole {
+  const meta = user.user_metadata?.role as string | undefined;
+  if (meta && ['client', 'lawyer', 'admin'].includes(meta)) {
+    return meta as UserRole;
+  }
+  return 'client';
+}
+
+/**
+ * Fetches role from user_accounts table; falls back to JWT metadata then 'client'.
+ * Never returns null — always resolves a valid role for an authenticated user.
  */
 async function getUserRole(
   request: NextRequest,
-  userId: string
-): Promise<UserRole | null> {
+  user: { id: string; user_metadata?: Record<string, unknown> }
+): Promise<UserRole> {
   try {
     const supabase = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -85,13 +87,18 @@ async function getUserRole(
     const { data } = await supabase
       .from('user_accounts')
       .select('role')
-      .eq('id', userId)
+      .eq('id', user.id)
       .single() as { data: { role: string } | null; error: unknown };
 
-    return (data?.role as UserRole) ?? null;
+    if (data?.role && ['client', 'lawyer', 'admin'].includes(data.role)) {
+      return data.role as UserRole;
+    }
   } catch {
-    return null;
+    // Fall through to metadata fallback
   }
+
+  // Fallback: role from JWT user_metadata (set during signUp)
+  return resolveRole(user);
 }
 
 export const config = {
