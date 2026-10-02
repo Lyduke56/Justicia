@@ -16,7 +16,15 @@ export const ROLE_DASHBOARDS: Record<UserRole, string> = {
 };
 
 /** Public routes that do not require authentication */
-export const PUBLIC_ROUTES = ['/', '/login', '/register', '/verify-email', '/forgot-password'];
+export const PUBLIC_ROUTES = [
+  '/',
+  '/login',
+  '/register',
+  '/verify-email',
+  '/forgot-password',
+  '/reset-password',
+  '/auth',
+];
 
 /** Route prefixes that require a specific role */
 export const ROLE_ROUTE_PREFIXES: Record<UserRole, string[]> = {

@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getDashboardForRole, type UserRole } from '@/lib/utils/rbac';
+import { getDashboardForRole, isAuthorizedForRoute, type UserRole } from '@/lib/utils/rbac';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,7 +21,9 @@ export async function signUpAction(
   const fullName = (formData.get('full_name') as string)?.trim();
   const email = (formData.get('email') as string)?.trim().toLowerCase();
   const password = formData.get('password') as string;
+  const confirmPassword = formData.get('confirm_password') as string | null;
   const role = (formData.get('role') as string) ?? 'client';
+  const inModal = formData.get('inModal') === 'true';
 
   // Basic validation
   if (!fullName || fullName.length < 2) {
@@ -32,6 +34,9 @@ export async function signUpAction(
   }
   if (!password || password.length < 8) {
     return { error: 'Password must be at least 8 characters.', field: 'password' };
+  }
+  if (confirmPassword !== null && password !== confirmPassword) {
+    return { error: 'Passwords do not match.', field: 'confirm_password' };
   }
   if (!['client', 'lawyer'].includes(role)) {
     return { error: 'Invalid role selected.', field: 'role' };
@@ -72,6 +77,19 @@ export async function signUpAction(
     );
   }
 
+  // If email confirmation is disabled in Supabase, the user is already logged in
+  if (signUpData?.session) {
+    redirect(getDashboardForRole(role as UserRole));
+  }
+
+  // When used inside a modal, return a friendly confirmation state instead of navigating away
+  if (inModal) {
+    return {
+      success:
+        'Account created successfully! We sent a confirmation link to your email. Please verify your email before logging in.',
+    };
+  }
+
   redirect('/verify-email');
 }
 
@@ -83,6 +101,7 @@ export async function signInAction(
 ): Promise<AuthState> {
   const email = (formData.get('email') as string)?.trim().toLowerCase();
   const password = formData.get('password') as string;
+  const redirectTo = (formData.get('redirectTo') as string)?.trim();
 
   if (!email) return { error: 'Email is required.', field: 'email' };
   if (!password) return { error: 'Password is required.', field: 'password' };
@@ -136,6 +155,10 @@ export async function signInAction(
         );
       }
     }
+  }
+
+  if (redirectTo && isAuthorizedForRoute(resolvedRole, redirectTo)) {
+    redirect(redirectTo);
   }
 
   redirect(getDashboardForRole(resolvedRole));

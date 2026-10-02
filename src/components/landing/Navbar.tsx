@@ -8,9 +8,10 @@ interface NavbarProps {
   onToggleAssetMode?: () => void;
   isSvgMode?: boolean;
   onOpenSignIn?: () => void;
+  onOpenSignUp?: () => void;
 }
 
-export function Navbar({ onToggleAssetMode, isSvgMode, onOpenSignIn }: NavbarProps) {
+export function Navbar({ onToggleAssetMode, isSvgMode, onOpenSignIn, onOpenSignUp }: NavbarProps) {
   const [activeSection, setActiveSection] = useState<'home' | 'features' | 'about'>('home');
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -121,12 +122,23 @@ export function Navbar({ onToggleAssetMode, isSvgMode, onOpenSignIn }: NavbarPro
           )}
 
           {/* SIGN UP Button (Warm Tan/Gold Filled) */}
-          <Link
-            href="/register"
-            className="font-cinzel text-xs font-bold tracking-[0.15em] bg-[#c59341] hover:bg-[#d6a54f] text-[#140c06] px-5 py-2 rounded shadow-md transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0 text-center"
-          >
-            SIGN UP
-          </Link>
+          {onOpenSignUp ? (
+            <button
+              type="button"
+              onClick={onOpenSignUp}
+              id="navbar-signup-btn"
+              className="font-cinzel text-xs font-bold tracking-[0.15em] bg-[#c59341] hover:bg-[#d6a54f] text-[#140c06] px-5 py-2 rounded shadow-md transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0 text-center"
+            >
+              SIGN UP
+            </button>
+          ) : (
+            <Link
+              href="/register"
+              className="font-cinzel text-xs font-bold tracking-[0.15em] bg-[#c59341] hover:bg-[#d6a54f] text-[#140c06] px-5 py-2 rounded shadow-md transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0 text-center"
+            >
+              SIGN UP
+            </Link>
+          )}
 
           {/* LOG IN Button (Gold Outlined) — opens sign-in modal */}
           <button
@@ -208,13 +220,26 @@ export function Navbar({ onToggleAssetMode, isSvgMode, onOpenSignIn }: NavbarPro
                 Rendering Mode: <span className="text-[#c59341] font-semibold">{isSvgMode ? 'SVG Vector' : 'Photorealistic'}</span>
               </button>
             )}
-            <Link
-              href="/register"
-              onClick={() => setMobileMenuOpen(false)}
-              className="font-cinzel text-center text-xs font-bold tracking-[0.15em] bg-[#c59341] text-[#140c06] py-2.5 rounded shadow-md"
-            >
-              SIGN UP
-            </Link>
+            {onOpenSignUp ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenSignUp();
+                }}
+                className="font-cinzel text-center text-xs font-bold tracking-[0.15em] bg-[#c59341] text-[#140c06] py-2.5 rounded shadow-md"
+              >
+                SIGN UP
+              </button>
+            ) : (
+              <Link
+                href="/register"
+                onClick={() => setMobileMenuOpen(false)}
+                className="font-cinzel text-center text-xs font-bold tracking-[0.15em] bg-[#c59341] text-[#140c06] py-2.5 rounded shadow-md"
+              >
+                SIGN UP
+              </Link>
+            )}
           </div>
         </div>
       )}

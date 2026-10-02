@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useActionState, useEffect, useRef, useState } from 'react';
+import React, { useActionState, useState } from 'react';
 import Link from 'next/link';
 import { signUpAction, type AuthState } from '@/app/actions/auth';
-import { ScalesLogo } from '@/components/landing/LawIcons';
 
 function EyeIcon({ open }: { open: boolean }) {
   return open ? (
@@ -34,12 +33,21 @@ function FieldError({ message }: { message?: string }) {
 
 const initialState: AuthState = null;
 
-export function SignUpForm() {
+export interface SignUpFormProps {
+  onClose?: () => void;
+  onSwitchToSignIn?: () => void;
+  inModal?: boolean;
+}
+
+export function SignUpForm({ onClose, onSwitchToSignIn, inModal = false }: SignUpFormProps) {
   const [state, formAction, isPending] = useActionState(signUpAction, initialState);
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [clientError, setClientError] = useState<string | null>(null);
   const [role, setRole] = useState<'client' | 'lawyer'>('client');
   const [passwordStrength, setPasswordStrength] = useState(0);
-  const passwordRef = useRef<HTMLInputElement>(null);
 
   function calcStrength(pw: string): number {
     let score = 0;
@@ -53,12 +61,60 @@ export function SignUpForm() {
   const strengthColors = ['#ef4444', '#f97316', '#eab308', '#22c55e'];
   const strengthLabels = ['Weak', 'Fair', 'Good', 'Strong'];
 
+  function handleFormSubmit(e: React.FormEvent<HTMLFormElement>) {
+    if (password && confirmPassword !== password) {
+      e.preventDefault();
+      setClientError('Passwords do not match.');
+      return;
+    }
+    setClientError(null);
+  }
+
+  // If successfully registered inside modal, show confirmation view
+  if (state?.success) {
+    return (
+      <div className="py-4 text-center space-y-4" role="status">
+        <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-6 h-6">
+            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <h3 className="font-cinzel text-lg font-bold text-[#ded7cb]">Account Created</h3>
+        <p className="text-xs text-[#a89a8c] leading-relaxed max-w-sm mx-auto">
+          {state.success}
+        </p>
+        <div className="pt-2">
+          {onSwitchToSignIn ? (
+            <button
+              type="button"
+              onClick={onSwitchToSignIn}
+              className="w-full font-cinzel text-xs font-bold tracking-[0.15em] uppercase bg-[#c59341] hover:bg-[#d6a54f] text-[#0c0805] py-2.5 rounded-lg transition-all"
+            >
+              Sign In Now
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              onClick={onClose}
+              className="inline-block w-full text-center font-cinzel text-xs font-bold tracking-[0.15em] uppercase bg-[#c59341] hover:bg-[#d6a54f] text-[#0c0805] py-2.5 rounded-lg transition-all"
+            >
+              Sign In Now
+            </Link>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form
       action={formAction}
-      className="space-y-5"
+      onSubmit={handleFormSubmit}
+      className="space-y-4"
       noValidate
     >
+      <input type="hidden" name="inModal" value={inModal ? 'true' : 'false'} />
+
       {/* Global error */}
       {state?.error && !state.field && (
         <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2" role="alert">
@@ -81,7 +137,7 @@ export function SignUpForm() {
           autoComplete="name"
           placeholder="e.g. Juan dela Cruz"
           required
-          className={`w-full bg-[#110a06] border ${state?.field === 'full_name' ? 'border-red-500/60' : 'border-[#3c2a1c]'} rounded-lg px-4 py-2.5 text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`}
+          className={`w-full bg-[#110a06] border ${state?.field === 'full_name' ? 'border-red-500/60' : 'border-[#3c2a1c]'} rounded-lg px-4 py-2 text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`}
         />
         <FieldError message={state?.field === 'full_name' ? state.error : undefined} />
       </div>
@@ -98,7 +154,7 @@ export function SignUpForm() {
           autoComplete="email"
           placeholder="you@example.com"
           required
-          className={`w-full bg-[#110a06] border ${state?.field === 'email' ? 'border-red-500/60' : 'border-[#3c2a1c]'} rounded-lg px-4 py-2.5 text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`}
+          className={`w-full bg-[#110a06] border ${state?.field === 'email' ? 'border-red-500/60' : 'border-[#3c2a1c]'} rounded-lg px-4 py-2 text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`}
         />
         <FieldError message={state?.field === 'email' ? state.error : undefined} />
       </div>
@@ -116,9 +172,14 @@ export function SignUpForm() {
             autoComplete="new-password"
             placeholder="Min. 8 characters"
             required
-            ref={passwordRef}
-            onChange={e => setPasswordStrength(calcStrength(e.target.value))}
-            className={`w-full bg-[#110a06] border ${state?.field === 'password' ? 'border-red-500/60' : 'border-[#3c2a1c]'} rounded-lg px-4 py-2.5 pr-10 text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`}
+            value={password}
+            onChange={e => {
+              const val = e.target.value;
+              setPassword(val);
+              setPasswordStrength(calcStrength(val));
+              if (clientError) setClientError(null);
+            }}
+            className={`w-full bg-[#110a06] border ${state?.field === 'password' ? 'border-red-500/60' : 'border-[#3c2a1c]'} rounded-lg px-4 py-2 pr-10 text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`}
           />
           <button
             type="button"
@@ -130,8 +191,8 @@ export function SignUpForm() {
           </button>
         </div>
         {/* Strength bar */}
-        {passwordRef.current?.value && (
-          <div className="mt-2">
+        {password.length > 0 && (
+          <div className="mt-1.5">
             <div className="flex gap-1">
               {[0, 1, 2, 3].map(i => (
                 <div
@@ -142,13 +203,49 @@ export function SignUpForm() {
               ))}
             </div>
             {passwordStrength > 0 && (
-              <p className="text-[10px] mt-1" style={{ color: strengthColors[passwordStrength - 1] }}>
+              <p className="text-[10px] mt-0.5" style={{ color: strengthColors[passwordStrength - 1] }}>
                 {strengthLabels[passwordStrength - 1]}
               </p>
             )}
           </div>
         )}
         <FieldError message={state?.field === 'password' ? state.error : undefined} />
+      </div>
+
+      {/* Confirm Password */}
+      <div>
+        <label htmlFor="confirm_password_signup" className="block text-[11px] font-semibold tracking-[0.15em] uppercase text-[#a89a8c] mb-1.5">
+          Confirm Password
+        </label>
+        <div className="relative">
+          <input
+            id="confirm_password_signup"
+            name="confirm_password"
+            type={showConfirmPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            placeholder="Re-enter your password"
+            required
+            value={confirmPassword}
+            onChange={e => {
+              setConfirmPassword(e.target.value);
+              if (clientError) setClientError(null);
+            }}
+            className={`w-full bg-[#110a06] border ${
+              state?.field === 'confirm_password' || clientError
+                ? 'border-red-500/60'
+                : 'border-[#3c2a1c]'
+            } rounded-lg px-4 py-2 pr-10 text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`}
+          />
+          <button
+            type="button"
+            onClick={() => setShowConfirmPassword(v => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b5c4c] hover:text-[#c59341] transition-colors"
+            aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+          >
+            <EyeIcon open={showConfirmPassword} />
+          </button>
+        </div>
+        <FieldError message={clientError ?? (state?.field === 'confirm_password' ? state.error : undefined)} />
       </div>
 
       {/* Role selector */}
@@ -163,7 +260,7 @@ export function SignUpForm() {
               key={r}
               type="button"
               onClick={() => setRole(r)}
-              className={`relative rounded-lg border py-3 px-3 text-left transition-all ${
+              className={`relative rounded-lg border py-2.5 px-3 text-left transition-all ${
                 role === r
                   ? 'border-[#c59341]/70 bg-[#c59341]/10 shadow-[0_0_12px_rgba(197,147,65,0.15)]'
                   : 'border-[#3c2a1c] bg-[#110a06] hover:border-[#c59341]/30'
@@ -186,7 +283,7 @@ export function SignUpForm() {
           ))}
         </div>
         {role === 'lawyer' && (
-          <p className="mt-2 text-[10px] text-[#7a6a5a]">
+          <p className="mt-1.5 text-[10px] text-[#7a6a5a]">
             * Lawyer accounts require IBP verification before full access is granted.
           </p>
         )}
@@ -202,9 +299,9 @@ export function SignUpForm() {
         />
         <label htmlFor="terms" className="text-[11px] text-[#7a6a5a] leading-relaxed cursor-pointer">
           I agree to Justicia&apos;s{' '}
-          <Link href="/terms" className="text-[#c59341] hover:underline">Terms of Service</Link>{' '}
+          <Link href="/terms" target="_blank" rel="noopener noreferrer" className="text-[#c59341] hover:underline">Terms of Service</Link>{' '}
           and{' '}
-          <Link href="/privacy" className="text-[#c59341] hover:underline">Privacy Policy</Link>.
+          <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="text-[#c59341] hover:underline">Privacy Policy</Link>.
         </label>
       </div>
 
@@ -213,7 +310,7 @@ export function SignUpForm() {
         type="submit"
         id="signup-submit-btn"
         disabled={isPending}
-        className="w-full font-cinzel text-xs font-bold tracking-[0.2em] uppercase bg-[#c59341] hover:bg-[#d6a54f] disabled:opacity-50 disabled:cursor-not-allowed text-[#0c0805] py-3 rounded-lg transition-all duration-200 shadow-lg shadow-[#c59341]/20 hover:shadow-[#c59341]/30 hover:-translate-y-0.5 active:translate-y-0"
+        className="w-full font-cinzel text-xs font-bold tracking-[0.2em] uppercase bg-[#c59341] hover:bg-[#d6a54f] disabled:opacity-50 disabled:cursor-not-allowed text-[#0c0805] py-2.5 rounded-lg transition-all duration-200 shadow-lg shadow-[#c59341]/20 hover:shadow-[#c59341]/30 hover:-translate-y-0.5 active:translate-y-0"
       >
         {isPending ? (
           <span className="flex items-center justify-center gap-2">
@@ -227,6 +324,24 @@ export function SignUpForm() {
           'Create Account'
         )}
       </button>
+
+      {/* Switch to Sign In */}
+      <p className="text-center text-[11px] text-[#7a6a5a] pt-1">
+        Already have an account?{' '}
+        {onSwitchToSignIn ? (
+          <button
+            type="button"
+            onClick={onSwitchToSignIn}
+            className="text-[#c59341] hover:text-[#d6a54f] transition-colors font-medium"
+          >
+            Sign in
+          </button>
+        ) : (
+          <Link href="/login" onClick={onClose} className="text-[#c59341] hover:text-[#d6a54f] transition-colors font-medium">
+            Sign in
+          </Link>
+        )}
+      </p>
     </form>
   );
 }

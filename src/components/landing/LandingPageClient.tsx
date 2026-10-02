@@ -9,11 +9,17 @@ import { FeaturesSection } from './FeaturesSection';
 import { AboutSection } from './AboutSection';
 import { Footer } from './Footer';
 import { BookshelfSvg } from './BookshelfSvg';
-import { SignInModal } from '@/components/auth/SignInModal';
+import { AuthModal, type AuthMode } from '@/components/auth/AuthModal';
 
 export function LandingPageClient() {
   const [isSvgMode, setIsSvgMode] = useState(false);
-  const [signInOpen, setSignInOpen] = useState(false);
+  const [authModal, setAuthModal] = useState<{
+    isOpen: boolean;
+    mode: AuthMode;
+  }>({
+    isOpen: false,
+    mode: 'signin',
+  });
 
   return (
     <div className="relative min-h-screen bg-[#0c0805] text-[#ded7cb] selection:bg-[#c59341]/30 selection:text-white">
@@ -21,7 +27,8 @@ export function LandingPageClient() {
       <Navbar
         isSvgMode={isSvgMode}
         onToggleAssetMode={() => setIsSvgMode(prev => !prev)}
-        onOpenSignIn={() => setSignInOpen(true)}
+        onOpenSignIn={() => setAuthModal({ isOpen: true, mode: 'signin' })}
+        onOpenSignUp={() => setAuthModal({ isOpen: true, mode: 'signup' })}
       />
 
       {/* UPPER SECTION: Bookshelf Library Background (Hero + Motto) */}
@@ -70,8 +77,12 @@ export function LandingPageClient() {
       {/* Footer */}
       <Footer />
 
-      {/* Sign In Modal */}
-      <SignInModal isOpen={signInOpen} onClose={() => setSignInOpen(false)} />
+      {/* Auth Modal (Sign In / Sign Up / Forgot Password) */}
+      <AuthModal
+        isOpen={authModal.isOpen}
+        initialMode={authModal.mode}
+        onClose={() => setAuthModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
