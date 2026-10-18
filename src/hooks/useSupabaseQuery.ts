@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 interface QueryState<T> {
@@ -11,47 +11,43 @@ interface QueryState<T> {
 /**
  * Generic Supabase query hook for client components.
  * Accepts a query factory function that returns a Supabase query promise.
- *
- * Usage:
- *   const { data, loading } = useSupabaseQuery(
- *     (supabase) => supabase.from('consultations').select('*').eq('client_id', userId)
- *   );
- *
- * TODO: Add real-time subscription support via supabase.channel()
  */
 export function useSupabaseQuery<T>(
   queryFactory: (supabase: ReturnType<typeof createClient>) => Promise<{ data: T | null; error: { message: string } | null }>,
   deps: unknown[] = []
 ): QueryState<T> {
-  const [state, setState] = useState<QueryState<T>>({
-    data: null,
-    loading: true,
-    error: null,
-    refetch: () => {},
-  });
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const queryFactoryRef = useRef(queryFactory);
+  useEffect(() => {
+    queryFactoryRef.current = queryFactory;
+  }, [queryFactory]);
 
   const execute = useCallback(() => {
     const supabase = createClient();
-    setState((prev) => ({ ...prev, loading: true, error: null }));
-
-    queryFactory(supabase).then(({ data, error }) => {
-      setState((prev) => ({
-        ...prev,
-        data: data ?? null,
-        loading: false,
-        error: error?.message ?? null,
-      }));
+    queueMicrotask(() => {
+      setLoading(true);
+      setError(null);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
 
+    queryFactoryRef.current(supabase).then(({ data: resData, error: resError }) => {
+      setData(resData ?? null);
+      setLoading(false);
+      setError(resError?.message ?? null);
+    });
+  }, []);
+
+  const depsKey = JSON.stringify(deps);
   useEffect(() => {
     execute();
-  }, [execute]);
+  }, [execute, depsKey]);
 
-  useEffect(() => {
-    setState((prev) => ({ ...prev, refetch: execute }));
-  }, [execute]);
-
-  return state;
+  return {
+    data,
+    loading,
+    error,
+    refetch: execute,
+  };
 }

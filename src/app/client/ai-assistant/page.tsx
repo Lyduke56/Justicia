@@ -1,37 +1,44 @@
 import type { Metadata } from 'next';
+import { createClient } from '@/lib/supabase/server';
+import { AIAssistantChat } from '@/components/client/AIAssistantChat';
 
-export const metadata: Metadata = { title: 'AI Legal Assistant' };
+export const metadata: Metadata = {
+  title: 'AI Legal Assistant',
+};
 
 /**
- * AI Legal Assistant — Conversation List / New Chat
- *
- * Shows all past AI conversations and allows starting a new one.
- * Each conversation follows the RAG flow:
- *   classify issue → clarifying questions → retrieve legal sources → generate response + citations → disclaimer → escalate?
- *
- * TODO: Fetch conversations list from Supabase (conversations table, user_id = current user)
- * TODO: Show conversation title, last message preview, timestamp
- * TODO: "New conversation" button → creates a row in conversations → navigates to /ai-assistant/[conversationId]
- * TODO: Add search/filter for past conversations
- * TODO: Show escalation badge if conversation was flagged for lawyer referral
+ * AI Legal Assistant Page
+ * Matches Figma design (media_1792247442877.png)
+ * Centered greeting, pill question input with attachments, Philippine legal RAG flow.
  */
-export default function AIAssistantPage() {
-  return (
-    <main className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">AI Legal Assistant</h1>
-        <button className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium" type="button">
-          + New Chat
-        </button>
-      </div>
-      <p className="text-muted-foreground text-sm">
-        Ask any Philippine legal question. Our AI will guide you with relevant laws and jurisprudence.
-      </p>
-      <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
-        🚧 <strong>Scaffold placeholder</strong> — <code>src/app/(client)/ai-assistant/page.tsx</code>
-        <br />
-        TODO: Conversation list from Supabase, new conversation flow
-      </div>
-    </main>
-  );
+export default async function AIAssistantPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let displayName =
+    (user?.user_metadata?.full_name as string) ||
+    user?.email?.split('@')[0] ||
+    'Client';
+
+  if (user) {
+    try {
+      const { data: profile } = await supabase
+        .from('user_accounts')
+        .select('full_name')
+        .eq('id', user.id)
+        .single() as { data: { full_name: string | null } | null };
+
+      if (profile?.full_name) {
+        displayName = profile.full_name;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  const firstName = displayName.trim().split(' ')[0] || displayName;
+
+  return <AIAssistantChat userFirstName={firstName} />;
 }

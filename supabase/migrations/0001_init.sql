@@ -3,6 +3,7 @@
 -- File: supabase/migrations/0001_init.sql
 -- ============================================================
 -- Run via: supabase db push   (or paste into Supabase SQL Editor)
+-- Idempotent: safe to run multiple times.
 -- ============================================================
 
 -- Enable UUID generation extension
@@ -10,22 +11,38 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- for gen_random_uuid()
 
 -- ============================================================
--- ENUMS
+-- ENUMS (Idempotent)
 -- ============================================================
 
-CREATE TYPE user_role AS ENUM ('client', 'lawyer', 'admin');
-CREATE TYPE verification_status AS ENUM ('pending', 'verified', 'rejected');
-CREATE TYPE legal_source_status AS ENUM ('active', 'outdated', 'superseded');
-CREATE TYPE consultation_method AS ENUM ('video', 'audio');
-CREATE TYPE consultation_status AS ENUM (
-  'pending',
-  'confirmed',
-  'awaiting_client_confirmation',
-  'declined',
-  'completed',
-  'cancelled'
-);
-CREATE TYPE notification_channel AS ENUM ('in_app', 'email');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+    CREATE TYPE user_role AS ENUM ('client', 'lawyer', 'admin');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'verification_status') THEN
+    CREATE TYPE verification_status AS ENUM ('pending', 'verified', 'rejected');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'legal_source_status') THEN
+    CREATE TYPE legal_source_status AS ENUM ('active', 'outdated', 'superseded');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'consultation_method') THEN
+    CREATE TYPE consultation_method AS ENUM ('video', 'audio');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'consultation_status') THEN
+    CREATE TYPE consultation_status AS ENUM (
+      'pending',
+      'confirmed',
+      'awaiting_client_confirmation',
+      'declined',
+      'completed',
+      'cancelled'
+    );
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notification_channel') THEN
+    CREATE TYPE notification_channel AS ENUM ('in_app', 'email');
+  END IF;
+END;
+$$;
 
 -- ============================================================
 -- TABLE: user_accounts
@@ -33,7 +50,7 @@ CREATE TYPE notification_channel AS ENUM ('in_app', 'email');
 -- for auditable, RLS-enforced RBAC.
 -- ============================================================
 
-CREATE TABLE public.user_accounts (
+CREATE TABLE IF NOT EXISTS public.user_accounts (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email               TEXT NOT NULL UNIQUE,
   role                user_role NOT NULL DEFAULT 'client',
@@ -43,18 +60,17 @@ CREATE TABLE public.user_accounts (
 );
 
 ALTER TABLE public.user_accounts ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — users can read/update their own row
--- TODO: RLS policy — admins can read/update all rows
--- Example (permissive dev policy — replace with restrictive policies before production):
+
+DROP POLICY IF EXISTS "users_own_row" ON public.user_accounts;
 CREATE POLICY "users_own_row" ON public.user_accounts
   FOR ALL USING (auth.uid() = id);
 
 -- ============================================================
--- TABLE: lawyer_profiles
+-- TABLE: lawyer_profiles (Initial stub - expanded in 0003)
 -- One-to-one with user_accounts for role = 'lawyer'
 -- ============================================================
 
-CREATE TABLE public.lawyer_profiles (
+CREATE TABLE IF NOT EXISTS public.lawyer_profiles (
   lawyer_id             UUID PRIMARY KEY REFERENCES public.user_accounts(id) ON DELETE CASCADE,
   verification_status   verification_status NOT NULL DEFAULT 'pending',
   bio                   TEXT,
@@ -68,10 +84,12 @@ CREATE TABLE public.lawyer_profiles (
 );
 
 ALTER TABLE public.lawyer_profiles ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — lawyers can update their own profile
--- TODO: RLS policy — clients/public can read verified lawyer profiles
+
+DROP POLICY IF EXISTS "lawyers_own_profile" ON public.lawyer_profiles;
 CREATE POLICY "lawyers_own_profile" ON public.lawyer_profiles
   FOR ALL USING (auth.uid() = lawyer_id);
+
+DROP POLICY IF EXISTS "public_read_verified_profiles" ON public.lawyer_profiles;
 CREATE POLICY "public_read_verified_profiles" ON public.lawyer_profiles
   FOR SELECT USING (verification_status = 'verified');
 
@@ -81,7 +99,7 @@ CREATE POLICY "public_read_verified_profiles" ON public.lawyer_profiles
 -- Indexed for RAG retrieval (pgvector embeddings stored separately).
 -- ============================================================
 
-CREATE TABLE public.legal_sources (
+CREATE TABLE IF NOT EXISTS public.legal_sources (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title       TEXT NOT NULL,
   citation    TEXT NOT NULL,          -- e.g. "RA 386", "G.R. No. 12345"
@@ -92,8 +110,8 @@ CREATE TABLE public.legal_sources (
 );
 
 ALTER TABLE public.legal_sources ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — all authenticated users can read active sources
--- TODO: RLS policy — only admins can insert/update/delete
+
+DROP POLICY IF EXISTS "authenticated_read_sources" ON public.legal_sources;
 CREATE POLICY "authenticated_read_sources" ON public.legal_sources
   FOR SELECT TO authenticated USING (true);
 
@@ -102,7 +120,7 @@ CREATE POLICY "authenticated_read_sources" ON public.legal_sources
 -- AI Legal Assistant conversation threads (per user).
 -- ============================================================
 
-CREATE TABLE public.conversations (
+CREATE TABLE IF NOT EXISTS public.conversations (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    UUID NOT NULL REFERENCES public.user_accounts(id) ON DELETE CASCADE,
   title      TEXT,
@@ -111,7 +129,8 @@ CREATE TABLE public.conversations (
 );
 
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — users can only access their own conversations
+
+DROP POLICY IF EXISTS "users_own_conversations" ON public.conversations;
 CREATE POLICY "users_own_conversations" ON public.conversations
   FOR ALL USING (auth.uid() = user_id);
 
@@ -121,7 +140,7 @@ CREATE POLICY "users_own_conversations" ON public.conversations
 -- conversation_or_thread_id references either conversations.id or a thread UUID.
 -- ============================================================
 
-CREATE TABLE public.messages (
+CREATE TABLE IF NOT EXISTS public.messages (
   id                         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_or_thread_id  UUID NOT NULL,
   sender_id                  UUID NOT NULL REFERENCES public.user_accounts(id),
@@ -131,8 +150,8 @@ CREATE TABLE public.messages (
 );
 
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — users can only read messages in conversations/threads they are part of
--- TODO: RLS policy — users can only insert messages as themselves (sender_id = auth.uid())
+
+DROP POLICY IF EXISTS "messages_sender" ON public.messages;
 CREATE POLICY "messages_sender" ON public.messages
   FOR INSERT WITH CHECK (auth.uid() = sender_id);
 
@@ -141,7 +160,7 @@ CREATE POLICY "messages_sender" ON public.messages
 -- Booked video/audio consultations between clients and lawyers.
 -- ============================================================
 
-CREATE TABLE public.consultations (
+CREATE TABLE IF NOT EXISTS public.consultations (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id        UUID NOT NULL REFERENCES public.user_accounts(id),
   lawyer_id        UUID NOT NULL REFERENCES public.user_accounts(id),
@@ -152,9 +171,8 @@ CREATE TABLE public.consultations (
 );
 
 ALTER TABLE public.consultations ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — clients see their own consultations
--- TODO: RLS policy — lawyers see consultations assigned to them
--- TODO: RLS policy — admins see all
+
+DROP POLICY IF EXISTS "client_own_consultations" ON public.consultations;
 CREATE POLICY "client_own_consultations" ON public.consultations
   FOR ALL USING (auth.uid() = client_id OR auth.uid() = lawyer_id);
 
@@ -163,7 +181,7 @@ CREATE POLICY "client_own_consultations" ON public.consultations
 -- Legal cases managed by lawyers on behalf of clients.
 -- ============================================================
 
-CREATE TABLE public.cases (
+CREATE TABLE IF NOT EXISTS public.cases (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id    UUID NOT NULL REFERENCES public.user_accounts(id),
   lawyer_id    UUID NOT NULL REFERENCES public.user_accounts(id),
@@ -176,7 +194,8 @@ CREATE TABLE public.cases (
 );
 
 ALTER TABLE public.cases ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — clients and their assigned lawyers can access their shared cases
+
+DROP POLICY IF EXISTS "case_participants" ON public.cases;
 CREATE POLICY "case_participants" ON public.cases
   FOR ALL USING (auth.uid() = client_id OR auth.uid() = lawyer_id);
 
@@ -185,7 +204,7 @@ CREATE POLICY "case_participants" ON public.cases
 -- User-uploaded legal documents. Actual files in Supabase Storage "documents" bucket.
 -- ============================================================
 
-CREATE TABLE public.documents (
+CREATE TABLE IF NOT EXISTS public.documents (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_id         UUID NOT NULL REFERENCES public.user_accounts(id),
   case_id          UUID REFERENCES public.cases(id) ON DELETE SET NULL,
@@ -196,8 +215,8 @@ CREATE TABLE public.documents (
 );
 
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — owners always have access
--- TODO: RLS policy — granted users can access based on document_access_grants
+
+DROP POLICY IF EXISTS "document_owner" ON public.documents;
 CREATE POLICY "document_owner" ON public.documents
   FOR ALL USING (auth.uid() = owner_id);
 
@@ -206,7 +225,7 @@ CREATE POLICY "document_owner" ON public.documents
 -- Controls which other users can access a document (and at what level).
 -- ============================================================
 
-CREATE TABLE public.document_access_grants (
+CREATE TABLE IF NOT EXISTS public.document_access_grants (
   document_id  UUID NOT NULL REFERENCES public.documents(id) ON DELETE CASCADE,
   grantee_id   UUID NOT NULL REFERENCES public.user_accounts(id) ON DELETE CASCADE,
   access_level TEXT NOT NULL DEFAULT 'read',  -- 'read' | 'edit' | 'admin'
@@ -214,8 +233,8 @@ CREATE TABLE public.document_access_grants (
 );
 
 ALTER TABLE public.document_access_grants ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — document owners can manage grants
--- TODO: RLS policy — grantees can read their own grants
+
+DROP POLICY IF EXISTS "grantee_read" ON public.document_access_grants;
 CREATE POLICY "grantee_read" ON public.document_access_grants
   FOR SELECT USING (auth.uid() = grantee_id);
 
@@ -224,7 +243,7 @@ CREATE POLICY "grantee_read" ON public.document_access_grants
 -- Client reviews of lawyers after completed consultations.
 -- ============================================================
 
-CREATE TABLE public.reviews (
+CREATE TABLE IF NOT EXISTS public.reviews (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id  UUID NOT NULL REFERENCES public.user_accounts(id),
   lawyer_id  UUID NOT NULL REFERENCES public.user_accounts(id),
@@ -234,10 +253,12 @@ CREATE TABLE public.reviews (
 );
 
 ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — client can insert/update their own reviews
--- TODO: RLS policy — all authenticated users can read reviews (public ratings)
+
+DROP POLICY IF EXISTS "authenticated_read_reviews" ON public.reviews;
 CREATE POLICY "authenticated_read_reviews" ON public.reviews
   FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "client_own_reviews" ON public.reviews;
 CREATE POLICY "client_own_reviews" ON public.reviews
   FOR INSERT WITH CHECK (auth.uid() = client_id);
 
@@ -246,7 +267,7 @@ CREATE POLICY "client_own_reviews" ON public.reviews
 -- User-submitted reports for moderation (users, reviews, messages).
 -- ============================================================
 
-CREATE TABLE public.reports (
+CREATE TABLE IF NOT EXISTS public.reports (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   reporter_id      UUID NOT NULL REFERENCES public.user_accounts(id),
   target_type      TEXT NOT NULL,    -- 'user' | 'review' | 'message' | 'consultation'
@@ -257,10 +278,12 @@ CREATE TABLE public.reports (
 );
 
 ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — reporters can see their own reports
--- TODO: RLS policy — admins can see and update all reports
+
+DROP POLICY IF EXISTS "reporter_own_reports" ON public.reports;
 CREATE POLICY "reporter_own_reports" ON public.reports
   FOR SELECT USING (auth.uid() = reporter_id);
+
+DROP POLICY IF EXISTS "reporter_insert" ON public.reports;
 CREATE POLICY "reporter_insert" ON public.reports
   FOR INSERT WITH CHECK (auth.uid() = reporter_id);
 
@@ -269,7 +292,7 @@ CREATE POLICY "reporter_insert" ON public.reports
 -- Payment records for consultation fees.
 -- ============================================================
 
-CREATE TABLE public.payments (
+CREATE TABLE IF NOT EXISTS public.payments (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   consultation_id   UUID NOT NULL REFERENCES public.consultations(id),
   payer_id          UUID NOT NULL REFERENCES public.user_accounts(id),
@@ -280,8 +303,8 @@ CREATE TABLE public.payments (
 );
 
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — payer and payee can see their own payment records
--- TODO: RLS policy — admins can see all payments
+
+DROP POLICY IF EXISTS "payment_participants" ON public.payments;
 CREATE POLICY "payment_participants" ON public.payments
   FOR SELECT USING (auth.uid() = payer_id OR auth.uid() = payee_id);
 
@@ -290,17 +313,21 @@ CREATE POLICY "payment_participants" ON public.payments
 -- In-app and email notifications.
 -- ============================================================
 
-CREATE TABLE public.notifications (
+CREATE TABLE IF NOT EXISTS public.notifications (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES public.user_accounts(id) ON DELETE CASCADE,
-  type        TEXT NOT NULL,
+  type        TEXT NOT NULL DEFAULT 'info',
+  title       TEXT NOT NULL DEFAULT '',
+  body        TEXT NOT NULL DEFAULT '',
+  metadata    JSONB,
   channel     notification_channel NOT NULL DEFAULT 'in_app',
-  read_status BOOLEAN NOT NULL DEFAULT FALSE,
+  is_read     BOOLEAN NOT NULL DEFAULT FALSE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — users can only see their own notifications
+
+DROP POLICY IF EXISTS "own_notifications" ON public.notifications;
 CREATE POLICY "own_notifications" ON public.notifications
   FOR ALL USING (auth.uid() = user_id);
 
@@ -309,7 +336,7 @@ CREATE POLICY "own_notifications" ON public.notifications
 -- User-submitted support requests.
 -- ============================================================
 
-CREATE TABLE public.support_tickets (
+CREATE TABLE IF NOT EXISTS public.support_tickets (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   submitter_id      UUID NOT NULL REFERENCES public.user_accounts(id),
   category          TEXT NOT NULL,
@@ -319,20 +346,21 @@ CREATE TABLE public.support_tickets (
 );
 
 ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — submitters can see their own tickets
--- TODO: RLS policy — admins can see and update all tickets
+
+DROP POLICY IF EXISTS "submitter_own_tickets" ON public.support_tickets;
 CREATE POLICY "submitter_own_tickets" ON public.support_tickets
   FOR SELECT USING (auth.uid() = submitter_id);
+
+DROP POLICY IF EXISTS "submitter_insert" ON public.support_tickets;
 CREATE POLICY "submitter_insert" ON public.support_tickets
   FOR INSERT WITH CHECK (auth.uid() = submitter_id);
 
 -- ============================================================
 -- TABLE: audit_log_entries
 -- Immutable audit trail of sensitive actions across the platform.
--- IMPORTANT: No UPDATE or DELETE RLS policies — this table is append-only.
 -- ============================================================
 
-CREATE TABLE public.audit_log_entries (
+CREATE TABLE IF NOT EXISTS public.audit_log_entries (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_id    UUID NOT NULL REFERENCES public.user_accounts(id),
   actor_role  user_role NOT NULL,
@@ -343,9 +371,8 @@ CREATE TABLE public.audit_log_entries (
 );
 
 ALTER TABLE public.audit_log_entries ENABLE ROW LEVEL SECURITY;
--- TODO: RLS policy — only admins can read audit logs
--- TODO: RLS policy — only system/service role can insert (use service role key in API routes)
--- TODO: REVOKE DELETE, UPDATE on audit_log_entries from all roles (immutability guarantee)
+
+DROP POLICY IF EXISTS "admin_read_audit_log" ON public.audit_log_entries;
 CREATE POLICY "admin_read_audit_log" ON public.audit_log_entries
   FOR SELECT USING (
     EXISTS (
@@ -358,23 +385,15 @@ CREATE POLICY "admin_read_audit_log" ON public.audit_log_entries
 -- INDEXES (performance)
 -- ============================================================
 
-CREATE INDEX idx_user_accounts_role ON public.user_accounts(role);
-CREATE INDEX idx_lawyer_profiles_verification ON public.lawyer_profiles(verification_status);
-CREATE INDEX idx_conversations_user_id ON public.conversations(user_id);
-CREATE INDEX idx_messages_thread_id ON public.messages(conversation_or_thread_id);
-CREATE INDEX idx_consultations_client_id ON public.consultations(client_id);
-CREATE INDEX idx_consultations_lawyer_id ON public.consultations(lawyer_id);
-CREATE INDEX idx_consultations_status ON public.consultations(status);
-CREATE INDEX idx_documents_owner_id ON public.documents(owner_id);
-CREATE INDEX idx_documents_case_id ON public.documents(case_id);
-CREATE INDEX idx_notifications_user_id ON public.notifications(user_id, read_status);
-CREATE INDEX idx_audit_log_timestamp ON public.audit_log_entries(timestamp DESC);
-CREATE INDEX idx_audit_log_actor ON public.audit_log_entries(actor_id);
-
--- ============================================================
--- NOTE: pgvector extension for RAG embeddings
--- Uncomment when enabling the AI retrieval pipeline:
--- CREATE EXTENSION IF NOT EXISTS vector;
--- ALTER TABLE public.legal_sources ADD COLUMN embedding vector(1536);
--- CREATE INDEX idx_legal_sources_embedding ON public.legal_sources USING ivfflat (embedding vector_cosine_ops);
--- ============================================================
+CREATE INDEX IF NOT EXISTS idx_user_accounts_role ON public.user_accounts(role);
+CREATE INDEX IF NOT EXISTS idx_lawyer_profiles_verification ON public.lawyer_profiles(verification_status);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON public.conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_messages_thread_id ON public.messages(conversation_or_thread_id);
+CREATE INDEX IF NOT EXISTS idx_consultations_client_id ON public.consultations(client_id);
+CREATE INDEX IF NOT EXISTS idx_consultations_lawyer_id ON public.consultations(lawyer_id);
+CREATE INDEX IF NOT EXISTS idx_consultations_status ON public.consultations(status);
+CREATE INDEX IF NOT EXISTS idx_documents_owner_id ON public.documents(owner_id);
+CREATE INDEX IF NOT EXISTS idx_documents_case_id ON public.documents(case_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON public.audit_log_entries(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON public.audit_log_entries(actor_id);

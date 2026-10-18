@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 /**
  * AIChatWindow — Client-facing component
  * The chat message display and input area for the AI Legal Assistant.
@@ -54,7 +56,7 @@ export function AIChatWindow({ messages, onSend, isLoading = false }: AIChatWind
               {msg.escalate && (
                 <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 p-2 text-xs text-amber-800">
                   💼 This situation may benefit from professional legal counsel.{' '}
-                  <a href="/lawyers" className="underline font-medium">Connect with a Lawyer</a>
+                  <Link href="/client/lawyers" className="underline font-medium">Connect with a Lawyer</Link>
                 </div>
               )}
             </div>

@@ -15,6 +15,19 @@ export async function proxy(request: NextRequest) {
   // 1. Always refresh the session cookie
   const { supabaseResponse, user } = await updateSession(request);
 
+  // Demo session check (enables viewing Figma mockup experience as 'Clyde')
+  const hasDemoParam = request.nextUrl.searchParams.get('demo') === 'true';
+  const hasDemoCookie = request.cookies.get('justicia_demo_session')?.value === 'true';
+
+  if (hasDemoParam) {
+    const dashboardUrl = request.nextUrl.clone();
+    dashboardUrl.pathname = '/client/dashboard';
+    dashboardUrl.searchParams.delete('demo');
+    const redirectRes = NextResponse.redirect(dashboardUrl);
+    redirectRes.cookies.set('justicia_demo_session', 'true', { path: '/', maxAge: 60 * 60 * 24 });
+    return redirectRes;
+  }
+
   // 2. Allow public routes through without auth checks
   if (isPublicRoute(pathname)) {
     // If already authenticated, redirect away from auth pages to their dashboard
@@ -27,8 +40,16 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // 3. Unauthenticated users → redirect to /login
+  // Allow demo session through for client routes and API routes
+  if (!user && hasDemoCookie && (pathname.startsWith('/client') || pathname.startsWith('/api/'))) {
+    return supabaseResponse;
+  }
+
+  // 3. Unauthenticated users
   if (!user) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';
     loginUrl.searchParams.set('redirectTo', pathname);
