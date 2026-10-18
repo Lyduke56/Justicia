@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { getDashboardForRole, type UserRole } from '@/lib/utils/rbac';
 
@@ -167,4 +168,14 @@ export async function forgotPasswordAction(
     success:
       'If an account exists with that email, you will receive a password reset link shortly.',
   };
+}
+
+// ─── Sign Out ─────────────────────────────────────────────────────────────────
+
+export async function signOutAction(): Promise<void> {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  const cookieStore = await cookies();
+  cookieStore.delete('justicia_demo_session');
+  redirect('/login');
 }

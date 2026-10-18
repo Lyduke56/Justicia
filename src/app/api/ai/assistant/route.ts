@@ -2,24 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classifyLegalIssue, retrieveLegalChunks } from '@/lib/ai/retrieval';
 import { chatCompletion } from '@/lib/ai/llmClient';
 
-/**
- * AI Legal Assistant — RAG Chat Endpoint
- *
- * RAG Pipeline (stubbed):
- *   1. Classify the legal issue category
- *   2. Retrieve relevant legal source chunks (pgvector similarity search)
- *   3. Build a grounded prompt with retrieved context
- *   4. Call LLM for response generation
- *   5. Attach Philippine legal disclaimer
- *   6. Determine if case should be escalated to a lawyer
- *
- * Returns a stable contract so the frontend can be built before the real pipeline is wired in.
- *
- * TODO: Add streaming support (ReadableStream / SSE)
- * TODO: Persist messages to the `messages` table
- * TODO: Rate limiting per user
- * TODO: Auth guard: only authenticated users
- */
 
 interface AssistantRequest {
   conversationId: string;

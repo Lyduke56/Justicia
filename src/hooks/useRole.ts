@@ -25,7 +25,9 @@ export function useRole(): RoleState {
     if (authLoading) return;
 
     if (!user) {
-      setState({ role: null, loading: false });
+      queueMicrotask(() => {
+        setState({ role: null, loading: false });
+      });
       return;
     }
 

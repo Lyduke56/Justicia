@@ -1,35 +1,69 @@
+import React from 'react';
+import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
+import { ClientShell } from '@/components/client/ClientShell';
+
+export const metadata = {
+  title: {
+    template: '%s | Justicia Client Portal',
+    default: 'Client Portal | Justicia',
+  },
+};
+
 /**
- * Client Layout — Dashboard Shell
- *
- * Wraps all client-facing pages with the persistent navigation sidebar/header.
- *
- * TODO: Build ClientNav component with:
- *   - Justicia logo
- *   - Navigation links (Dashboard, AI Assistant, Find a Lawyer, Consultations, Cases, Documents, Messages)
- *   - User avatar / profile menu
- *   - Notification bell
- *   - Language switcher
- * TODO: Add mobile-responsive drawer navigation
- * TODO: Verify user role is 'client' — redirect if not (middleware handles this too)
+ * Client Portal Layout
+ * Authenticates client (or honors demo preview session) and renders persistent navigation shell.
  */
-export default function ClientLayout({ children }: { children: React.ReactNode }) {
+export default async function ClientLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const cookieStore = await cookies();
+  const isDemo = cookieStore.get('justicia_demo_session')?.value === 'true';
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user && !isDemo) {
+    redirect('/login?redirectTo=/client/dashboard');
+  }
+
+  // Resolve user identity
+  const userId = user?.id || 'demo-clyde';
+  const email = user?.email || 'clyde@justicia.ph';
+  let fullName =
+    (user?.user_metadata?.full_name as string) ||
+    (isDemo ? 'Clyde' : user?.email?.split('@')[0] || 'Client');
+
+  if (user) {
+    try {
+      const { data: profile } = await supabase
+        .from('user_accounts')
+        .select('full_name')
+        .eq('id', user.id)
+        .single() as { data: { full_name: string | null } | null };
+
+      if (profile?.full_name) {
+        fullName = profile.full_name;
+      }
+    } catch {
+      // Continue with metadata name
+    }
+  }
+
   return (
-    <div className="flex min-h-screen">
-      {/* TODO: <ClientNav /> */}
-      <aside className="w-64 border-r bg-muted/30 p-4 hidden md:block" aria-label="Client navigation">
-        <div className="text-sm font-bold mb-6">Justicia</div>
-        <nav className="space-y-1 text-sm text-muted-foreground">
-          <div className="px-3 py-2 rounded-lg bg-muted">🚧 ClientNav placeholder</div>
-          <div className="px-3 py-2">Dashboard</div>
-          <div className="px-3 py-2">AI Assistant</div>
-          <div className="px-3 py-2">Find a Lawyer</div>
-          <div className="px-3 py-2">Consultations</div>
-          <div className="px-3 py-2">Cases</div>
-          <div className="px-3 py-2">Documents</div>
-          <div className="px-3 py-2">Messages</div>
-        </nav>
-      </aside>
-      <main className="flex-1 overflow-auto">{children}</main>
-    </div>
+    <ClientShell
+      user={{
+        id: userId,
+        email,
+        fullName,
+      }}
+    >
+      {children}
+    </ClientShell>
   );
 }

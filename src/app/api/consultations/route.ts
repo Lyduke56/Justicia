@@ -18,7 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * TODO: DELETE [consultationId] — cancel (with cancellation policy check)
  */
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
+export async function GET(): Promise<NextResponse> {
   // TODO: Implement
   return NextResponse.json({
     data: [],
