@@ -104,6 +104,9 @@ export default async function FindLawyerPage({ searchParams }: PageProps) {
         totalCount={0}
         page={page}
         pageSize={pageSize}
+        specializationOptions={[]}
+        chapterOptions={[]}
+        languageOptions={[]}
       >
         <EmptyState message="You have no favorites yet. Click the heart icon on a lawyer card to save them here." />
       </FindLawyerLayout>
@@ -158,6 +161,9 @@ export default async function FindLawyerPage({ searchParams }: PageProps) {
         totalCount={0}
         page={page}
         pageSize={pageSize}
+        specializationOptions={[]}
+        chapterOptions={[]}
+        languageOptions={[]}
       >
         <div className="p-8 text-center text-[#7D6855]">
           <p>Unable to load lawyers. Please try again later.</p>
@@ -191,6 +197,9 @@ export default async function FindLawyerPage({ searchParams }: PageProps) {
       totalCount={totalCount}
       page={page}
       pageSize={pageSize}
+      specializationOptions={specializationOptions}
+      chapterOptions={chapterOptions}
+      languageOptions={languageOptions}
     >
       <Suspense fallback={<LawyerGridSkeleton />}>
         <LawyerGrid
@@ -217,6 +226,9 @@ function FindLawyerLayout({
   totalCount,
   page,
   pageSize,
+  specializationOptions = [],
+  chapterOptions = [],
+  languageOptions = [],
 }: {
   children: React.ReactNode;
   user: { id: string } | null;
@@ -231,6 +243,9 @@ function FindLawyerLayout({
   totalCount: number;
   page: number;
   pageSize: number;
+  specializationOptions?: string[];
+  chapterOptions?: string[];
+  languageOptions?: string[];
 }) {
   return (
     <div className="p-5 sm:p-8 max-w-[1400px] mx-auto space-y-5">
@@ -242,6 +257,9 @@ function FindLawyerLayout({
           totalCount={totalCount}
           page={page}
           pageSize={pageSize}
+          specializationOptions={specializationOptions}
+          chapterOptions={chapterOptions}
+          languageOptions={languageOptions}
         />
       </Suspense>
       {children}

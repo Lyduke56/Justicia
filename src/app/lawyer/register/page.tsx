@@ -20,8 +20,14 @@ export default async function LawyerRegisterPage() {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (profile && profile.verification_status !== 'draft') {
-      redirect('/lawyer/verification');
+    if (profile) {
+      if (profile.verification_status === 'approved') {
+        redirect('/lawyer/dashboard');
+      }
+      if (profile.verification_status === 'pending') {
+        redirect('/lawyer/verification');
+      }
+      // If rejected, draft, or needs_resubmission, allow them to view and submit the form again
     }
   }
 
