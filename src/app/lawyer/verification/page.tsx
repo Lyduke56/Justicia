@@ -1,26 +1,55 @@
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Lawyer Verification' };
+import { redirect } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
+import { LawyerVerificationStatus } from '@/components/lawyer/LawyerVerificationStatus';
 
-/**
- * Lawyer Verification — Credential Submission & Status
- * Lawyers must submit credentials for admin review before serving clients.
- * TODO: Show current verification_status (pending / verified / rejected)
- * TODO: Upload form: IBP number, PRC ID, Bar roll number, certificates
- *   → uploads to Supabase Storage "documents" bucket
- *   → updates lawyer_profiles.credentials jsonb
- * TODO: Show rejection reason if status = 'rejected'
- * TODO: Show estimated review timeline
- * TODO: Admin approval triggers email notification (via /api/notifications)
- */
-export default function VerificationPage() {
+export const metadata: Metadata = {
+  title: 'Application Status | Justicia',
+  description: 'Check the status of your Justicia lawyer application.',
+};
+
+export default async function VerificationPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/login?redirectTo=/lawyer/verification');
+  }
+
+  // Fetch account + profile
+  const { data: account } = await supabase
+    .from('user_accounts')
+    .select('email, full_name, role')
+    .eq('id', user.id)
+    .single() as { data: { email: string; full_name: string | null; role: string } | null };
+
+  const { data: profile } = await supabase
+    .from('lawyer_profiles')
+    .select('verification_status, rejection_reason, admin_notes, submitted_at, reviewed_at, full_name')
+    .eq('user_id', user.id)
+    .maybeSingle() as {
+      data: {
+        verification_status: string;
+        rejection_reason: string | null;
+        admin_notes: string | null;
+        submitted_at: string | null;
+        reviewed_at: string | null;
+        full_name: string | null;
+      } | null;
+    };
+
+  // If approved, redirect to dashboard
+  if (profile?.verification_status === 'approved') {
+    redirect('/lawyer/dashboard');
+  }
+
   return (
-    <main className="p-6 space-y-4">
-      <h1 className="text-2xl font-bold">Verification</h1>
-      <p className="text-muted-foreground text-sm">Submit your credentials to become a verified Justicia lawyer.</p>
-      <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
-        🚧 <code>src/app/(lawyer)/verification/page.tsx</code>
-        <br />TODO: Status badge, credential upload form (IBP #, PRC ID, bar roll, certs), rejection notes
-      </div>
-    </main>
+    <LawyerVerificationStatus
+      profile={profile}
+      email={account?.email ?? user.email ?? ''}
+      fullName={profile?.full_name ?? account?.full_name ?? user.user_metadata?.full_name ?? ''}
+    />
   );
 }

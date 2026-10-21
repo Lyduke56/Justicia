@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useCallback, useState, useTransition } from 'react';
 
 interface Filters {
@@ -18,6 +18,9 @@ interface LawyerSearchFiltersProps {
   totalCount: number;
   page: number;
   pageSize: number;
+  specializationOptions?: string[];
+  chapterOptions?: string[];
+  languageOptions?: string[];
 }
 
 const FEE_RANGES = [
@@ -31,9 +34,14 @@ const FEE_RANGES = [
 export function LawyerSearchFilters({
   filters,
   isLoggedIn,
+  specializationOptions = [],
+  chapterOptions = [],
+  languageOptions = [],
 }: LawyerSearchFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const currentSearchParams = useSearchParams();
+  const fromAI = currentSearchParams.get('from') === 'ai';
   const [isPending, startTransition] = useTransition();
   const [localQuery, setLocalQuery] = useState(filters.query);
 
@@ -68,8 +76,38 @@ export function LawyerSearchFilters({
     navigate({ query: localQuery });
   };
 
+  const clearAIFilters = () => {
+    navigate({ specialization: '', chapter: '', languages: [], query: '' });
+  };
+
   return (
     <div className="space-y-3">
+      {/* AI redirect banner */}
+      {fromAI && (filters.specialization || filters.languages.length > 0) && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#E8DAC9] border border-[#C58B3C]/40 text-sm text-[#34150F]">
+          <span className="text-base">⚖️</span>
+          <div className="flex-1">
+            <span className="font-semibold">AI-suggested filters applied: </span>
+            {filters.specialization && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#C58B3C]/15 text-xs font-medium text-[#34150F] border border-[#C58B3C]/30 mr-1">
+                {filters.specialization}
+              </span>
+            )}
+            {filters.languages.map(lang => (
+              <span key={lang} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#C58B3C]/15 text-xs font-medium text-[#34150F] border border-[#C58B3C]/30 mr-1">
+                {lang}
+              </span>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={clearAIFilters}
+            className="text-xs text-[#7D6855] hover:text-[#C58B3C] underline underline-offset-2 transition-colors shrink-0"
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
       {/* Search Bar */}
       <form onSubmit={handleSearch} className="flex gap-2" role="search">
         <input
@@ -110,6 +148,9 @@ export function LawyerSearchFilters({
             aria-label="Filter by specialization"
           >
             <option value="all">All Fields</option>
+            {specializationOptions.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
           </select>
         </div>
 
@@ -125,6 +166,9 @@ export function LawyerSearchFilters({
             aria-label="Filter by IBP chapter"
           >
             <option value="all">All Chapters</option>
+            {chapterOptions.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
           </select>
         </div>
 
@@ -157,6 +201,9 @@ export function LawyerSearchFilters({
             aria-label="Filter by dialect or language"
           >
             <option value="all">All Languages</option>
+            {languageOptions.map(l => (
+              <option key={l} value={l}>{l}</option>
+            ))}
           </select>
         </div>
 

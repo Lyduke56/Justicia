@@ -25,30 +25,130 @@ Rules & Guidelines:
    - Flag whether the situation requires formal representation by a licensed member of the Integrated Bar of the Philippines (IBP).
 3. Always maintain professionalism and clarity.`;
 
+const OFFITOPIC_REJECTION = {
+  text: "I'm Justicia AI, a specialized Philippine legal assistant. I can only help with legal questions — such as labor disputes, family law, contracts, criminal matters, property rights, and more.\n\nPlease ask me a law or case-related question and I'll do my best to assist you.",
+  citations: [],
+  escalate: false,
+  offTopic: true,
+  suggestedFilters: null,
+};
+
+function isOffTopic(query: string): boolean {
+  const lower = query.toLowerCase().trim();
+
+  // Very short queries — let them through
+  if (lower.length < 5) return false;
+
+  // Explicit non-legal topics
+  const offTopicPatterns = [
+    /\b(recipe|cook|food|restaurant|eat|drink|meal|grocery)\b/,
+    /\b(weather|forecast|temperature|rain|sunny)\b/,
+    /\b(sports|game|score|football|basketball|nba|fifa)\b/,
+    /\b(movie|film|series|netflix|tv show|anime|music|song)\b/,
+    /\b(fashion|clothes|outfit|style|shopping|sale|discount)\b/,
+    /\b(joke|funny|meme|humor|laugh)\b/,
+    /\b(math|algebra|calculus|physics|chemistry|biology)\b/,
+    /\b(travel|vacation|trip|hotel|airfare|flight|tour)\b/,
+    /\b(gaming|video game|console|esports)\b/,
+    /\b(crypto(?!graphy)|bitcoin|nft|token(?! fraud))\b/,
+  ];
+
+  // If it matches an off-topic pattern AND has no legal signals, reject
+  const legalSignals = [
+    /\b(law|legal|case|court|judge|lawyer|attorney|rights|contract|sue|file|complaint|crime|criminal|civil|labor|property|lease|estate|marriage|annulment|custody|dismissal|nlrc|dole|barangay|ibp|rpc|ra\s*\d|pd\s*\d)\b/,
+  ];
+
+  const matchesOffTopic = offTopicPatterns.some(p => p.test(lower));
+  const hasLegalSignal = legalSignals.some(p => p.test(lower));
+
+  return matchesOffTopic && !hasLegalSignal;
+}
+
+/**
+ * Extracts suggested lawyer search filters from the AI response.
+ * Returns filter params to pre-populate Find a Lawyer search.
+ */
+function extractSuggestedFilters(text: string, query: string): Record<string, string> | null {
+  const lower = (text + ' ' + query).toLowerCase();
+  const filters: Record<string, string> = {};
+
+  // Practice area detection
+  const practiceAreaMap: Record<string, string[]> = {
+    'Labor & Employment': ['labor', 'dismissal', 'dole', 'nlrc', 'termination', 'employment', 'employee', 'employer', 'retrenchment'],
+    'Family Law': ['marriage', 'annulment', 'divorce', 'custody', 'support', 'family', 'spouse', 'wife', 'husband', 'child'],
+    'Corporate Law': ['corporation', 'company', 'sec', 'incorporation', 'shareholder', 'partnership', 'business'],
+    'Criminal Law': ['crime', 'criminal', 'arrest', 'warrant', 'bail', 'theft', 'estafa', 'homicide', 'murder', 'rape', 'libel'],
+    'Civil Law': ['contract', 'obligation', 'damages', 'breach', 'rescission', 'lease', 'sale', 'debt'],
+    'Real Estate': ['property', 'land', 'title', 'foreclosure', 'ejectment', 'tenancy', 'deed', 'renting'],
+    'Tax Law': ['tax', 'bir', 'vat', 'income tax', 'assessment'],
+    'Intellectual Property': ['trademark', 'patent', 'copyright', 'ip', 'infringement'],
+    'Immigration': ['visa', 'immigration', 'alien', 'deportation', 'citizenship'],
+    'Constitutional Law': ['constitution', 'rights', 'due process', 'equal protection', 'habeas corpus'],
+  };
+
+  for (const [area, keywords] of Object.entries(practiceAreaMap)) {
+    if (keywords.some(kw => lower.includes(kw))) {
+      filters.specialization = area;
+      break;
+    }
+  }
+
+  // Language detection from query
+  const languageMap: Record<string, string[]> = {
+    'Cebuano': ['cebuano', 'bisaya', 'cebu', 'davao', 'visayas'],
+    'Ilocano': ['ilocano', 'ilocos', 'ilocandia'],
+    'Hiligaynon': ['hiligaynon', 'ilonggo', 'iloilo'],
+    'Waray': ['waray', 'samar', 'leyte'],
+  };
+
+  for (const [lang, keywords] of Object.entries(languageMap)) {
+    if (keywords.some(kw => lower.includes(kw))) {
+      filters.lang = lang;
+      break;
+    }
+  }
+
+  return Object.keys(filters).length > 0 ? filters : null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const messages: Message[] = body.messages || [];
+    const attachedDocumentText: string = body.documentText || '';
 
     if (!messages.length) {
       return NextResponse.json({ error: 'Messages are required' }, { status: 400 });
     }
 
     const latestUserMessage = messages[messages.length - 1].content;
+
+    // ── Off-topic guard ───────────────────────────────────────────────────────
+    if (isOffTopic(latestUserMessage)) {
+      return NextResponse.json(OFFITOPIC_REJECTION);
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (apiKey) {
       try {
         const ai = new GoogleGenAI({ apiKey });
 
-        // Build conversational contents
-        const contents = messages.map((m) => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }],
-        }));
+        // Build conversational contents — prepend document text if provided
+        const contents = messages.map((m, idx) => {
+          const isLast = idx === messages.length - 1;
+          const text =
+            isLast && attachedDocumentText
+              ? `[Attached document excerpt]:\n${attachedDocumentText.slice(0, 4000)}\n\n[User question]: ${m.content}`
+              : m.content;
+          return {
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text }],
+          };
+        });
 
         const response = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
           contents,
           config: {
             systemInstruction: PHILIPPINE_LEGAL_SYSTEM_PROMPT,
@@ -58,14 +158,16 @@ export async function POST(request: NextRequest) {
 
         const generatedText = response.text || '';
 
-        // Extract citations dynamically from the response
         const citations = extractPhilippineCitations(generatedText, latestUserMessage);
         const shouldEscalate = checkEscalationNeeds(generatedText, latestUserMessage);
+        const suggestedFilters = extractSuggestedFilters(generatedText, latestUserMessage);
 
         return NextResponse.json({
           text: generatedText,
           citations,
-          escalate: shouldEscalate,
+          escalate: shouldEscalate || Boolean(suggestedFilters),
+          suggestedFilters,
+          offTopic: false,
         });
       } catch (geminiError: unknown) {
         console.error('[Gemini API Error]', geminiError);
@@ -75,7 +177,13 @@ export async function POST(request: NextRequest) {
 
     // Knowledge-base powered fallback if API key is not yet set
     const fallbackResponse = generateLocalLegalResponse(latestUserMessage);
-    return NextResponse.json(fallbackResponse);
+    const suggestedFilters = extractSuggestedFilters(fallbackResponse.text, latestUserMessage);
+    return NextResponse.json({
+      ...fallbackResponse,
+      escalate: fallbackResponse.escalate || Boolean(suggestedFilters),
+      suggestedFilters,
+      offTopic: false,
+    });
   } catch (err: unknown) {
     console.error('Chat API Error:', err);
     return NextResponse.json(
