@@ -15,16 +15,22 @@ export async function proxy(request: NextRequest) {
   // 1. Always refresh the session cookie
   const { supabaseResponse, user } = await updateSession(request);
 
-  // Demo session check (enables viewing Figma mockup experience as 'Clyde')
-  const hasDemoParam = request.nextUrl.searchParams.get('demo') === 'true';
-  const hasDemoCookie = request.cookies.get('justicia_demo_session')?.value === 'true';
+  // Demo session check (enables viewing Figma mockup experience as 'Clyde' or lawyer 'Atty. Santos')
+  const demoParam = request.nextUrl.searchParams.get('demo');
+  const hasDemoParam = demoParam === 'true' || demoParam === 'client' || demoParam === 'lawyer';
+  const demoCookie = request.cookies.get('justicia_demo_session')?.value;
+  const hasDemoCookie = Boolean(demoCookie);
 
   if (hasDemoParam) {
+    const isLawyer = demoParam === 'lawyer' || pathname.startsWith('/lawyer');
+    const roleForDemo = isLawyer ? 'lawyer' : 'client';
+    const targetPath = isLawyer ? '/lawyer/dashboard' : '/client/dashboard';
+
     const dashboardUrl = request.nextUrl.clone();
-    dashboardUrl.pathname = '/client/dashboard';
+    dashboardUrl.pathname = targetPath;
     dashboardUrl.searchParams.delete('demo');
     const redirectRes = NextResponse.redirect(dashboardUrl);
-    redirectRes.cookies.set('justicia_demo_session', 'true', { path: '/', maxAge: 60 * 60 * 24 });
+    redirectRes.cookies.set('justicia_demo_session', roleForDemo, { path: '/', maxAge: 60 * 60 * 24 });
     return redirectRes;
   }
 
@@ -40,8 +46,8 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // Allow demo session through for client routes and API routes
-  if (!user && hasDemoCookie && (pathname.startsWith('/client') || pathname.startsWith('/api/'))) {
+  // Allow demo session through for client routes, lawyer routes, and API routes
+  if (!user && hasDemoCookie && (pathname.startsWith('/client') || pathname.startsWith('/lawyer') || pathname.startsWith('/api/'))) {
     return supabaseResponse;
   }
 

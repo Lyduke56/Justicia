@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { signOutAction } from '@/app/actions/auth';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import {
@@ -10,16 +9,34 @@ import {
   BellIcon,
   UserCircleIcon,
   GearIcon,
-  CalendarBookingIcon,
-  UserGroupIcon,
-  ScaleIcon,
-  ClockIcon,
-  ShieldCheckIcon,
+  DashboardGridIcon,
+  ConsultationChatIcon,
   MessagesIcon,
-  BriefcaseFolderIcon,
-  StarIcon,
+  CalendarGridIcon,
+  ClientDocumentsIcon,
+  UserPersonIcon,
   LogoutIcon,
 } from './LawyerIcons';
+
+import { LawyerDashboardView } from './views/LawyerDashboardView';
+import { LawyerConsultationsView } from './views/LawyerConsultationsView';
+
+export type LawyerViewKey =
+  | 'dashboard'
+  | 'consultations'
+  | 'messages'
+  | 'calendar'
+  | 'documents'
+  | 'profile'
+  | 'settings'
+  | 'other';
+
+interface LawyerNavItem {
+  key: Exclude<LawyerViewKey, 'settings' | 'other'>;
+  name: string;
+  href: string;
+  icon: React.FC<{ className?: string }>;
+}
 
 interface LawyerShellProps {
   user: {
@@ -30,79 +47,103 @@ interface LawyerShellProps {
     ibpChapter?: string;
     isVerified?: boolean;
   };
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
-const LAWYER_NAV_ITEMS = [
-  {
-    name: 'Dashboard',
-    href: '/lawyer/dashboard',
-    icon: HomeIcon,
-  },
-  {
-    name: 'Consultations',
-    href: '/lawyer/consultations',
-    icon: CalendarBookingIcon,
-  },
-  {
-    name: 'My Clients',
-    href: '/lawyer/clients',
-    icon: UserGroupIcon,
-  },
-  {
-    name: 'Active Cases',
-    href: '/lawyer/cases',
-    icon: ScaleIcon,
-  },
-  {
-    name: 'Availability & Rates',
-    href: '/lawyer/availability',
-    icon: ClockIcon,
-  },
-  {
-    name: 'Verification Status',
-    href: '/lawyer/verification',
-    icon: ShieldCheckIcon,
-  },
-  {
-    name: 'Messages',
-    href: '/lawyer/messages',
-    icon: MessagesIcon,
-  },
-  {
-    name: 'Documents',
-    href: '/lawyer/documents',
-    icon: BriefcaseFolderIcon,
-  },
-  {
-    name: 'Client Reviews',
-    href: '/lawyer/reviews',
-    icon: StarIcon,
-  },
+/**
+ * EXACT sidebar sections as designed in Figma mockups:
+ * 1. Lawyer Dashboard
+ * 2. Consultations
+ * 3. Messages
+ * 4. Calendar
+ * 5. Client Documents
+ * 6. Lawyer Profile
+ * ── Divider ──
+ * 7. Settings
+ * 8. Logout
+ */
+const LAWYER_NAV_ITEMS: LawyerNavItem[] = [
+  { key: 'dashboard',      name: 'Lawyer Dashboard',  href: '/lawyer/dashboard',      icon: DashboardGridIcon },
+  { key: 'consultations',  name: 'Consultations',     href: '/lawyer/consultations',  icon: ConsultationChatIcon },
+  { key: 'messages',       name: 'Messages',          href: '/lawyer/messages',       icon: MessagesIcon },
+  { key: 'calendar',       name: 'Calendar',          href: '/lawyer/calendar',       icon: CalendarGridIcon },
+  { key: 'documents',      name: 'Client Documents',  href: '/lawyer/documents',      icon: ClientDocumentsIcon },
+  { key: 'profile',        name: 'Lawyer Profile',    href: '/lawyer/profile',        icon: UserPersonIcon },
 ];
 
+/** Derive LawyerViewKey from the current pathname */
+function pathnameToView(pathname: string): LawyerViewKey {
+  if (pathname === '/lawyer/dashboard') return 'dashboard';
+  if (pathname === '/lawyer/consultations' || pathname.startsWith('/lawyer/consultations/')) return 'consultations';
+  if (pathname === '/lawyer/messages' || pathname.startsWith('/lawyer/messages/')) return 'messages';
+  if (pathname === '/lawyer/calendar' || pathname.startsWith('/lawyer/calendar/') || pathname.startsWith('/lawyer/availability')) return 'calendar';
+  if (pathname === '/lawyer/documents' || pathname.startsWith('/lawyer/documents/')) return 'documents';
+  if (pathname === '/lawyer/profile' || pathname.startsWith('/lawyer/profile/')) return 'profile';
+  if (pathname === '/lawyer/settings' || pathname.startsWith('/lawyer/settings/')) return 'settings';
+  return 'dashboard';
+}
+
 export function LawyerShell({ user, children }: LawyerShellProps) {
-  // Mount 30-min inactivity auto-logout
   useInactivityLogout();
 
+  const router = useRouter();
   const pathname = usePathname();
+
+  const [activeView, setActiveView] = useState<LawyerViewKey>(() => pathnameToView(pathname));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
-  const isCurrentActive = (href: string) => {
-    return pathname === href || (href !== '/lawyer/dashboard' && pathname.startsWith(href));
-  };
+  useEffect(() => {
+    setActiveView(pathnameToView(pathname));
+  }, [pathname]);
+
+  const navigate = useCallback(
+    (key: LawyerViewKey) => {
+      const item = LAWYER_NAV_ITEMS.find((n) => n.key === key);
+      const href = item?.href ?? (key === 'settings' ? '/lawyer/settings' : '/lawyer/dashboard');
+      setActiveView(key);
+      router.push(href, { scroll: false });
+      setMobileMenuOpen(false);
+    },
+    [router]
+  );
+
+  const navigateToDashboard = useCallback(() => {
+    setActiveView('dashboard');
+    router.push('/lawyer/dashboard', { scroll: false });
+  }, [router]);
+
+  function renderView() {
+    switch (activeView) {
+      case 'consultations':
+        return <LawyerConsultationsView />;
+      case 'dashboard':
+        return <LawyerDashboardView />;
+      default:
+        return children ?? <LawyerDashboardView />;
+    }
+  }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#EFE5D8] text-[#34150F] selection:bg-[#C58B3C]/30">
+    /*
+     * Shell layout:
+     *   flex-col h-screen        → fills viewport exactly
+     *   header (shrink-0)        → never scrolls
+     *   flex-row flex-1 min-h-0  → remaining height; min-h-0 prevents flex blowout
+     *     aside (overflow-y-auto)→ locked column, scrollable only if nav items overflow
+     *     main  (overflow-y-auto)→ THE ONLY scrollable zone
+     */
+    <div className="flex flex-col h-screen bg-[#EFE5D8] text-[#34150F] selection:bg-[#C58B3C]/30">
+
       {/* ─── Top Navigation Bar ────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 h-16 w-full bg-[#23150F] border-b border-[#352219] flex items-center justify-between px-4 sm:px-8 shadow-md">
+      <header className="shrink-0 h-16 w-full bg-[#23150F] border-b border-[#352219] flex items-center justify-between px-4 sm:px-8 shadow-md z-40">
         {/* Left: Brand / Logo */}
         <div className="flex items-center gap-3">
-          {/* Mobile hamburger toggle */}
+          {/* Mobile hamburger */}
           <button
             type="button"
+            id="lawyer-mobile-menu-toggle"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="md:hidden text-[#ded7cb] hover:text-[#C58B3C] p-1.5 focus:outline-none"
             aria-label="Toggle navigation menu"
@@ -116,31 +157,36 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
             </svg>
           </button>
 
-          <Link
-            href="/lawyer/dashboard"
+          <button
+            type="button"
+            id="lawyer-nav-logo"
+            onClick={navigateToDashboard}
             className="font-cinzel text-sm sm:text-base tracking-[0.2em] text-[#ded7cb] hover:text-[#C58B3C] transition-colors"
           >
             [LOGO HERE]
-          </Link>
+          </button>
         </div>
 
-        {/* Right: Icons (Home, Bell, Profile) - Settings icon removed */}
+        {/* Right: Icons (Home, Bell, Settings, Profile) - matching Figma header */}
         <div className="flex items-center gap-4 sm:gap-6 text-[#ded7cb]">
-          <Link
-            href="/lawyer/dashboard"
+          <button
+            type="button"
+            id="lawyer-nav-home"
+            onClick={navigateToDashboard}
             className={`p-1.5 rounded-lg transition-colors hover:text-[#C58B3C] ${
-              pathname === '/lawyer/dashboard' ? 'text-[#C58B3C]' : ''
+              activeView === 'dashboard' ? 'text-[#C58B3C]' : ''
             }`}
             title="Dashboard Home"
             aria-label="Dashboard Home"
           >
             <HomeIcon className="w-5 h-5 sm:w-6 sm:h-6" />
-          </Link>
+          </button>
 
           {/* Notifications button */}
           <div className="relative">
             <button
               type="button"
+              id="lawyer-nav-notifications"
               onClick={() => {
                 setNotificationsOpen(!notificationsOpen);
                 setUserDropdownOpen(false);
@@ -174,10 +220,25 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
             )}
           </div>
 
+          {/* Settings shortcut button (as present in Figma header) */}
+          <button
+            type="button"
+            id="lawyer-nav-settings"
+            onClick={() => navigate('settings')}
+            className={`p-1.5 rounded-lg transition-colors hover:text-[#C58B3C] ${
+              activeView === 'settings' ? 'text-[#C58B3C]' : ''
+            }`}
+            title="Account Settings"
+            aria-label="Account Settings"
+          >
+            <GearIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+          </button>
+
           {/* User Profile Avatar / Menu */}
           <div className="relative">
             <button
               type="button"
+              id="lawyer-nav-user-menu"
               onClick={() => {
                 setUserDropdownOpen(!userDropdownOpen);
                 setNotificationsOpen(false);
@@ -204,22 +265,28 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
                   </span>
                 </div>
                 <div className="py-1">
-                  <Link
-                    href="/lawyer/profile"
-                    onClick={() => setUserDropdownOpen(false)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-[#ded7cb] hover:bg-[#3E271D] transition"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigate('profile');
+                      setUserDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[#ded7cb] hover:bg-[#3E271D] transition text-left"
                   >
-                    <UserCircleIcon className="w-4 h-4 text-[#C58B3C]" />
+                    <UserPersonIcon className="w-4 h-4 text-[#C58B3C]" />
                     <span>Public Profile</span>
-                  </Link>
-                  <Link
-                    href="/lawyer/settings"
-                    onClick={() => setUserDropdownOpen(false)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-[#ded7cb] hover:bg-[#3E271D] transition"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigate('settings');
+                      setUserDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[#ded7cb] hover:bg-[#3E271D] transition text-left"
                   >
                     <GearIcon className="w-4 h-4 text-[#C58B3C]" />
                     <span>Account Settings</span>
-                  </Link>
+                  </button>
                 </div>
                 <div className="pt-1 border-t border-[#3E271D]">
                   <form action={signOutAction}>
@@ -238,23 +305,25 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
         </div>
       </header>
 
-      {/* ─── Body Layout: Left Sidebar + Main Content ──────────────────────── */}
-      <div className="flex-1 flex flex-row overflow-hidden relative">
-        {/* Left Sidebar (Desktop) */}
+      {/* ─── Body: Sidebar + Content ─────────────────────────────────────────── */}
+      <div className="flex flex-row flex-1 min-h-0 relative">
+        {/* Desktop Sidebar (Figma Mockup: 6 main items + Divider + Settings + Logout) */}
         <aside
-          className="w-64 shrink-0 bg-[#DECEB8] border-r border-[#D1BEA8] p-5 hidden md:flex flex-col justify-between"
+          className="w-64 shrink-0 bg-[#DECEB8] border-r border-[#D1BEA8] p-5 hidden md:flex flex-col justify-between overflow-y-auto"
           aria-label="Lawyer practice navigation"
         >
           <div className="space-y-6">
             <nav className="space-y-2" aria-label="Main navigation">
               {LAWYER_NAV_ITEMS.map((item) => {
-                const active = isCurrentActive(item.href);
+                const active = activeView === item.key;
                 const Icon = item.icon;
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                  <button
+                    key={item.key}
+                    type="button"
+                    id={`lawyer-sidebar-nav-${item.key}`}
+                    onClick={() => navigate(item.key)}
+                    className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs sm:text-sm font-medium transition-all text-left ${
                       active
                         ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                         : 'text-[#3E2A1E] hover:bg-[#E5D7C5] hover:text-[#34150F]'
@@ -262,7 +331,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
                   >
                     <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-[#C58B3C]' : 'text-[#5C4535]'}`} />
                     <span className="truncate">{item.name}</span>
-                  </Link>
+                  </button>
                 );
               })}
             </nav>
@@ -271,17 +340,19 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
           {/* Bottom Sidebar: Divider + Settings + Logout */}
           <div className="space-y-2 pt-6">
             <hr className="border-[#C8B59E] mb-4" />
-            <Link
-              href="/lawyer/settings"
-              className={`flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
-                isCurrentActive('/lawyer/settings')
+            <button
+              type="button"
+              id="lawyer-sidebar-settings"
+              onClick={() => navigate('settings')}
+              className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all text-left ${
+                activeView === 'settings'
                   ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                   : 'text-[#3E2A1E] hover:bg-[#E5D7C5] hover:text-[#34150F]'
               }`}
             >
               <GearIcon className="w-5 h-5 text-[#5C4535]" />
               <span>Settings</span>
-            </Link>
+            </button>
 
             <form action={signOutAction}>
               <button
@@ -322,14 +393,14 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
 
                 <nav className="space-y-2">
                   {LAWYER_NAV_ITEMS.map((item) => {
-                    const active = isCurrentActive(item.href);
+                    const active = activeView === item.key;
                     const Icon = item.icon;
                     return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setMobileMenuOpen(false)}
-                        className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => navigate(item.key)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-left ${
                           active
                             ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                             : 'text-[#3E2A1E] hover:bg-[#E5D7C5]'
@@ -337,25 +408,25 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
                       >
                         <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-[#C58B3C]' : 'text-[#5C4535]'}`} />
                         <span>{item.name}</span>
-                      </Link>
+                      </button>
                     );
                   })}
                 </nav>
               </div>
 
               <div className="space-y-2 pt-4 border-t border-[#C8B59E]">
-                <Link
-                  href="/lawyer/settings"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-[#3E2A1E] hover:bg-[#E5D7C5]"
+                <button
+                  type="button"
+                  onClick={() => navigate('settings')}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-[#3E2A1E] hover:bg-[#E5D7C5] text-left"
                 >
                   <GearIcon className="w-5 h-5 text-[#5C4535]" />
                   <span>Settings</span>
-                </Link>
+                </button>
                 <form action={signOutAction}>
                   <button
                     type="submit"
-                    className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-[#3E2A1E] hover:text-[#99431E]"
+                    className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-[#3E2A1E] hover:text-[#99431E] text-left"
                   >
                     <LogoutIcon className="w-5 h-5 text-[#5C4535]" />
                     <span>Logout</span>
@@ -366,9 +437,11 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
           </div>
         )}
 
-        {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto bg-[#EFE5D8]">
-          {children}
+        {/* Main Content Viewport */}
+        <main className="flex-1 overflow-y-auto bg-[#ECE1D2]" id="lawyer-main-content">
+          <div key={activeView} className="client-view-enter">
+            {renderView()}
+          </div>
         </main>
       </div>
     </div>

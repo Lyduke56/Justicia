@@ -80,9 +80,9 @@ export function AdminShell({ user, children }: AdminShellProps) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#EFE5D8] text-[#34150F] selection:bg-[#C58B3C]/30">
+    <div className="flex flex-col h-screen bg-[#EFE5D8] text-[#34150F] selection:bg-[#C58B3C]/30">
       {/* ─── Top Navigation Bar ────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 h-16 w-full bg-[#23150F] border-b border-[#352219] flex items-center justify-between px-4 sm:px-8 shadow-md">
+      <header className="shrink-0 h-16 w-full bg-[#23150F] border-b border-[#352219] flex items-center justify-between px-4 sm:px-8 shadow-md z-40">
         {/* Left: Brand / Logo */}
         <div className="flex items-center gap-3">
           {/* Mobile hamburger toggle */}
@@ -211,10 +211,10 @@ export function AdminShell({ user, children }: AdminShellProps) {
       </header>
 
       {/* ─── Body Layout: Left Sidebar + Main Content ──────────────────────── */}
-      <div className="flex-1 flex flex-row overflow-hidden relative">
+      <div className="flex flex-row flex-1 min-h-0 relative">
         {/* Left Sidebar (Desktop) */}
         <aside
-          className="w-64 shrink-0 bg-[#DECEB8] border-r border-[#D1BEA8] p-5 hidden md:flex flex-col justify-between"
+          className="w-64 shrink-0 bg-[#DECEB8] border-r border-[#D1BEA8] p-5 hidden md:flex flex-col justify-between overflow-y-auto"
           aria-label="Admin portal navigation"
         >
           <div className="space-y-6">

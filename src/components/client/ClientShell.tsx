@@ -32,10 +32,11 @@ export type ViewKey =
   | 'lawyers'
   | 'messages'
   | 'cases'
-  | 'consultations';
+  | 'consultations'
+  | 'other';
 
 interface NavItem {
-  key: ViewKey;
+  key: Exclude<ViewKey, 'other'>;
   name: string;
   href: string;
   icon: React.FC<{ className?: string }>;
@@ -66,11 +67,12 @@ function pathnameToView(pathname: string): ViewKey {
       return item.key;
     }
   }
-  return 'dashboard';
+  if (pathname === '/client/dashboard') return 'dashboard';
+  return 'other';
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export function ClientShell({ user }: ClientShellProps) {
+export function ClientShell({ user, children }: ClientShellProps) {
   useInactivityLogout();
 
   const router   = useRouter();
@@ -119,8 +121,10 @@ export function ClientShell({ user }: ClientShellProps) {
         return <CasesView />;
       case 'consultations':
         return <ConsultationsView onNavigate={navigate} />;
-      default:
+      case 'dashboard':
         return <DashboardView firstName={firstName} />;
+      default:
+        return children ?? <DashboardView firstName={firstName} />;
     }
   }
 

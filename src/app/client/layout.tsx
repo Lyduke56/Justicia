@@ -21,7 +21,8 @@ export default async function ClientLayout({
   children: React.ReactNode;
 }) {
   const cookieStore = await cookies();
-  const isDemo = cookieStore.get('justicia_demo_session')?.value === 'true';
+  const demoCookie = cookieStore.get('justicia_demo_session')?.value;
+  const isDemo = demoCookie === 'true' || demoCookie === 'client';
 
   const supabase = await createClient();
   const {
