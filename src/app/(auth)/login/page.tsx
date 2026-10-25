@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { SignInForm } from '@/components/auth/SignInForm';
+import { AuthDemoSwitcher } from '@/components/auth/AuthDemoSwitcher';
 
 export const metadata: Metadata = { title: 'Sign In' };
 
@@ -58,6 +59,8 @@ export default function LoginPage() {
               Sign up
             </Link>
           </p>
+
+          <AuthDemoSwitcher />
         </div>
       </div>
     </div>

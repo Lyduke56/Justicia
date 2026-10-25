@@ -17,14 +17,15 @@ export async function proxy(request: NextRequest) {
 
   // Demo session check (enables viewing Figma mockup experience as 'Clyde' or lawyer 'Atty. Santos')
   const demoParam = request.nextUrl.searchParams.get('demo');
-  const hasDemoParam = demoParam === 'true' || demoParam === 'client' || demoParam === 'lawyer';
+  const hasDemoParam = demoParam === 'true' || demoParam === 'client' || demoParam === 'lawyer' || demoParam === 'admin';
   const demoCookie = request.cookies.get('justicia_demo_session')?.value;
   const hasDemoCookie = Boolean(demoCookie);
 
   if (hasDemoParam) {
     const isLawyer = demoParam === 'lawyer' || pathname.startsWith('/lawyer');
-    const roleForDemo = isLawyer ? 'lawyer' : 'client';
-    const targetPath = isLawyer ? '/lawyer/dashboard' : '/client/dashboard';
+    const isAdmin = demoParam === 'admin' || pathname.startsWith('/admin');
+    const roleForDemo = isAdmin ? 'admin' : isLawyer ? 'lawyer' : 'client';
+    const targetPath = isAdmin ? '/admin/dashboard' : isLawyer ? '/lawyer/dashboard' : '/client/dashboard';
 
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = targetPath;

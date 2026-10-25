@@ -185,12 +185,20 @@ export function AdminShell({ user, children }: AdminShellProps) {
                 </div>
                 <div className="py-1">
                   <Link
+                    href="/admin/profile"
+                    onClick={() => setUserDropdownOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-[#ded7cb] hover:bg-[#3E271D] transition"
+                  >
+                    <UserCircleIcon className="w-4 h-4 text-[#C58B3C]" />
+                    <span>Officer Profile</span>
+                  </Link>
+                  <Link
                     href="/admin/settings"
                     onClick={() => setUserDropdownOpen(false)}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg text-[#ded7cb] hover:bg-[#3E271D] transition"
                   >
                     <GearIcon className="w-4 h-4 text-[#C58B3C]" />
-                    <span>Admin Settings</span>
+                    <span>System Settings</span>
                   </Link>
                 </div>
                 <div className="pt-1 border-t border-[#3E271D]">

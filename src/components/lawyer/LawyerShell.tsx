@@ -20,6 +20,8 @@ import {
 
 import { LawyerDashboardView } from './views/LawyerDashboardView';
 import { LawyerConsultationsView } from './views/LawyerConsultationsView';
+import { LawyerProfileView } from './views/LawyerProfileView';
+import { LawyerSettingsView } from './views/LawyerSettingsView';
 
 export type LawyerViewKey =
   | 'dashboard'
@@ -120,6 +122,19 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
         return <LawyerConsultationsView />;
       case 'dashboard':
         return <LawyerDashboardView />;
+      case 'profile':
+        return (
+          <LawyerProfileView
+            initialData={{
+              fullName: user.fullName,
+              rollNumber: user.rollNumber,
+              ibpChapter: user.ibpChapter,
+              email: user.email,
+            }}
+          />
+        );
+      case 'settings':
+        return <LawyerSettingsView />;
       default:
         return children ?? <LawyerDashboardView />;
     }
