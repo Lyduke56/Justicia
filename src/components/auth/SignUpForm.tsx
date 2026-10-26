@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useActionState, useState } from 'react';
+import React, { useActionState, useRef, useState } from 'react';
 import Link from 'next/link';
 import { signUpAction, type AuthState } from '@/app/actions/auth';
+
+// ─── Icons ────────────────────────────────────────────────────────────────────
 
 function EyeIcon({ open }: { open: boolean }) {
   return open ? (
@@ -19,10 +21,15 @@ function EyeIcon({ open }: { open: boolean }) {
   );
 }
 
-function FieldError({ message }: { message?: string }) {
+function FieldError({ message, variant }: { message?: string; variant: 'dark' | 'neumorphic' }) {
   if (!message) return null;
   return (
-    <p className="mt-1.5 text-[11px] text-red-400 flex items-center gap-1" role="alert">
+    <p
+      className={`mt-1.5 text-[11px] flex items-center gap-1 ${
+        variant === 'neumorphic' ? 'text-red-600' : 'text-red-400'
+      }`}
+      role="alert"
+    >
       <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 flex-shrink-0">
         <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm-.75 4a.75.75 0 0 1 1.5 0v3a.75.75 0 0 1-1.5 0V5zm.75 6.5a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z" />
       </svg>
@@ -31,23 +38,41 @@ function FieldError({ message }: { message?: string }) {
   );
 }
 
+// ─── Style maps ───────────────────────────────────────────────────────────────
+
+const neumorphicInputStyle = {
+  boxShadow: 'inset 3px 3px 6px rgba(125, 90, 55, 0.28), inset -3px -3px 6px rgba(255, 255, 255, 0.88)',
+};
+
+function getInputClass(variant: 'dark' | 'neumorphic', hasError: boolean, withIcon = false) {
+  if (variant === 'neumorphic') {
+    return `w-full bg-[#EACEAA] rounded-[14px] px-4 py-2.5 sm:py-3 ${withIcon ? 'pr-11 ' : ''}text-sm text-[#34150F] placeholder:text-[#9e836f]/60 focus:outline-none focus:ring-1 ${hasError ? 'ring-red-500/60' : 'focus:ring-[#D29D54]/70'} transition-all border-none`;
+  }
+  return `w-full bg-[#110a06] border ${hasError ? 'border-red-500/60' : 'border-[#3c2a1c]'} rounded-lg px-4 py-2.5 ${withIcon ? 'pr-10 ' : ''}text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`;
+}
+
+function getLabelClass(variant: 'dark' | 'neumorphic') {
+  if (variant === 'neumorphic') return 'block text-xs font-medium text-[#6B5344] mb-1.5 pl-0.5 select-none';
+  return 'block text-[11px] font-semibold tracking-[0.15em] uppercase text-[#a89a8c] mb-1.5';
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 const initialState: AuthState = null;
 
 export interface SignUpFormProps {
-  onClose?: () => void;
-  onSwitchToSignIn?: () => void;
-  inModal?: boolean;
+  variant?: 'dark' | 'neumorphic';
 }
 
-export function SignUpForm({ onClose, onSwitchToSignIn, inModal = false }: SignUpFormProps) {
+export function SignUpForm({ variant = 'dark' }: SignUpFormProps) {
   const [state, formAction, isPending] = useActionState(signUpAction, initialState);
-  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [clientError, setClientError] = useState<string | null>(null);
   const [role, setRole] = useState<'client' | 'lawyer'>('client');
-  const [passwordStrength, setPasswordStrength] = useState(0);
+  const [passwordValue, setPasswordValue] = useState('');
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  const isNeumorphic = variant === 'neumorphic';
+  const labelClass = getLabelClass(variant);
 
   function calcStrength(pw: string): number {
     let score = 0;
@@ -58,66 +83,22 @@ export function SignUpForm({ onClose, onSwitchToSignIn, inModal = false }: SignU
     return score;
   }
 
+  const passwordStrength = calcStrength(passwordValue);
   const strengthColors = ['#ef4444', '#f97316', '#eab308', '#22c55e'];
   const strengthLabels = ['Weak', 'Fair', 'Good', 'Strong'];
 
-  function handleFormSubmit(e: React.FormEvent<HTMLFormElement>) {
-    if (password && confirmPassword !== password) {
-      e.preventDefault();
-      setClientError('Passwords do not match.');
-      return;
-    }
-    setClientError(null);
-  }
-
-  // If successfully registered inside modal, show confirmation view
-  if (state?.success) {
-    return (
-      <div className="py-4 text-center space-y-4" role="status">
-        <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-6 h-6">
-            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
-        <h3 className="font-cinzel text-lg font-bold text-[#ded7cb]">Account Created</h3>
-        <p className="text-xs text-[#a89a8c] leading-relaxed max-w-sm mx-auto">
-          {state.success}
-        </p>
-        <div className="pt-2">
-          {onSwitchToSignIn ? (
-            <button
-              type="button"
-              onClick={onSwitchToSignIn}
-              className="w-full font-cinzel text-xs font-bold tracking-[0.15em] uppercase bg-[#c59341] hover:bg-[#d6a54f] text-[#0c0805] py-2.5 rounded-lg transition-all"
-            >
-              Sign In Now
-            </button>
-          ) : (
-            <Link
-              href="/login"
-              onClick={onClose}
-              className="inline-block w-full text-center font-cinzel text-xs font-bold tracking-[0.15em] uppercase bg-[#c59341] hover:bg-[#d6a54f] text-[#0c0805] py-2.5 rounded-lg transition-all"
-            >
-              Sign In Now
-            </Link>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <form
-      action={formAction}
-      onSubmit={handleFormSubmit}
-      className="space-y-4"
-      noValidate
-    >
-      <input type="hidden" name="inModal" value={inModal ? 'true' : 'false'} />
-
+    <form action={formAction} className="space-y-4 sm:space-y-5" noValidate>
       {/* Global error */}
       {state?.error && !state.field && (
-        <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2" role="alert">
+        <div
+          className={`px-4 py-3 rounded-lg flex items-start gap-2 text-sm ${
+            isNeumorphic
+              ? 'bg-red-100 border border-red-300 text-red-700'
+              : 'bg-red-500/10 border border-red-500/30 text-red-400'
+          }`}
+          role="alert"
+        >
           <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 flex-shrink-0 mt-0.5">
             <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm-.75 4a.75.75 0 0 1 1.5 0v3a.75.75 0 0 1-1.5 0V5zm.75 6.5a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z" />
           </svg>
@@ -125,10 +106,10 @@ export function SignUpForm({ onClose, onSwitchToSignIn, inModal = false }: SignU
         </div>
       )}
 
-      {/* Full name */}
+      {/* Full Name */}
       <div>
-        <label htmlFor="full_name" className="block text-[11px] font-semibold tracking-[0.15em] uppercase text-[#a89a8c] mb-1.5">
-          Full Name
+        <label htmlFor="full_name" className={labelClass}>
+          {isNeumorphic ? 'Full Name:' : 'Full Name'}
         </label>
         <input
           id="full_name"
@@ -137,15 +118,16 @@ export function SignUpForm({ onClose, onSwitchToSignIn, inModal = false }: SignU
           autoComplete="name"
           placeholder="e.g. Juan dela Cruz"
           required
-          className={`w-full bg-[#110a06] border ${state?.field === 'full_name' ? 'border-red-500/60' : 'border-[#3c2a1c]'} rounded-lg px-4 py-2 text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`}
+          className={getInputClass(variant, state?.field === 'full_name')}
+          style={isNeumorphic ? neumorphicInputStyle : undefined}
         />
-        <FieldError message={state?.field === 'full_name' ? state.error : undefined} />
+        <FieldError message={state?.field === 'full_name' ? state.error : undefined} variant={variant} />
       </div>
 
       {/* Email */}
       <div>
-        <label htmlFor="email_signup" className="block text-[11px] font-semibold tracking-[0.15em] uppercase text-[#a89a8c] mb-1.5">
-          Email Address
+        <label htmlFor="email_signup" className={labelClass}>
+          {isNeumorphic ? 'Email:' : 'Email Address'}
         </label>
         <input
           id="email_signup"
@@ -154,15 +136,16 @@ export function SignUpForm({ onClose, onSwitchToSignIn, inModal = false }: SignU
           autoComplete="email"
           placeholder="you@example.com"
           required
-          className={`w-full bg-[#110a06] border ${state?.field === 'email' ? 'border-red-500/60' : 'border-[#3c2a1c]'} rounded-lg px-4 py-2 text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`}
+          className={getInputClass(variant, state?.field === 'email')}
+          style={isNeumorphic ? neumorphicInputStyle : undefined}
         />
-        <FieldError message={state?.field === 'email' ? state.error : undefined} />
+        <FieldError message={state?.field === 'email' ? state.error : undefined} variant={variant} />
       </div>
 
       {/* Password */}
       <div>
-        <label htmlFor="password_signup" className="block text-[11px] font-semibold tracking-[0.15em] uppercase text-[#a89a8c] mb-1.5">
-          Password
+        <label htmlFor="password_signup" className={labelClass}>
+          {isNeumorphic ? 'Password:' : 'Password'}
         </label>
         <div className="relative">
           <input
@@ -172,87 +155,54 @@ export function SignUpForm({ onClose, onSwitchToSignIn, inModal = false }: SignU
             autoComplete="new-password"
             placeholder="Min. 8 characters"
             required
-            value={password}
-            onChange={e => {
-              const val = e.target.value;
-              setPassword(val);
-              setPasswordStrength(calcStrength(val));
-              if (clientError) setClientError(null);
-            }}
-            className={`w-full bg-[#110a06] border ${state?.field === 'password' ? 'border-red-500/60' : 'border-[#3c2a1c]'} rounded-lg px-4 py-2 pr-10 text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`}
+            ref={passwordRef}
+            onChange={e => setPasswordValue(e.target.value)}
+            className={getInputClass(variant, state?.field === 'password', true)}
+            style={isNeumorphic ? neumorphicInputStyle : undefined}
           />
           <button
             type="button"
             onClick={() => setShowPassword(v => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b5c4c] hover:text-[#c59341] transition-colors"
+            className={
+              isNeumorphic
+                ? 'absolute right-3.5 top-1/2 -translate-y-1/2 text-[#7A604D] hover:text-[#34150F] transition-colors p-1'
+                : 'absolute right-3 top-1/2 -translate-y-1/2 text-[#6b5c4c] hover:text-[#c59341] transition-colors'
+            }
             aria-label={showPassword ? 'Hide password' : 'Show password'}
           >
             <EyeIcon open={showPassword} />
           </button>
         </div>
-        {/* Strength bar */}
-        {password.length > 0 && (
-          <div className="mt-1.5">
+
+        {/* Strength bar — only shown when typing */}
+        {passwordValue && (
+          <div className="mt-2">
             <div className="flex gap-1">
               {[0, 1, 2, 3].map(i => (
                 <div
                   key={i}
                   className="h-1 flex-1 rounded-full transition-all duration-300"
-                  style={{ background: i < passwordStrength ? strengthColors[passwordStrength - 1] : '#2a1e14' }}
+                  style={{
+                    background: i < passwordStrength
+                      ? strengthColors[passwordStrength - 1]
+                      : isNeumorphic ? '#cbb396' : '#2a1e14',
+                  }}
                 />
               ))}
             </div>
             {passwordStrength > 0 && (
-              <p className="text-[10px] mt-0.5" style={{ color: strengthColors[passwordStrength - 1] }}>
+              <p className="text-[10px] mt-1" style={{ color: strengthColors[passwordStrength - 1] }}>
                 {strengthLabels[passwordStrength - 1]}
               </p>
             )}
           </div>
         )}
-        <FieldError message={state?.field === 'password' ? state.error : undefined} />
-      </div>
-
-      {/* Confirm Password */}
-      <div>
-        <label htmlFor="confirm_password_signup" className="block text-[11px] font-semibold tracking-[0.15em] uppercase text-[#a89a8c] mb-1.5">
-          Confirm Password
-        </label>
-        <div className="relative">
-          <input
-            id="confirm_password_signup"
-            name="confirm_password"
-            type={showConfirmPassword ? 'text' : 'password'}
-            autoComplete="new-password"
-            placeholder="Re-enter your password"
-            required
-            value={confirmPassword}
-            onChange={e => {
-              setConfirmPassword(e.target.value);
-              if (clientError) setClientError(null);
-            }}
-            className={`w-full bg-[#110a06] border ${
-              state?.field === 'confirm_password' || clientError
-                ? 'border-red-500/60'
-                : 'border-[#3c2a1c]'
-            } rounded-lg px-4 py-2 pr-10 text-sm text-[#ded7cb] placeholder:text-[#5c4a3a] focus:outline-none focus:border-[#c59341]/60 focus:ring-1 focus:ring-[#c59341]/20 transition-all`}
-          />
-          <button
-            type="button"
-            onClick={() => setShowConfirmPassword(v => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b5c4c] hover:text-[#c59341] transition-colors"
-            aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
-          >
-            <EyeIcon open={showConfirmPassword} />
-          </button>
-        </div>
-        <FieldError message={clientError ?? (state?.field === 'confirm_password' ? state.error : undefined)} />
+        <FieldError message={state?.field === 'password' ? state.error : undefined} variant={variant} />
       </div>
 
       {/* Role selector */}
       <div>
-        <p className="block text-[11px] font-semibold tracking-[0.15em] uppercase text-[#a89a8c] mb-2">
-          I am joining as a…
-        </p>
+        <p className={labelClass}>I am joining as a…</p>
         <input type="hidden" name="role" value={role} />
         <div className="grid grid-cols-2 gap-2.5">
           {(['client', 'lawyer'] as const).map(r => (
@@ -260,22 +210,35 @@ export function SignUpForm({ onClose, onSwitchToSignIn, inModal = false }: SignU
               key={r}
               type="button"
               onClick={() => setRole(r)}
-              className={`relative rounded-lg border py-2.5 px-3 text-left transition-all ${
-                role === r
-                  ? 'border-[#c59341]/70 bg-[#c59341]/10 shadow-[0_0_12px_rgba(197,147,65,0.15)]'
-                  : 'border-[#3c2a1c] bg-[#110a06] hover:border-[#c59341]/30'
+              className={`relative rounded-[14px] border py-3 px-3 text-left transition-all ${
+                isNeumorphic
+                  ? role === r
+                    ? 'border-[#D29D54]/70 bg-[#D29D54]/10'
+                    : 'border-[#cbb396]/60 bg-[#EACEAA] hover:border-[#D29D54]/40'
+                  : role === r
+                    ? 'border-[#c59341]/70 bg-[#c59341]/10 shadow-[0_0_12px_rgba(197,147,65,0.15)]'
+                    : 'border-[#3c2a1c] bg-[#110a06] hover:border-[#c59341]/30'
               }`}
+              style={isNeumorphic && role !== r ? neumorphicInputStyle : undefined}
             >
-              <div className="font-cinzel text-xs font-bold tracking-[0.12em] uppercase text-[#ded7cb]">
+              <div
+                className={`text-xs font-bold tracking-[0.12em] uppercase ${
+                  isNeumorphic ? 'text-[#34150F]' : 'font-cinzel text-[#ded7cb]'
+                }`}
+              >
                 {r === 'client' ? '⚖ Client' : '📜 Lawyer'}
               </div>
-              <div className="text-[10px] text-[#7a6a5a] mt-0.5">
+              <div className={`text-[10px] mt-0.5 ${isNeumorphic ? 'text-[#7A604D]' : 'text-[#7a6a5a]'}`}>
                 {r === 'client' ? 'Seek legal guidance' : 'Provide legal services'}
               </div>
               {role === r && (
-                <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#c59341] flex items-center justify-center">
+                <span
+                  className={`absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center ${
+                    isNeumorphic ? 'bg-[#D29D54]' : 'bg-[#c59341]'
+                  }`}
+                >
                   <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5">
-                    <path d="M2 6l3 3 5-5" stroke="#0c0805" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </span>
               )}
@@ -283,7 +246,7 @@ export function SignUpForm({ onClose, onSwitchToSignIn, inModal = false }: SignU
           ))}
         </div>
         {role === 'lawyer' && (
-          <p className="mt-1.5 text-[10px] text-[#7a6a5a]">
+          <p className={`mt-2 text-[10px] ${isNeumorphic ? 'text-[#7A604D]' : 'text-[#7a6a5a]'}`}>
             * Lawyer accounts require IBP verification before full access is granted.
           </p>
         )}
@@ -295,53 +258,46 @@ export function SignUpForm({ onClose, onSwitchToSignIn, inModal = false }: SignU
           id="terms"
           type="checkbox"
           required
-          className="mt-0.5 accent-[#c59341] w-3.5 h-3.5 rounded cursor-pointer"
+          className={`mt-0.5 w-3.5 h-3.5 rounded cursor-pointer ${isNeumorphic ? 'accent-[#D29D54]' : 'accent-[#c59341]'}`}
         />
-        <label htmlFor="terms" className="text-[11px] text-[#7a6a5a] leading-relaxed cursor-pointer">
+        <label htmlFor="terms" className={`text-[11px] leading-relaxed cursor-pointer ${isNeumorphic ? 'text-[#7A604D]' : 'text-[#7a6a5a]'}`}>
           I agree to Justicia&apos;s{' '}
-          <Link href="/terms" target="_blank" rel="noopener noreferrer" className="text-[#c59341] hover:underline">Terms of Service</Link>{' '}
+          <Link href="/terms" className={isNeumorphic ? 'text-[#99431E] hover:underline' : 'text-[#c59341] hover:underline'}>
+            Terms of Service
+          </Link>{' '}
           and{' '}
-          <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="text-[#c59341] hover:underline">Privacy Policy</Link>.
+          <Link href="/privacy" className={isNeumorphic ? 'text-[#99431E] hover:underline' : 'text-[#c59341] hover:underline'}>
+            Privacy Policy
+          </Link>
+          .
         </label>
       </div>
 
       {/* Submit */}
-      <button
-        type="submit"
-        id="signup-submit-btn"
-        disabled={isPending}
-        className="w-full font-cinzel text-xs font-bold tracking-[0.2em] uppercase bg-[#c59341] hover:bg-[#d6a54f] disabled:opacity-50 disabled:cursor-not-allowed text-[#0c0805] py-2.5 rounded-lg transition-all duration-200 shadow-lg shadow-[#c59341]/20 hover:shadow-[#c59341]/30 hover:-translate-y-0.5 active:translate-y-0"
-      >
-        {isPending ? (
-          <span className="flex items-center justify-center gap-2">
-            <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3" />
-              <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-            </svg>
-            Creating account…
-          </span>
-        ) : (
-          'Create Account'
-        )}
-      </button>
-
-      {/* Switch to Sign In */}
-      <p className="text-center text-[11px] text-[#7a6a5a] pt-1">
-        Already have an account?{' '}
-        {onSwitchToSignIn ? (
-          <button
-            type="button"
-            onClick={onSwitchToSignIn}
-            className="text-[#c59341] hover:text-[#d6a54f] transition-colors font-medium"
-          >
-            Sign in
-          </button>
-        ) : (
-          <Link href="/login" onClick={onClose} className="text-[#c59341] hover:text-[#d6a54f] transition-colors font-medium">
-            Sign in
-          </Link>
-        )}
-      </p>
+      <div className={isNeumorphic ? 'flex justify-center pt-2' : ''}>
+        <button
+          type="submit"
+          id="signup-submit-btn"
+          disabled={isPending}
+          className={
+            isNeumorphic
+              ? 'w-[230px] sm:w-[240px] bg-[#34150F] hover:bg-[#250e0a] text-[#FAF6F0] text-xs sm:text-sm font-semibold tracking-[0.16em] uppercase py-3.5 px-6 rounded-[14px] shadow-[0_6px_16px_rgba(52,21,15,0.35)] hover:shadow-[0_8px_20px_rgba(52,21,15,0.45)] transition-all duration-200 active:translate-y-0.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+              : 'w-full font-cinzel text-xs font-bold tracking-[0.2em] uppercase bg-[#c59341] hover:bg-[#d6a54f] disabled:opacity-50 disabled:cursor-not-allowed text-[#0c0805] py-3 rounded-lg transition-all duration-200 shadow-lg shadow-[#c59341]/20 hover:shadow-[#c59341]/30 hover:-translate-y-0.5 active:translate-y-0'
+          }
+        >
+          {isPending ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3" />
+                <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+              Creating account…
+            </span>
+          ) : (
+            isNeumorphic ? 'CREATE ACCOUNT' : 'Create Account'
+          )}
+        </button>
+      </div>
     </form>
   );
 }

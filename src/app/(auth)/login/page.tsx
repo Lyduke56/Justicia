@@ -1,63 +1,65 @@
 import type { Metadata } from 'next';
-import { SignInForm } from '@/components/auth/SignInForm';
-import { ScalesLogo } from '@/components/landing/LawIcons';
+import Image from 'next/image';
 import Link from 'next/link';
+import { SignInForm } from '@/components/auth/SignInForm';
 
-export const metadata: Metadata = { title: 'Log In' };
+export const metadata: Metadata = { title: 'Sign In' };
 
 /**
- * Login Page
+ * Login Page — mounts the real SignInForm (Server Action via useActionState)
+ * inside the existing neumorphic split-screen layout.
  *
- * Standalone sign-in page. The Navbar also opens sign-in as a modal,
- * but this page is used when navigating directly to /login.
+ * This is a Server Component; SignInForm is a Client Component.
+ * No 'use client' needed here — Next.js handles the boundary automatically.
  */
 export default function LoginPage() {
   return (
-    <div className="w-full max-w-md">
-      {/* Logo header */}
-      <div className="text-center mb-8">
-        <Link href="/" className="inline-flex items-center justify-center gap-2 mb-4 group">
-          <ScalesLogo className="w-7 h-7 text-[#c59341] group-hover:text-[#d6a54f] transition-colors" />
-          <span className="font-cinzel font-bold tracking-[0.3em] text-[#e6ded2] text-lg group-hover:text-white transition-colors">
-            JUSTICIA
-          </span>
-        </Link>
+    <div className="min-h-screen w-full flex flex-col lg:flex-row">
+      {/* Left Column: Image with Text Overlay */}
+      <div className="relative w-full lg:w-1/2 min-h-[360px] lg:min-h-screen flex flex-col justify-end overflow-hidden">
+        <Image
+          src="/actual_images/gavel.png"
+          alt="Judge with gavel and law book"
+          fill
+          priority
+          sizes="(max-width: 1024px) 100vw, 50vw"
+          className="object-cover object-center filter brightness-90"
+        />
+        {/* Gradient Scrim */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent pointer-events-none" />
 
-        <h1 className="font-cinzel text-2xl font-bold text-[#ded7cb] tracking-wide">
-          Welcome Back
-        </h1>
-        <p className="text-[12px] text-[#7a6a5a] mt-1.5">
-          Sign in to your Justicia account
-        </p>
-
-        {/* Decorative line */}
-        <div className="flex items-center gap-3 mt-5">
-          <div className="flex-1 h-px bg-gradient-to-r from-transparent to-[#3c2a1c]" />
-          <span className="text-[#c59341] text-[10px]">✦</span>
-          <div className="flex-1 h-px bg-gradient-to-l from-transparent to-[#3c2a1c]" />
+        {/* Text Overlay at bottom */}
+        <div className="relative z-10 p-8 sm:p-12 lg:p-16 text-left">
+          <h1 className="font-cormorant text-4xl sm:text-5xl lg:text-[54px] font-medium text-[#FAF6F0] leading-[1.1] tracking-tight">
+            Sign In To <span className="text-[#D29D54]">Justicia</span>
+          </h1>
+          <p className="text-[#ded7cb]/80 text-xs sm:text-sm mt-3 sm:mt-4 max-w-lg leading-relaxed font-light">
+            Welcome back. Access your Philippine legal assistance dashboard, verified attorney consultations, and AI-powered document review.
+          </p>
         </div>
       </div>
 
-      {/* Form card */}
-      <div
-        className="relative rounded-2xl border border-[#3c2a1c] px-7 py-8 shadow-2xl shadow-black/40"
-        style={{
-          background: 'linear-gradient(145deg, #140d07 0%, #0c0805 60%, #110a06 100%)',
-        }}
-      >
-        {/* Gold top border accent */}
-        <div className="absolute left-1/4 right-1/4 -top-px h-px bg-gradient-to-r from-transparent via-[#c59341]/60 to-transparent rounded-full" />
+      {/* Right Column: Form Panel */}
+      <div className="w-full lg:w-1/2 min-h-screen flex items-center justify-center bg-[#EACEAA] p-6 sm:p-10 lg:p-16">
+        <div className="w-full max-w-[440px] mx-auto py-8">
+          <h2 className="font-cormorant text-4xl sm:text-[44px] font-medium text-[#34150F] text-center leading-none mb-8 select-none">
+            Sign In
+          </h2>
 
-        <SignInForm />
+          <SignInForm variant="neumorphic" />
+
+          {/* Sign Up Link */}
+          <p className="text-center text-[11px] text-[#7A604D] pt-4">
+            Don&apos;t have an account?{' '}
+            <Link
+              href="/register"
+              className="text-[#99431E] hover:text-[#34150F] font-semibold underline underline-offset-2 transition-colors"
+            >
+              Sign up
+            </Link>
+          </p>
+        </div>
       </div>
-
-      {/* Sign up link */}
-      <p className="text-center text-[11px] text-[#7a6a5a] mt-5">
-        Don&apos;t have an account?{' '}
-        <Link href="/register" className="text-[#c59341] hover:text-[#d6a54f] transition-colors font-medium">
-          Create one free
-        </Link>
-      </p>
     </div>
   );
 }

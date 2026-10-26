@@ -24,7 +24,7 @@ export function HeroSection() {
         {/* User Specified Overlay: Color #160C0D at 75% */}
         <div
           className="absolute inset-0"
-          style={{ backgroundColor: 'rgba(22, 12, 13, 0.75)' }}
+          style={{ backgroundColor: 'rgba(22, 12, 13, 0.90)' }}
         />
 
         {/* Top Navbar scrim */}

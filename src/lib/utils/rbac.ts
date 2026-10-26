@@ -22,13 +22,17 @@ export const PUBLIC_ROUTES = [
   '/register',
   '/verify-email',
   '/forgot-password',
-  '/reset-password',
-  '/auth',
+  '/auth/callback',       // Supabase email confirmation + password reset code exchange
+  '/auth/reset-password', // Set new password after reset link
+  '/lawyers',             // Public lawyer profiles (/lawyers/[id])
+  '/lawyer/register',     // Lawyer registration flow (account creation + application)
+  '/api/ai/chat',         // AI chat endpoint
+  '/api/ai/assistant',    // AI assistant endpoint
 ];
 
 /** Route prefixes that require a specific role */
 export const ROLE_ROUTE_PREFIXES: Record<UserRole, string[]> = {
-  client: ['/client', '/ai-assistant', '/legal-research', '/lawyers', '/consultations', '/cases', '/documents', '/messages', '/profile', '/settings'],
+  client: ['/client', '/ai-assistant', '/legal-research', '/consultations', '/cases', '/documents', '/messages', '/profile', '/settings'],
   lawyer: ['/lawyer'],
   admin: ['/admin'],
 };

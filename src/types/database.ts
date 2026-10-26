@@ -1,13 +1,12 @@
 /**
- * Supabase Database Types
- *
- * Hand-authored typed schema matching supabase/migrations/0001_init.sql.
- * TODO: Replace with auto-generated types via:
- *   npx supabase gen types typescript --project-id <PROJECT_ID> > src/types/database.ts
+ * Supabase Database Types — extended for lawyer system
+ * Hand-authored. Replace with generated types when ready.
+ *   npx supabase gen types typescript --project-id <ID> > src/types/database.ts
  */
 
 export type UserRole = 'client' | 'lawyer' | 'admin';
 export type VerificationStatus = 'pending' | 'verified' | 'rejected';
+export type LawyerVerificationStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'needs_resubmission';
 export type LegalSourceStatus = 'active' | 'outdated' | 'superseded';
 export type ConsultationMethod = 'video' | 'audio';
 export type ConsultationStatus =
@@ -23,29 +22,140 @@ export type NotificationChannel = 'in_app' | 'email';
 // Row types (what you get back from SELECT)
 // ---------------------------------------------------------------------------
 
-export interface UserAccountRow {
+export type UserAccountRow = {
   id: string;
   email: string;
   role: UserRole;
+  full_name: string | null;
   verification_status: VerificationStatus;
   mfa_enabled: boolean;
   created_at: string;
-}
+};
 
-export interface LawyerProfileRow {
-  lawyer_id: string; // FK -> user_accounts.id
-  verification_status: VerificationStatus;
-  bio: string | null;
+export type LawyerProfileRow = {
+  user_id: string;
+  full_name: string;
+  roll_number: string;
+  ibp_chapter: string | null;
+  about: string | null;
   practice_areas: string[] | null;
-  hourly_rate: number | null;
-  consultation_fees: Record<string, unknown> | null; // jsonb
-  availability_schedule: Record<string, unknown> | null; // jsonb
   languages: string[] | null;
-  location: string | null;
-  credentials: Record<string, unknown> | null; // jsonb
-}
+  experience_years: number | null;
+  photo_url: string | null;
+  is_available: boolean;
+  is_visible: boolean;
+  bar_passer_year: number | null;
+  fee_initial_30min: number | null;
+  fee_standard_60min: number | null;
+  fee_extended_120min: number | null;
+  verification_status: LawyerVerificationStatus;
+  admin_notes: string | null;
+  rejection_reason: string | null;
+  submitted_at: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
-export interface LegalSourceRow {
+export type LawyerPracticeAreaDetailRow = {
+  id: string;
+  lawyer_id: string;
+  area: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type LawyerExperienceRow = {
+  id: string;
+  lawyer_id: string;
+  title: string;
+  organization: string | null;
+  years: string | null;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type LawyerServiceRow = {
+  id: string;
+  lawyer_id: string;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type LawyerEducationRow = {
+  id: string;
+  lawyer_id: string;
+  degree: string;
+  school: string | null;
+  start_year: number | null;
+  end_year: number | null;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type LawyerCaseSummaryRow = {
+  id: string;
+  lawyer_id: string;
+  title: string;
+  practice_area: string | null;
+  year: number | null;
+  anonymized_summary: string;
+  sort_order: number;
+  created_at: string;
+};
+
+export type LawyerVerificationDocumentRow = {
+  id: string;
+  lawyer_id: string;
+  doc_type: string;
+  storage_path: string;
+  uploaded_at: string;
+};
+
+export type NotificationRow = {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  metadata: Record<string, unknown> | null;
+  is_read: boolean;
+  created_at: string;
+};
+
+export type LawyerFavoriteRow = {
+  client_id: string;
+  lawyer_id: string;
+  created_at: string;
+};
+
+export type AuditLogRow = {
+  id: string;
+  actor_id: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  details: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type EmailOutboxDevRow = {
+  id: string;
+  to: string;
+  subject: string;
+  body: string;
+  status: string;
+  error: string | null;
+  created_at: string;
+};
+
+export type LegalSourceRow = {
   id: string;
   title: string;
   citation: string;
@@ -53,119 +163,68 @@ export interface LegalSourceRow {
   status: LegalSourceStatus;
   version: string | null;
   indexed_at: string;
-}
+  content: string | null;
+};
 
-export interface ConversationRow {
+export type ConversationRow = {
   id: string;
-  user_id: string; // FK -> user_accounts.id
+  user_id: string;
   title: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface MessageRow {
+export type MessageRow = {
   id: string;
   conversation_or_thread_id: string;
-  sender_id: string; // FK -> user_accounts.id
+  sender_id: string;
   content: string;
   attachment_ids: string[] | null;
   sent_at: string;
-}
+  role: string | null;
+  citations: Record<string, unknown>[] | null;
+};
 
-export interface ConsultationRow {
+export type ConsultationRow = {
   id: string;
-  client_id: string; // FK -> user_accounts.id
-  lawyer_id: string; // FK -> user_accounts.id
+  client_id: string;
+  lawyer_id: string;
   scheduled_time: string;
   method: ConsultationMethod;
   status: ConsultationStatus;
   concern_summary: string | null;
-}
+};
 
-export interface CaseRow {
+export type CaseRow = {
   id: string;
-  client_id: string; // FK -> user_accounts.id
-  lawyer_id: string; // FK -> user_accounts.id
+  client_id: string;
+  lawyer_id: string;
   title: string;
   gr_number: string | null;
   text_content: string | null;
-  citations: Record<string, unknown> | null; // jsonb
+  citations: Record<string, unknown> | null;
   version_tag: string | null;
   status: string;
-}
+};
 
-export interface DocumentRow {
+export type DocumentRow = {
   id: string;
-  owner_id: string; // FK -> user_accounts.id
-  case_id: string | null; // FK -> cases.id (nullable)
+  owner_id: string;
+  case_id: string | null;
   filename: string;
   version: number;
   visibility_scope: string;
   uploaded_at: string;
-}
+};
 
-export interface DocumentAccessGrantRow {
-  document_id: string; // FK -> documents.id
-  grantee_id: string; // FK -> user_accounts.id
-  access_level: string;
-}
-
-export interface ReviewRow {
+export type ReviewRow = {
   id: string;
-  client_id: string; // FK -> user_accounts.id
-  lawyer_id: string; // FK -> user_accounts.id
+  client_id: string;
+  lawyer_id: string;
   rating: number;
   comment: string | null;
   created_at: string;
-}
-
-export interface ReportRow {
-  id: string;
-  reporter_id: string; // FK -> user_accounts.id
-  target_type: string;
-  target_id: string;
-  reason: string;
-  status: string;
-  resolution_notes: string | null;
-}
-
-export interface PaymentRow {
-  id: string;
-  consultation_id: string; // FK -> consultations.id
-  payer_id: string; // FK -> user_accounts.id
-  payee_id: string; // FK -> user_accounts.id
-  amount: number;
-  status: string;
-  masked_card_last4: string | null;
-}
-
-export interface NotificationRow {
-  id: string;
-  user_id: string; // FK -> user_accounts.id
-  type: string;
-  channel: NotificationChannel;
-  read_status: boolean;
-  created_at: string;
-}
-
-export interface SupportTicketRow {
-  id: string;
-  submitter_id: string; // FK -> user_accounts.id
-  category: string;
-  status: string;
-  assigned_admin_id: string | null; // FK -> user_accounts.id
-  created_at: string;
-}
-
-export interface AuditLogEntryRow {
-  id: string;
-  actor_id: string; // FK -> user_accounts.id
-  actor_role: UserRole;
-  action: string;
-  target_type: string;
-  target_id: string;
-  timestamp: string;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Database shape (used as the generic param for createClient<Database>)
@@ -176,78 +235,125 @@ export interface Database {
     Tables: {
       user_accounts: {
         Row: UserAccountRow;
-        Insert: Omit<UserAccountRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Insert: Omit<UserAccountRow, 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<UserAccountRow>;
+        Relationships: [];
       };
       lawyer_profiles: {
         Row: LawyerProfileRow;
-        Insert: LawyerProfileRow;
+        Insert: Partial<Omit<LawyerProfileRow, 'created_at' | 'updated_at'>> & {
+          user_id: string;
+          created_at?: string;
+          updated_at?: string;
+        };
         Update: Partial<LawyerProfileRow>;
+        Relationships: [];
       };
-      legal_sources: {
-        Row: LegalSourceRow;
-        Insert: Omit<LegalSourceRow, 'id' | 'indexed_at'> & { id?: string; indexed_at?: string };
-        Update: Partial<LegalSourceRow>;
+      lawyer_practice_areas_detail: {
+        Row: LawyerPracticeAreaDetailRow;
+        Insert: Omit<LawyerPracticeAreaDetailRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<LawyerPracticeAreaDetailRow>;
+        Relationships: [];
       };
-      conversations: {
-        Row: ConversationRow;
-        Insert: Omit<ConversationRow, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string; updated_at?: string };
-        Update: Partial<ConversationRow>;
+      lawyer_experience: {
+        Row: LawyerExperienceRow;
+        Insert: Omit<LawyerExperienceRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<LawyerExperienceRow>;
+        Relationships: [];
       };
-      messages: {
-        Row: MessageRow;
-        Insert: Omit<MessageRow, 'id' | 'sent_at'> & { id?: string; sent_at?: string };
-        Update: Partial<MessageRow>;
+      lawyer_services: {
+        Row: LawyerServiceRow;
+        Insert: Omit<LawyerServiceRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<LawyerServiceRow>;
+        Relationships: [];
       };
-      consultations: {
-        Row: ConsultationRow;
-        Insert: Omit<ConsultationRow, 'id'> & { id?: string };
-        Update: Partial<ConsultationRow>;
+      lawyer_education: {
+        Row: LawyerEducationRow;
+        Insert: Omit<LawyerEducationRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<LawyerEducationRow>;
+        Relationships: [];
       };
-      cases: {
-        Row: CaseRow;
-        Insert: Omit<CaseRow, 'id'> & { id?: string };
-        Update: Partial<CaseRow>;
+      lawyer_case_summaries: {
+        Row: LawyerCaseSummaryRow;
+        Insert: Omit<LawyerCaseSummaryRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<LawyerCaseSummaryRow>;
+        Relationships: [];
       };
-      documents: {
-        Row: DocumentRow;
-        Insert: Omit<DocumentRow, 'id' | 'uploaded_at'> & { id?: string; uploaded_at?: string };
-        Update: Partial<DocumentRow>;
-      };
-      document_access_grants: {
-        Row: DocumentAccessGrantRow;
-        Insert: DocumentAccessGrantRow;
-        Update: Partial<DocumentAccessGrantRow>;
-      };
-      reviews: {
-        Row: ReviewRow;
-        Insert: Omit<ReviewRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
-        Update: Partial<ReviewRow>;
-      };
-      reports: {
-        Row: ReportRow;
-        Insert: Omit<ReportRow, 'id'> & { id?: string };
-        Update: Partial<ReportRow>;
-      };
-      payments: {
-        Row: PaymentRow;
-        Insert: Omit<PaymentRow, 'id'> & { id?: string };
-        Update: Partial<PaymentRow>;
+      lawyer_verification_documents: {
+        Row: LawyerVerificationDocumentRow;
+        Insert: Omit<LawyerVerificationDocumentRow, 'id' | 'uploaded_at'> & { id?: string; uploaded_at?: string };
+        Update: Partial<LawyerVerificationDocumentRow>;
+        Relationships: [];
       };
       notifications: {
         Row: NotificationRow;
         Insert: Omit<NotificationRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<NotificationRow>;
+        Relationships: [];
       };
-      support_tickets: {
-        Row: SupportTicketRow;
-        Insert: Omit<SupportTicketRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
-        Update: Partial<SupportTicketRow>;
+      lawyer_favorites: {
+        Row: LawyerFavoriteRow;
+        Insert: Omit<LawyerFavoriteRow, 'created_at'> & { created_at?: string };
+        Update: Partial<LawyerFavoriteRow>;
+        Relationships: [];
       };
-      audit_log_entries: {
-        Row: AuditLogEntryRow;
-        Insert: Omit<AuditLogEntryRow, 'id'> & { id?: string };
-        Update: Partial<AuditLogEntryRow>;
+      audit_log: {
+        Row: AuditLogRow;
+        Insert: Omit<AuditLogRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<AuditLogRow>;
+        Relationships: [];
+      };
+      email_outbox_dev: {
+        Row: EmailOutboxDevRow;
+        Insert: Omit<EmailOutboxDevRow, 'id' | 'created_at' | 'error'> & {
+          id?: string;
+          created_at?: string;
+          error?: string | null;
+        };
+        Update: Partial<EmailOutboxDevRow>;
+        Relationships: [];
+      };
+      legal_sources: {
+        Row: LegalSourceRow;
+        Insert: Omit<LegalSourceRow, 'id' | 'indexed_at'> & { id?: string; indexed_at?: string };
+        Update: Partial<LegalSourceRow>;
+        Relationships: [];
+      };
+      conversations: {
+        Row: ConversationRow;
+        Insert: Omit<ConversationRow, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string; updated_at?: string };
+        Update: Partial<ConversationRow>;
+        Relationships: [];
+      };
+      messages: {
+        Row: MessageRow;
+        Insert: Omit<MessageRow, 'id' | 'sent_at'> & { id?: string; sent_at?: string };
+        Update: Partial<MessageRow>;
+        Relationships: [];
+      };
+      consultations: {
+        Row: ConsultationRow;
+        Insert: Omit<ConsultationRow, 'id'> & { id?: string };
+        Update: Partial<ConsultationRow>;
+        Relationships: [];
+      };
+      cases: {
+        Row: CaseRow;
+        Insert: Omit<CaseRow, 'id'> & { id?: string };
+        Update: Partial<CaseRow>;
+        Relationships: [];
+      };
+      documents: {
+        Row: DocumentRow;
+        Insert: Omit<DocumentRow, 'id' | 'uploaded_at'> & { id?: string; uploaded_at?: string };
+        Update: Partial<DocumentRow>;
+        Relationships: [];
+      };
+      reviews: {
+        Row: ReviewRow;
+        Insert: Omit<ReviewRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<ReviewRow>;
+        Relationships: [];
       };
     };
     Views: Record<string, never>;

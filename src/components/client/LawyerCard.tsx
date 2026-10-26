@@ -1,56 +1,67 @@
-/**
- * LawyerCard — Client-facing component
- * Displays a lawyer's profile summary in the discovery grid.
- * TODO: Show: avatar, name, practice areas chips, location, languages, hourly rate, avg rating (stars), "Book" CTA
- * TODO: Add verified badge
- * TODO: Add availability indicator (available today / next available: date)
- * TODO: Hover: show short bio excerpt
- */
-interface LawyerCardProps {
-  lawyerId: string;
+import React from 'react';
+import Link from 'next/link';
+
+export interface LawyerItem {
+  id: string;
   name: string;
-  practiceAreas: string[];
-  location: string;
-  hourlyRate: number;
-  rating: number;
-  reviewCount: number;
-  isVerified: boolean;
+  rollNumber: string;
+  chapter: string;
+  specializations: string[];
+  hourlyRate?: number;
+  rating?: number;
+  isVerified?: boolean;
 }
 
-export function LawyerCard({ lawyerId, name, practiceAreas, location, hourlyRate, rating, reviewCount, isVerified }: LawyerCardProps) {
+interface LawyerCardProps {
+  lawyer: LawyerItem;
+}
+
+export function LawyerCard({ lawyer }: LawyerCardProps) {
   return (
-    <article
-      className="rounded-2xl border bg-card p-5 space-y-3 hover:shadow-md transition-shadow"
-      aria-label={`Lawyer: ${name}`}
+    <Link
+      href={`/client/lawyers/${lawyer.id}`}
+      className="group block rounded-2xl p-4 bg-[#EFE5D8] shadow-[5px_5px_12px_rgba(0,0,0,0.06),-5px_-5px_12px_rgba(255,255,255,0.9)] border border-[#E8DCCB]/60 hover:shadow-[7px_7px_18px_rgba(0,0,0,0.1),-7px_-7px_18px_rgba(255,255,255,1)] transition-all duration-200"
     >
-      <div className="flex items-center gap-3">
-        {/* TODO: Avatar */}
-        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-lg font-bold">
-          {name.charAt(0)}
+      <div className="flex items-center gap-3.5">
+        {/* Silhouette Avatar Circle */}
+        <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full border-2 border-[#5C4535]/75 flex items-center justify-center shrink-0 group-hover:border-[#C58B3C] transition-colors">
+          <svg
+            className="w-8 h-8 text-[#5C4535] group-hover:text-[#C58B3C] transition-colors"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="8" r="4" />
+            <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
+          </svg>
         </div>
-        <div>
-          <h3 className="font-semibold text-sm">{name}</h3>
-          <p className="text-xs text-muted-foreground">{location}</p>
+
+        {/* Lawyer Details */}
+        <div className="min-w-0 flex-1">
+          {/* IBP Verified Badge */}
+          <div className="flex items-center gap-1 text-[10px] font-semibold text-[#C58B3C] tracking-wide uppercase">
+            <span>IBP Verified</span>
+          </div>
+
+          {/* Full Name */}
+          <h3 className="font-cormorant font-bold text-sm sm:text-[15px] text-[#34150F] truncate group-hover:text-[#C58B3C] transition-colors leading-tight mt-0.5">
+            {lawyer.name}
+          </h3>
+
+          {/* Roll No & IBP Chapter */}
+          <p className="text-[10px] text-[#7D6855] uppercase tracking-wider font-medium mt-0.5 truncate">
+            Roll No. {lawyer.rollNumber} <span className="opacity-60">|</span> IBP {lawyer.chapter}
+          </p>
+
+          {/* Specializations */}
+          <p className="text-[10px] text-[#695444] font-normal truncate mt-0.5">
+            {lawyer.specializations.join(' • ')}
+          </p>
         </div>
-        {isVerified && (
-          <span className="ml-auto text-xs text-green-600 font-medium" aria-label="Verified lawyer">✓ Verified</span>
-        )}
       </div>
-      <div className="flex flex-wrap gap-1">
-        {practiceAreas.slice(0, 3).map((area) => (
-          <span key={area} className="rounded-full bg-muted px-2 py-0.5 text-xs">{area}</span>
-        ))}
-      </div>
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>⭐ {rating.toFixed(1)} ({reviewCount} reviews)</span>
-        <span className="font-medium text-foreground">₱{hourlyRate.toLocaleString()}/hr</span>
-      </div>
-      <a
-        href={`/lawyers/${lawyerId}`}
-        className="block w-full text-center rounded-lg bg-primary text-primary-foreground py-2 text-sm font-medium hover:opacity-90 transition"
-      >
-        View Profile & Book
-      </a>
-    </article>
+    </Link>
   );
 }
