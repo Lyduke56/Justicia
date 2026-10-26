@@ -83,9 +83,19 @@ export interface SignInFormProps {
   onClose?: () => void;
   /** Called to switch to sign-up flow (modal usage only) */
   onSwitchToSignUp?: () => void;
+  /** Called to switch to forgot-password flow (modal usage only) */
+  onSwitchToForgotPassword?: () => void;
+  /** Optional redirect URL after login */
+  redirectTo?: string;
 }
 
-export function SignInForm({ variant = 'dark', onClose, onSwitchToSignUp }: SignInFormProps) {
+export function SignInForm({
+  variant = 'dark',
+  onClose,
+  onSwitchToSignUp,
+  onSwitchToForgotPassword,
+  redirectTo,
+}: SignInFormProps) {
   const [state, formAction, isPending] = useActionState(signInAction, initialState);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -94,6 +104,8 @@ export function SignInForm({ variant = 'dark', onClose, onSwitchToSignUp }: Sign
 
   return (
     <form action={formAction} className="space-y-5" noValidate>
+      {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
+
       {/* Global error */}
       {state?.error && !state.field && (
         <div className={s.errorBox} role="alert">
@@ -128,13 +140,23 @@ export function SignInForm({ variant = 'dark', onClose, onSwitchToSignUp }: Sign
           <label htmlFor="password_signin" className={s.label.replace('mb-1.5', '')}>
             Password{isNeumorphic ? ':' : ''}
           </label>
-          <Link
-            href="/forgot-password"
-            onClick={onClose}
-            className={s.forgotLink}
-          >
-            Forgot password?
-          </Link>
+          {onSwitchToForgotPassword ? (
+            <button
+              type="button"
+              onClick={onSwitchToForgotPassword}
+              className={s.forgotLink}
+            >
+              Forgot password?
+            </button>
+          ) : (
+            <Link
+              href="/forgot-password"
+              onClick={onClose}
+              className={s.forgotLink}
+            >
+              Forgot password?
+            </Link>
+          )}
         </div>
         <div className="relative">
           <input

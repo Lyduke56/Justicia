@@ -62,9 +62,17 @@ const initialState: AuthState = null;
 
 export interface SignUpFormProps {
   variant?: 'dark' | 'neumorphic';
+  onClose?: () => void;
+  onSwitchToSignIn?: () => void;
+  inModal?: boolean;
 }
 
-export function SignUpForm({ variant = 'dark' }: SignUpFormProps) {
+export function SignUpForm({
+  variant = 'dark',
+  onClose,
+  onSwitchToSignIn,
+  inModal = false,
+}: SignUpFormProps) {
   const [state, formAction, isPending] = useActionState(signUpAction, initialState);
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<'client' | 'lawyer'>('client');
@@ -298,6 +306,22 @@ export function SignUpForm({ variant = 'dark' }: SignUpFormProps) {
           )}
         </button>
       </div>
+
+      {/* Switch to sign in for modal */}
+      {onSwitchToSignIn && (
+        <div className="text-center pt-1">
+          <p className="text-[11px] text-[#7a6a5a]">
+            Already have an account?{' '}
+            <button
+              type="button"
+              onClick={onSwitchToSignIn}
+              className="text-[#c59341] hover:text-[#d6a54f] font-medium transition-colors"
+            >
+              Sign In
+            </button>
+          </p>
+        </div>
+      )}
     </form>
   );
 }
