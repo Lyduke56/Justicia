@@ -3,9 +3,16 @@
 import React, { useActionState } from 'react';
 import { forgotPasswordAction, type AuthState } from '@/app/actions/auth';
 
+import Link from 'next/link';
+
 const initialState: AuthState = null;
 
-export function ForgotPasswordForm() {
+export interface ForgotPasswordFormProps {
+  onClose?: () => void;
+  onSwitchToSignIn?: () => void;
+}
+
+export function ForgotPasswordForm({ onClose, onSwitchToSignIn }: ForgotPasswordFormProps) {
   const [state, formAction, isPending] = useActionState(forgotPasswordAction, initialState);
 
   return (
@@ -50,7 +57,7 @@ export function ForgotPasswordForm() {
           />
           {state?.field === 'email' && state.error && (
             <p className="mt-1.5 text-[11px] text-red-400 flex items-center gap-1" role="alert">
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 flex-shrink-0">
                 <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm-.75 4a.75.75 0 0 1 1.5 0v3a.75.75 0 0 1-1.5 0V5zm.75 6.5a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z" />
               </svg>
               {state.error}
@@ -80,6 +87,26 @@ export function ForgotPasswordForm() {
           )}
         </button>
       )}
+
+      {/* Back to sign in */}
+      <div className="text-center pt-1">
+        {onSwitchToSignIn ? (
+          <button
+            type="button"
+            onClick={onSwitchToSignIn}
+            className="text-[11px] text-[#c59341] hover:text-[#d6a54f] transition-colors font-medium"
+          >
+            ← Back to Sign In
+          </button>
+        ) : (
+          <p className="text-[11px] text-[#7a6a5a]">
+            Remember your password?{' '}
+            <Link href="/login" onClick={onClose} className="text-[#c59341] hover:text-[#d6a54f] transition-colors font-medium">
+              Sign in
+            </Link>
+          </p>
+        )}
+      </div>
     </form>
   );
 }
