@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/database';
@@ -5,8 +6,9 @@ import type { Database } from '@/types/database';
 /**
  * Creates a Supabase client for use in Server Components, Server Actions,
  * and Route Handlers. Reads/writes cookies to keep the session fresh.
+ * Wrapped in React cache() so multiple calls in one request reuse the same client.
  */
-export async function createClient() {
+export const createClient = cache(async () => {
   const cookieStore = await cookies();
 
   return createServerClient<Database>(
@@ -29,14 +31,14 @@ export async function createClient() {
       },
     }
   );
-}
+});
 
 /**
  * Creates a Supabase client using the service role key.
  * ONLY use server-side for admin operations that bypass RLS.
  * NEVER expose the service role key to the client.
  */
-export async function createServiceClient() {
+export const createServiceClient = cache(async () => {
   const cookieStore = await cookies();
 
   return createServerClient<Database>(
@@ -59,4 +61,4 @@ export async function createServiceClient() {
       },
     }
   );
-}
+});

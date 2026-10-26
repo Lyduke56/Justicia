@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { signUpAction } from '@/app/actions/auth';
 import { saveLawyerDraftAction, submitLawyerApplicationAction } from '@/app/actions/lawyerRegistration';
 
-interface ExistingUser { id: string; email: string }
+interface ExistingUser { id: string; email: string; fullName?: string }
 
 const STEPS = ['Account', 'Credentials', 'Profile', 'Review & Submit'] as const;
 type Step = 0 | 1 | 2 | 3;
@@ -50,12 +50,46 @@ const INITIAL: FormState = {
   feeInitial: '', feeStandard: '', feeExtended: '', photoUrl: '',
 };
 
-export function LawyerRegisterForm({ existingUser }: { existingUser: ExistingUser | null }) {
+interface LawyerDraft {
+  full_name?: string;
+  roll_number?: string;
+  ibp_chapter?: string;
+  bar_passer_year?: number | null;
+  about?: string;
+  practice_areas?: string[];
+  languages?: string[];
+  experience_years?: number | null;
+  fee_initial_30min?: number | null;
+  fee_standard_60min?: number | null;
+  fee_extended_120min?: number | null;
+}
+
+export function LawyerRegisterForm({
+  existingUser,
+  emailUnconfirmed = false,
+  draft = null,
+}: {
+  existingUser: ExistingUser | null;
+  emailUnconfirmed?: boolean;
+  draft?: LawyerDraft | null;
+}) {
   const [step, setStep] = useState<Step>(existingUser ? 1 : 0);
   const [form, setForm] = useState<FormState>({
     ...INITIAL,
     email: existingUser?.email ?? '',
-    fullName: '',
+    // fullName: prefer draft data, then existingUser metadata
+    fullName: (draft?.full_name) || (existingUser?.fullName ?? ''),
+    // Pre-fill from saved draft if resuming
+    rollNumber: draft?.roll_number ?? '',
+    ibpChapter: draft?.ibp_chapter ?? '',
+    barPasserYear: draft?.bar_passer_year != null ? String(draft.bar_passer_year) : '',
+    about: draft?.about ?? '',
+    practiceAreas: draft?.practice_areas ?? [],
+    languages: draft?.languages ?? [],
+    experienceYears: draft?.experience_years != null ? String(draft.experience_years) : '',
+    feeInitial: draft?.fee_initial_30min != null ? String(draft.fee_initial_30min) : '',
+    feeStandard: draft?.fee_standard_60min != null ? String(draft.fee_standard_60min) : '',
+    feeExtended: draft?.fee_extended_120min != null ? String(draft.fee_extended_120min) : '',
   });
   const [errors, setErrors] = useState<Partial<Record<keyof FormState | 'general', string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -139,9 +173,13 @@ export function LawyerRegisterForm({ existingUser }: { existingUser: ExistingUse
     setIsSubmitting(true);
     const fd = buildFormData();
     const result = await submitLawyerApplicationAction(null, fd);
-    setIsSubmitting(false);
-    if (result?.error) setErrors({ general: result.error });
-    // On success, the action redirects to /lawyer/verification
+    if (result?.error) {
+      setErrors({ general: result.error });
+      setIsSubmitting(false);
+      return;
+    }
+    // Hard navigate to /lawyer/verification for a clean, immediate render without stale router cache
+    window.location.href = '/lawyer/verification';
   };
 
   const field = (id: keyof FormState, label: string, type = 'text', placeholder = '') => (
@@ -166,6 +204,44 @@ export function LawyerRegisterForm({ existingUser }: { existingUser: ExistingUse
       className="rounded-2xl p-6 sm:p-8 bg-[#EFE5D8] space-y-6"
       style={{ boxShadow: '8px 8px 20px rgba(0,0,0,0.07),-8px -8px 20px rgba(255,255,255,0.95)' }}
     >
+      {/* ─── Email confirmation gate ──────────────────────────────────────── */}
+      {emailUnconfirmed && (
+        <div className="flex flex-col items-center text-center space-y-5 py-6">
+          {/* Envelope icon */}
+          <div
+            className="w-20 h-20 rounded-full flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg,#C58B3C22,#C58B3C44)', boxShadow: '0 0 0 8px #C58B3C18' }}
+          >
+            <svg className="w-9 h-9 text-[#C58B3C]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25H4.5a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5a2.25 2.25 0 00-2.25 2.25m19.5 0-9.75 6.75L2.25 6.75" />
+            </svg>
+          </div>
+          <div className="space-y-2 max-w-sm">
+            <h2 className="font-cormorant text-2xl font-bold text-[#34150F]">Check your inbox</h2>
+            <p className="text-sm text-[#7D6855] leading-relaxed">
+              We sent a confirmation link to <strong className="text-[#34150F]">{existingUser?.email}</strong>.
+              Please verify your email address before continuing your registration.
+            </p>
+          </div>
+          <div className="w-full p-4 rounded-xl bg-[#F5EDE2] border border-[#E8DCCB] text-xs text-[#7D6855] space-y-1 text-left">
+            <p className="font-medium text-[#5C4535]">What to do next:</p>
+            <ol className="list-decimal list-inside space-y-1">
+              <li>Open the email from Justicia in your inbox (check spam too).</li>
+              <li>Click the confirmation link inside.</li>
+              <li>Return here and log in to continue your registration.</li>
+            </ol>
+          </div>
+          <a
+            href="/login"
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#C58B3C] text-white text-sm font-semibold hover:bg-[#B07A2E] transition-colors shadow-md"
+          >
+            Go to Log In
+          </a>
+        </div>
+      )}
+
+      {/* Hide all steps while email is unconfirmed */}
+      {!emailUnconfirmed && (<>
       {/* Step indicator */}
       <div className="flex items-center gap-0">
         {STEPS.map((label, i) => (
@@ -182,6 +258,16 @@ export function LawyerRegisterForm({ existingUser }: { existingUser: ExistingUse
           </div>
         ))}
       </div>
+
+      {/* Draft restored notice */}
+      {draft && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+          <svg className="w-4 h-4 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span><strong>Draft restored.</strong> Your previous progress has been pre-filled. Review and continue where you left off.</span>
+        </div>
+      )}
 
       {/* General error */}
       {errors.general && (
@@ -331,7 +417,7 @@ export function LawyerRegisterForm({ existingUser }: { existingUser: ExistingUse
 
       {/* Navigation */}
       <div className="flex justify-between pt-2">
-        {step > 0 && (
+        {step > (existingUser ? 1 : 0) && (
           <button
             type="button"
             onClick={() => setStep(s => (s > 0 ? (s - 1) as Step : 0))}
@@ -364,6 +450,7 @@ export function LawyerRegisterForm({ existingUser }: { existingUser: ExistingUse
           )}
         </div>
       </div>
+      </>)}
     </div>
   );
 }

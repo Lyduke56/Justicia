@@ -90,15 +90,20 @@ export async function submitLawyerApplicationAction(
 
     if (existing) return { error: 'This Roll of Attorneys number is already registered.' };
 
-    // Set role to lawyer
+    const fullName = (formData.get('full_name') as string)?.trim();
+    if (!fullName) return { error: 'Full name is required.' };
+    if (!rollNumber.trim()) return { error: 'Roll number is required.' };
+
+    // Set role to lawyer in user_accounts
     await serviceSupabase
       .from('user_accounts')
       .update({ role: 'lawyer' })
       .eq('id', user.id);
 
-    const fullName = (formData.get('full_name') as string)?.trim();
-    if (!fullName) return { error: 'Full name is required.' };
-    if (!rollNumber.trim()) return { error: 'Roll number is required.' };
+    // Also sync role in Supabase Auth user_metadata
+    await serviceSupabase.auth.admin.updateUserById(user.id, {
+      user_metadata: { ...user.user_metadata, role: 'lawyer', full_name: fullName },
+    });
 
     const profileData: Database['public']['Tables']['lawyer_profiles']['Insert'] = {
       user_id: user.id,
@@ -134,9 +139,8 @@ export async function submitLawyerApplicationAction(
       details: { full_name: fullName, roll_number: rollNumber },
     });
 
-    redirect('/lawyer/verification');
+    return { success: 'Application submitted.' };
   } catch (err: unknown) {
-    if (err instanceof Error && err.message === 'NEXT_REDIRECT') throw err;
     const msg = err instanceof Error ? err.message : 'An error occurred';
     return { error: msg };
   }

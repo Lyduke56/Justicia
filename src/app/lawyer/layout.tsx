@@ -20,6 +20,20 @@ export default async function LawyerLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Read current pathname injected by proxy via updateSession()
+  const headersList = await headers();
+  const currentPath = headersList.get('x-pathname') ?? '';
+
+  const isVerificationOrRegisterRoute =
+    currentPath.startsWith('/lawyer/verification') ||
+    currentPath.startsWith('/lawyer/register');
+
+  // Verification and register pages are standalone flows outside the LawyerShell navigation portal.
+  // Bypassing immediately eliminates all redundant layout database queries.
+  if (isVerificationOrRegisterRoute) {
+    return <>{children}</>;
+  }
+
   const cookieStore = await cookies();
   const demoCookie = cookieStore.get('justicia_demo_session')?.value;
   const isDemo = demoCookie === 'lawyer' || demoCookie === 'true';
@@ -42,20 +56,24 @@ export default async function LawyerLayout({
 
   if (user) {
     try {
-      const { data: userAcc } = await supabase
-        .from('user_accounts')
-        .select('role, full_name')
-        .eq('id', user.id)
-        .single() as { data: { role: string | null; full_name: string | null } | null };
+      const [userAccRes, profRes] = await Promise.all([
+        supabase
+          .from('user_accounts')
+          .select('role, full_name')
+          .eq('id', user.id)
+          .single(),
+        supabase
+          .from('lawyer_profiles')
+          .select('roll_number, ibp_chapter, verification_status')
+          .eq('user_id', user.id)
+          .single(),
+      ]);
+
+      const userAcc = userAccRes.data as { role: string | null; full_name: string | null } | null;
+      const prof = profRes.data as { roll_number: string | null; ibp_chapter: string | null; verification_status: string | null } | null;
 
       if (userAcc?.role) role = userAcc.role;
       if (userAcc?.full_name) fullName = userAcc.full_name;
-
-      const { data: prof } = await supabase
-        .from('lawyer_profiles')
-        .select('roll_number, ibp_chapter, verification_status')
-        .eq('user_id', user.id)
-        .single() as { data: { roll_number: string | null; ibp_chapter: string | null; verification_status: string | null } | null };
 
       if (prof) {
         rollNumber = prof.roll_number || rollNumber;
@@ -72,31 +90,26 @@ export default async function LawyerLayout({
     redirect('/client/dashboard');
   }
 
-  // Determine current path to allow /verification and /register regardless of approval status
-  const headersList = await headers();
-  const currentPath = headersList.get('x-invoke-path') || headersList.get('x-pathname') || '';
-  const isVerificationOrRegisterRoute =
-    currentPath.startsWith('/lawyer/verification') || currentPath.startsWith('/lawyer/register');
-
-  // Block unapproved lawyers from accessing any page other than verification/register
-  if (!isDemo && !isVerified && !isVerificationOrRegisterRoute && user) {
-    // Check verification_status from profile to determine correct redirect
+  // Block unapproved lawyers from accessing portal pages
+  // - If application has not been submitted yet or is draft -> send to /lawyer/register
+  // - If application is submitted and pending review -> send to /lawyer/verification
+  if (!isDemo && !isVerified && user) {
     const { data: statusCheck } = await supabase
       .from('lawyer_profiles')
       .select('verification_status')
       .eq('user_id', user.id)
       .maybeSingle() as { data: { verification_status: string } | null };
 
-    // Only block if not approved — redirect to verification status page
-    if (!statusCheck || statusCheck.verification_status !== 'approved') {
+    if (!statusCheck || statusCheck.verification_status === 'draft') {
+      redirect('/lawyer/register');
+    }
+
+    if (statusCheck.verification_status !== 'approved') {
       redirect('/lawyer/verification');
     }
   }
 
-  // On verification status or registration pages, render directly without LawyerShell
-  if (isVerificationOrRegisterRoute) {
-    return <>{children}</>;
-  }
+
 
   return (
     <LawyerShell

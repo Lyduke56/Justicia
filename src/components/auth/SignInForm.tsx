@@ -181,44 +181,6 @@ export function SignInForm({ variant = 'dark', onClose, onSwitchToSignUp }: Sign
         </button>
       </div>
 
-      {/* Demo links for quick portal evaluation */}
-      {isNeumorphic ? (
-        <div className="pt-2 flex flex-col items-center gap-1.5 text-center">
-          <Link
-            href="/client/dashboard?demo=true"
-            id="demo-client-bypass-btn"
-            className="inline-flex items-center gap-1.5 text-xs text-[#99431E] hover:text-[#34150F] font-semibold transition-colors"
-          >
-            <span>Explore Client Portal as Clyde (Demo)</span>
-            <span>→</span>
-          </Link>
-          <Link
-            href="/lawyer/dashboard?demo=lawyer"
-            id="demo-lawyer-bypass-btn"
-            className="inline-flex items-center gap-1.5 text-xs text-[#8A5A1E] hover:text-[#34150F] font-semibold transition-colors"
-          >
-            <span>Explore Lawyer Portal as Atty. Santos (Demo)</span>
-            <span>→</span>
-          </Link>
-        </div>
-      ) : (
-        <div className="pt-2 flex flex-col items-center gap-1 text-center">
-          <Link
-            href="/client/dashboard?demo=true"
-            onClick={onClose}
-            className="inline-flex items-center gap-1.5 text-[11px] text-[#C58B3C] hover:text-[#FAF6F0] font-medium transition-colors"
-          >
-            <span>Client Portal Demo (Clyde) →</span>
-          </Link>
-          <Link
-            href="/lawyer/dashboard?demo=lawyer"
-            onClick={onClose}
-            className="inline-flex items-center gap-1.5 text-[11px] text-[#D29D54] hover:text-[#FAF6F0] font-medium transition-colors"
-          >
-            <span>Lawyer Portal Demo (Atty. Santos) →</span>
-          </Link>
-        </div>
-      )}
 
       {/* Sign up link */}
       {!isNeumorphic && (

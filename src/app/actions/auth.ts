@@ -139,6 +139,22 @@ export async function signInAction(
     }
   }
 
+  // Direct unapproved lawyers to the appropriate page without dashboard bounce
+  if (resolvedRole === 'lawyer' && signInData?.user?.id) {
+    const { data: prof } = await supabase
+      .from('lawyer_profiles')
+      .select('verification_status')
+      .eq('user_id', signInData.user.id)
+      .maybeSingle() as { data: { verification_status: string } | null };
+
+    if (!prof || prof.verification_status === 'draft') {
+      redirect('/lawyer/register');
+    }
+    if (prof.verification_status !== 'approved') {
+      redirect('/lawyer/verification');
+    }
+  }
+
   redirect(getDashboardForRole(resolvedRole));
 }
 

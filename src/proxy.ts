@@ -15,16 +15,17 @@ export async function proxy(request: NextRequest) {
   // 1. Always refresh the session cookie
   const { supabaseResponse, user } = await updateSession(request);
 
-  // Demo session check (enables viewing Figma mockup experience as 'Clyde' or lawyer 'Atty. Santos')
+  // Demo session check (enables viewing Figma mockup experience as 'Clyde', lawyer 'Atty. Santos', or admin)
   const demoParam = request.nextUrl.searchParams.get('demo');
-  const hasDemoParam = demoParam === 'true' || demoParam === 'client' || demoParam === 'lawyer';
+  const hasDemoParam = demoParam === 'true' || demoParam === 'client' || demoParam === 'lawyer' || demoParam === 'admin';
   const demoCookie = request.cookies.get('justicia_demo_session')?.value;
   const hasDemoCookie = Boolean(demoCookie);
 
   if (hasDemoParam) {
-    const isLawyer = demoParam === 'lawyer' || pathname.startsWith('/lawyer');
-    const roleForDemo = isLawyer ? 'lawyer' : 'client';
-    const targetPath = isLawyer ? '/lawyer/dashboard' : '/client/dashboard';
+    const isAdmin = demoParam === 'admin' || (pathname.startsWith('/admin') && demoParam !== 'client' && demoParam !== 'lawyer');
+    const isLawyer = !isAdmin && (demoParam === 'lawyer' || pathname.startsWith('/lawyer'));
+    const roleForDemo = isAdmin ? 'admin' : isLawyer ? 'lawyer' : 'client';
+    const targetPath = isAdmin ? '/admin/dashboard' : isLawyer ? '/lawyer/dashboard' : '/client/dashboard';
 
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = targetPath;
@@ -46,8 +47,8 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // Allow demo session through for client routes, lawyer routes, and API routes
-  if (!user && hasDemoCookie && (pathname.startsWith('/client') || pathname.startsWith('/lawyer') || pathname.startsWith('/api/'))) {
+  // Allow demo session through for client routes, lawyer routes, admin routes, and API routes
+  if (!user && hasDemoCookie && (pathname.startsWith('/client') || pathname.startsWith('/lawyer') || pathname.startsWith('/admin') || pathname.startsWith('/api/'))) {
     return supabaseResponse;
   }
 
@@ -95,6 +96,11 @@ async function getUserRole(
   request: NextRequest,
   user: { id: string; user_metadata?: Record<string, unknown> }
 ): Promise<UserRole> {
+  // Fast path: If JWT metadata already confirms lawyer or admin, trust it immediately
+  if (user.user_metadata?.role === 'lawyer' || user.user_metadata?.role === 'admin') {
+    return user.user_metadata.role as UserRole;
+  }
+
   try {
     const supabase = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
