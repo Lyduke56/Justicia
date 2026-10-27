@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import type { PublicLawyerProfile } from './LawyerGrid';
-import { UserCircleIcon } from './ClientIcons';
 
 interface LawyerDetailViewProps {
   lawyer: PublicLawyerProfile;
@@ -16,11 +15,11 @@ type TabType = 'about' | 'reviews' | 'booking' | 'cases';
 export function LawyerDetailView({
   lawyer,
   onBack,
-  defaultTab = 'booking',
+  defaultTab = 'about',
 }: LawyerDetailViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
 
-  // Booking Form State
+  // ─── Booking Form State ───────────────────────────────────────────────────────
   const [selectedDay, setSelectedDay] = useState<number>(23);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('2:00 PM - 4:00 PM • PST, GMT+8');
   const [communicationMode, setCommunicationMode] = useState<'video' | 'audio'>('video');
@@ -32,6 +31,21 @@ export function LawyerDetailView({
   const [attachedFiles, setAttachedFiles] = useState<string[]>(['Residential_Lease_Agreement_Makati.pdf']);
   const [bookingStatus, setBookingStatus] = useState<'idle' | 'saved' | 'submitted'>('idle');
 
+  // ─── Reviews State ────────────────────────────────────────────────────────────
+  const [selectedReviewStar, setSelectedReviewStar] = useState<number | 'all'>(5);
+  const [reviewPage, setReviewPage] = useState<number>(1);
+  const [helpfulCounts, setHelpfulCounts] = useState<{ [id: number]: number }>({
+    0: 12,
+    1: 8,
+    2: 15,
+    3: 6,
+  });
+  const [userVotedHelpful, setUserVotedHelpful] = useState<{ [id: number]: boolean }>({});
+
+  // ─── Cases State ──────────────────────────────────────────────────────────────
+  const [casePage, setCasePage] = useState<number>(1);
+
+  // Calendar dates layout: September 2026 starts on Tuesday (2 empty slots for Sunday, Monday)
   const daysInMonth = [
     { day: null }, { day: null }, { day: 1 }, { day: 2 }, { day: 3 }, { day: 4 }, { day: 5 },
     { day: 6 }, { day: 7 }, { day: 8 }, { day: 9 }, { day: 10 }, { day: 11 }, { day: 12 },
@@ -74,21 +88,101 @@ export function LawyerDetailView({
     setBookingStatus('submitted');
   };
 
+  const toggleHelpful = (idx: number) => {
+    const hasVoted = userVotedHelpful[idx];
+    setHelpfulCounts((prev) => ({
+      ...prev,
+      [idx]: (prev[idx] || 0) + (hasVoted ? -1 : 1),
+    }));
+    setUserVotedHelpful((prev) => ({
+      ...prev,
+      [idx]: !hasVoted,
+    }));
+  };
+
   const standardFee = lawyer.feeStandard60min ?? 1500;
-  const initialFee = lawyer.feeInitial30min ?? Math.round(standardFee * 0.5);
-  const extendedFee = lawyer.feeExtended120min ?? Math.round(standardFee * 1.6);
+  const initialFee = lawyer.feeInitial30min ?? 700;
+  const extendedFee = lawyer.feeExtended120min ?? 2300;
+
+  // Mock reviews matching Figma design names & avatar
+  const allReviews = [
+    {
+      id: 0,
+      name: 'Clyde Justine Rosal',
+      stars: 5,
+      date: '10/17/2026',
+      content:
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
+    },
+    {
+      id: 1,
+      name: 'Benideck Longakit',
+      stars: 5,
+      date: '10/17/2026',
+      content:
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
+    },
+    {
+      id: 2,
+      name: 'Christopher John Rubio',
+      stars: 5,
+      date: '10/17/2026',
+      content:
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
+    },
+    {
+      id: 3,
+      name: 'Axziel Jay A. Bartolabac',
+      stars: 5,
+      date: '10/17/2026',
+      content:
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
+    },
+  ];
+
+  // Cases handled matching Figma design
+  const casesHandled = [
+    {
+      id: 1,
+      docket: 'SUBJECT MATTER & CASE DOCKET',
+      title: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
+      content:
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
+    },
+    {
+      id: 2,
+      docket: 'SUBJECT MATTER & CASE DOCKET',
+      title: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
+      content:
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
+    },
+    {
+      id: 3,
+      docket: 'SUBJECT MATTER & CASE DOCKET',
+      title: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
+      content:
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
+    },
+    {
+      id: 4,
+      docket: 'SUBJECT MATTER & CASE DOCKET',
+      title: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
+      content:
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
+    },
+  ];
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-6 py-6 space-y-6">
-      {/* ─── Back Button & Navigation ────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+    <div className="max-w-[1180px] mx-auto px-2 sm:px-6 py-4 space-y-6">
+      {/* ─── Back Navigation Link ────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between pb-1">
         {onBack ? (
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold text-[#5C4535] hover:text-[#34150F] hover:bg-[#DECEB8] transition-colors"
+            className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#5C4535] hover:text-[#23150F] transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
             <span>Back to Lawyers Directory</span>
@@ -96,47 +190,53 @@ export function LawyerDetailView({
         ) : (
           <Link
             href="/client/lawyers"
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold text-[#5C4535] hover:text-[#34150F] hover:bg-[#DECEB8] transition-colors"
+            className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#5C4535] hover:text-[#23150F] transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
             <span>Back to Lawyers Directory</span>
           </Link>
         )}
-
-        <span className="text-[11px] font-semibold text-[#7D6855] uppercase tracking-wider">
-          Philippine Bar Verified Counsel
-        </span>
       </div>
 
-      {/* ─── Lawyer Banner Card ────────────────────────────────────────────── */}
+      {/* ─── Lawyer Banner Header Card (Matches Figma Plate Exactly) ───────── */}
       <div
-        className="rounded-2xl p-5 sm:p-7 bg-[#E8DAC8] border border-[#D1BEA8]/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 transition-all"
+        className="w-full rounded-[26px] p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 transition-all"
         style={{
-          boxShadow: '6px 6px 16px rgba(0,0,0,0.07), -6px -6px 16px rgba(255,255,255,0.75)',
+          backgroundColor: '#DFC5A4',
+          boxShadow: '10px 12px 28px rgba(165, 135, 105, 0.45), 3px 4px 8px rgba(165, 135, 105, 0.25), -10px -10px 24px rgba(255, 255, 255, 0.95), -3px -3px 6px #FFFFFF',
         }}
       >
-        <div className="flex items-start sm:items-center gap-4 sm:gap-6">
-          {/* Avatar Icon */}
-          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#D4C1AB] border-2 border-[#5C4535]/30 flex items-center justify-center shrink-0 shadow-[inset_2px_2px_4px_rgba(0,0,0,0.1),inset_-2px_-2px_4px_rgba(255,255,255,0.6)]">
-            <UserCircleIcon className="w-12 h-12 sm:w-16 sm:h-16 text-[#34150F]" />
+        <div className="flex items-center gap-5 sm:gap-6">
+          {/* Avatar circle with dark brown border */}
+          <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full border-[2.75px] border-[#362519] flex items-center justify-center shrink-0">
+            <svg
+              className="w-12 h-12 sm:w-14 sm:h-14 text-[#362519]"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="8" r="4" />
+              <path d="M5.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6" />
+            </svg>
           </div>
 
-          <div className="space-y-1 sm:space-y-1.5">
-            <span className="inline-block text-[9px] uppercase tracking-widest font-bold text-[#9E6C28] bg-[#C58B3C]/20 px-2 py-0.5 rounded-full border border-[#C58B3C]/30">
-              IBP Verified
-            </span>
-            <h1 className="font-cormorant text-xl sm:text-2xl lg:text-3xl font-bold text-[#34150F] leading-tight">
+          {/* Lawyer Info */}
+          <div className="space-y-0.5">
+            <h1 className="font-cormorant text-2xl sm:text-3xl font-bold text-[#23150F] leading-tight">
               {lawyer.fullName}, Ll.B.
             </h1>
-            <p className="text-xs text-[#5C4535] font-medium">
+            <p className="text-xs sm:text-[13px] text-[#5C4535] font-medium leading-tight">
               Roll No. {lawyer.rollNumber || '58942'} | IBP {lawyer.ibpChapter?.toUpperCase() || 'MAKATI'}
             </p>
-            <p className="text-xs text-[#7D6855]">
+            <p className="text-xs text-[#5C4535] font-medium">
               ★ 4.9 (53 Reviews) • {lawyer.experienceYears ?? 9} years of practice
             </p>
-            <p className="text-xs text-[#7D6855]">
+            <p className="text-xs text-[#5C4535] font-medium">
               {lawyer.practiceAreas && lawyer.practiceAreas.length > 0
                 ? lawyer.practiceAreas.join(' • ')
                 : 'Labor & Employment • Corporate • Civil Law'}
@@ -144,26 +244,26 @@ export function LawyerDetailView({
           </div>
         </div>
 
-        {/* Rate Banner */}
-        <div className="sm:text-right w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-[#D1BEA8]">
-          <div className="flex sm:flex-col items-baseline sm:items-end justify-between gap-1">
-            <span className="font-cormorant text-3xl sm:text-4xl font-bold text-[#34150F]">
+        {/* Rate on right side */}
+        <div className="md:text-right shrink-0">
+          <div className="flex items-baseline md:justify-end">
+            <span className="font-cormorant text-3xl sm:text-4xl font-bold text-[#23150F]">
               ₱{standardFee.toLocaleString()}
             </span>
-            <span className="text-xs text-[#7D6855] font-medium">/per hour</span>
+            <span className="text-sm sm:text-base text-[#23150F] font-normal ml-1">/per hour</span>
           </div>
         </div>
       </div>
 
-      {/* ─── Navigation Tabs ───────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-4 pt-1">
+      {/* ─── Navigation Tabs (Exact Figma Layout & Soft Drop Shadow Pill) ───── */}
+      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-6 pt-2 pb-2">
         <button
           type="button"
           onClick={() => setActiveTab('about')}
-          className={`px-5 sm:px-7 py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${
             activeTab === 'about'
-              ? 'bg-[#D4C1AB] text-[#34150F] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
-              : 'text-[#5C4535] hover:text-[#34150F] hover:bg-[#DECEB8]/50'
+              ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
+              : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
           }`}
         >
           About
@@ -172,10 +272,10 @@ export function LawyerDetailView({
         <button
           type="button"
           onClick={() => setActiveTab('reviews')}
-          className={`px-5 sm:px-7 py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${
             activeTab === 'reviews'
-              ? 'bg-[#D4C1AB] text-[#34150F] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
-              : 'text-[#5C4535] hover:text-[#34150F] hover:bg-[#DECEB8]/50'
+              ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
+              : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
           }`}
         >
           Reviews
@@ -184,10 +284,10 @@ export function LawyerDetailView({
         <button
           type="button"
           onClick={() => setActiveTab('booking')}
-          className={`px-5 sm:px-7 py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${
             activeTab === 'booking'
-              ? 'bg-[#D4C1AB] text-[#34150F] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
-              : 'text-[#5C4535] hover:text-[#34150F] hover:bg-[#DECEB8]/50'
+              ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
+              : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
           }`}
         >
           Consultation Booking
@@ -196,77 +296,569 @@ export function LawyerDetailView({
         <button
           type="button"
           onClick={() => setActiveTab('cases')}
-          className={`px-5 sm:px-7 py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${
             activeTab === 'cases'
-              ? 'bg-[#D4C1AB] text-[#34150F] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
-              : 'text-[#5C4535] hover:text-[#34150F] hover:bg-[#DECEB8]/50'
+              ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
+              : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
           }`}
         >
           Cases Handled
         </button>
       </div>
 
-      {/* ─── Confirmation Feedback ─────────────────────────────────────────── */}
-      {bookingStatus === 'saved' && (
-        <div className="p-4 rounded-xl bg-amber-100/80 border border-amber-300 text-amber-900 text-xs sm:text-sm flex items-center justify-between animate-in fade-in">
-          <span>✓ Consultation draft details saved. You can complete your submission anytime.</span>
-          <button type="button" onClick={() => setBookingStatus('idle')} className="font-bold">✕</button>
+      {/* ─── TAB 1: ABOUT (Matches Image 4) ─────────────────────────────────── */}
+      {activeTab === 'about' && (
+        <div className="space-y-8 animate-in fade-in duration-150">
+          {/* Top Row: Bio (Left) & Consultation Rates (Right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+            {/* Bio Card (8 cols) */}
+            <div
+              className="lg:col-span-8 rounded-[28px] p-7 sm:p-8 bg-[#ECE1D2] flex flex-col justify-center"
+              style={{
+                boxShadow:
+                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
+              }}
+            >
+              <p className="text-xs sm:text-[13px] text-[#3E2A1E] leading-relaxed text-justify">
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+              </p>
+            </div>
+
+            {/* Consultation Rates Card (4 cols) */}
+            <div
+              className="lg:col-span-4 rounded-[28px] p-6 sm:p-7 flex flex-col justify-center space-y-4"
+              style={{
+                backgroundColor: '#DFC5A4',
+                boxShadow:
+                  '10px 12px 28px rgba(165, 135, 105, 0.45), 3px 4px 8px rgba(165, 135, 105, 0.25), -10px -10px 24px rgba(255, 255, 255, 0.95), -3px -3px 6px #FFFFFF',
+              }}
+            >
+              <h3 className="font-cormorant text-xl sm:text-2xl font-bold text-[#23150F] text-center">
+                Consultation Rates:
+              </h3>
+
+              <div className="space-y-3 pt-1">
+                <div className="flex justify-between items-baseline gap-2">
+                  <span className="text-xs sm:text-[13px] text-[#4A3525] font-medium">Initial Consultation (30 mins)</span>
+                  <div className="text-right shrink-0">
+                    <span className="font-bold text-xs sm:text-sm text-[#23150F]">₱{initialFee.toLocaleString()}</span>
+                    <span className="text-[11px] text-[#5C4535] ml-1">/per hour</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-baseline gap-2">
+                  <span className="text-xs sm:text-[13px] text-[#4A3525] font-medium">Standard Consultation (1 hr)</span>
+                  <div className="text-right shrink-0">
+                    <span className="font-bold text-xs sm:text-sm text-[#23150F]">₱{standardFee.toLocaleString()}</span>
+                    <span className="text-[11px] text-[#5C4535] ml-1">/per hour</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-baseline gap-2">
+                  <span className="text-xs sm:text-[13px] text-[#4A3525] font-medium">Extended Consultation (2 hrs)</span>
+                  <div className="text-right shrink-0">
+                    <span className="font-bold text-xs sm:text-sm text-[#23150F]">₱{extendedFee.toLocaleString()}</span>
+                    <span className="text-[11px] text-[#5C4535] ml-1">/per hour</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Professional Background Section */}
+          <div className="space-y-4">
+            <h2 className="font-cormorant text-2xl font-bold text-[#23150F]">Professional Background</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Areas of Practice */}
+              <div
+                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-2.5"
+                style={{
+                  boxShadow:
+                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
+                }}
+              >
+                <h4 className="font-cormorant font-bold text-base text-[#23150F]">Areas of Practice</h4>
+                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed">
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Legal Experience */}
+              <div
+                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-2.5"
+                style={{
+                  boxShadow:
+                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
+                }}
+              >
+                <h4 className="font-cormorant font-bold text-base text-[#23150F]">Legal Experience</h4>
+                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed">
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Consultation Services */}
+              <div
+                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-2.5"
+                style={{
+                  boxShadow:
+                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
+                }}
+              >
+                <h4 className="font-cormorant font-bold text-base text-[#23150F]">Consultation Services</h4>
+                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed">
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Philippine Bar Examination Passer */}
+              <div
+                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-2.5"
+                style={{
+                  boxShadow:
+                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
+                }}
+              >
+                <h4 className="font-cormorant font-bold text-base text-[#23150F]">
+                  Philippine Bar Examination Passer ({lawyer.barPasserYear ?? 2022})
+                </h4>
+                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed">
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Educational Background Section */}
+          <div className="space-y-4">
+            <h2 className="font-cormorant text-2xl font-bold text-[#23150F]">Educational Background</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Card 1: Juris Doctor */}
+              <div
+                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-3"
+                style={{
+                  boxShadow:
+                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
+                }}
+              >
+                <div className="flex items-center gap-3.5">
+                  {/* Scales of Justice Icon */}
+                  <svg className="w-8 h-8 text-[#23150F] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M12 3v18M7 21h10M3 7h18" />
+                    <path d="M6 7l-3 7c0 1.5 1.5 2.5 3 2.5s3-1 3-2.5L6 7z" />
+                    <path d="M18 7l-3 7c0 1.5 1.5 2.5 3 2.5s3-1 3-2.5L18 7z" />
+                  </svg>
+                  <div>
+                    <h4 className="font-cormorant font-bold text-base sm:text-lg text-[#23150F] leading-tight">
+                      Juris Doctor (2017 - 2021)
+                    </h4>
+                    <p className="text-xs text-[#7D6855]">University of the Philippines - Cebu</p>
+                  </div>
+                </div>
+
+                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed pt-1">
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Card 2: Bachelor of Arts in Political Science */}
+              <div
+                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-3"
+                style={{
+                  boxShadow:
+                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
+                }}
+              >
+                <div className="flex items-center gap-3.5">
+                  {/* Graduation Cap / Diploma Icon */}
+                  <svg className="w-8 h-8 text-[#23150F] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                    <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                  </svg>
+                  <div>
+                    <h4 className="font-cormorant font-bold text-base sm:text-lg text-[#23150F] leading-tight">
+                      Bachelor of Arts in Political Science (2013 - 2017)
+                    </h4>
+                    <p className="text-xs text-[#7D6855]">University of San Carlos - Main Campus</p>
+                  </div>
+                </div>
+
+                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed pt-1">
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {bookingStatus === 'submitted' && (
-        <div className="p-6 rounded-2xl bg-emerald-100/90 border border-emerald-300 text-emerald-950 space-y-3 animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">✅</span>
-            <h3 className="font-cormorant font-bold text-lg">Consultation Request Confirmed</h3>
+      {/* ─── TAB 2: REVIEWS (Matches Image 1) ───────────────────────────────── */}
+      {activeTab === 'reviews' && (
+        <div className="space-y-6 animate-in fade-in duration-150">
+          {/* Main Large Reviews Outer Container */}
+          <div
+            className="rounded-[28px] p-6 sm:p-9 bg-[#ECE1D2] space-y-6"
+            style={{
+              boxShadow:
+                '14px 14px 32px rgba(182, 155, 130, 0.4), -14px -14px 32px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
+            }}
+          >
+            {/* Score header */}
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="font-cormorant text-5xl sm:text-6xl font-bold text-[#23150F] leading-none">
+                4.9
+              </span>
+              <span className="font-cormorant text-2xl sm:text-3xl font-semibold text-[#23150F]">
+                /5
+              </span>
+
+              {/* 5 Stars */}
+              <div className="flex items-center gap-1.5 text-[#C58B3C] text-2xl sm:text-3xl ml-3 sm:ml-5">
+                <span>★</span>
+                <span>★</span>
+                <span>★</span>
+                <span>★</span>
+                <span>★</span>
+              </div>
+
+              <span className="font-sans text-xs sm:text-sm font-medium text-[#4A3525] ml-2">
+                (53 Reviews)
+              </span>
+            </div>
+
+            {/* Filter pills */}
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setSelectedReviewStar(5)}
+                className={`px-6 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+                  selectedReviewStar === 5
+                    ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
+                    : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
+                }`}
+              >
+                5
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedReviewStar(4)}
+                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+                  selectedReviewStar === 4
+                    ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
+                    : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
+                }`}
+              >
+                ★4
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedReviewStar(3)}
+                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+                  selectedReviewStar === 3
+                    ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
+                    : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
+                }`}
+              >
+                ★3
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedReviewStar(2)}
+                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+                  selectedReviewStar === 2
+                    ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
+                    : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
+                }`}
+              >
+                ★2
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedReviewStar(1)}
+                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+                  selectedReviewStar === 1
+                    ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
+                    : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
+                }`}
+              >
+                ★1
+              </button>
+            </div>
+
+            {/* Review Cards Stack */}
+            <div className="space-y-4 pt-1">
+              {allReviews.map((rev) => (
+                <div
+                  key={rev.id}
+                  className="rounded-[22px] p-5 sm:p-6 space-y-3"
+                  style={{
+                    backgroundColor: '#DFC5A4',
+                    boxShadow:
+                      '6px 8px 18px rgba(165, 135, 105, 0.4), 2px 2px 5px rgba(165, 135, 105, 0.2), -6px -6px 16px rgba(255, 255, 255, 0.9), -2px -2px 4px #FFFFFF',
+                  }}
+                >
+                  {/* Header: Avatar, Name, Stars, Date */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full border-2 border-[#362519] flex items-center justify-center shrink-0">
+                      <svg
+                        className="w-5 h-5 text-[#362519]"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="8" r="4" />
+                        <path d="M5.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6" />
+                      </svg>
+                    </div>
+
+                    <div>
+                      <h4 className="font-sans font-bold text-xs sm:text-sm text-[#23150F] leading-tight">
+                        {rev.name}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <div className="flex items-center text-[#C58B3C] text-xs">
+                          {'★'.repeat(rev.stars)}
+                        </div>
+                        <span className="text-[10px] sm:text-[11px] text-[#5C4535] font-medium">
+                          {rev.date}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Body Text */}
+                  <p className="text-xs sm:text-[13px] text-[#34150F] leading-relaxed text-justify">
+                    {rev.content}
+                  </p>
+
+                  {/* Footer Action Links */}
+                  <div className="flex items-center gap-5 pt-1 text-[11px] font-medium text-[#5C4535]">
+                    <button
+                      type="button"
+                      onClick={() => alert(`Reply to ${rev.name}`)}
+                      className="inline-flex items-center gap-1.5 hover:text-[#23150F] transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="9 17 4 12 9 7" />
+                        <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                      </svg>
+                      <span>Reply</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleHelpful(rev.id)}
+                      className="inline-flex items-center gap-1.5 hover:text-[#23150F] transition-colors"
+                    >
+                      <svg
+                        className={`w-3.5 h-3.5 ${userVotedHelpful[rev.id] ? 'fill-current text-[#C58B3C]' : ''}`}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+                      </svg>
+                      <span>Helpful? ({helpfulCounts[rev.id] || 0})</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <p className="text-xs sm:text-sm">
-            Your booking request for <strong>{lawyer.fullName}</strong> on <strong>September {selectedDay}, 2026 ({selectedTimeSlot})</strong> has been received under confidential attorney-client privilege.
-          </p>
-          <div className="flex items-center gap-4 pt-2">
-            <Link
-              href="/client/consultations"
-              className="px-4 py-2 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-semibold hover:bg-[#352219]"
-            >
-              View My Consultations
-            </Link>
+
+          {/* Bottom Pagination matching Figma: < ● ● ● ● > */}
+          <div className="flex items-center justify-center gap-4 pt-3 pb-4">
             <button
               type="button"
-              onClick={() => setBookingStatus('idle')}
-              className="text-xs text-[#5C4535] underline"
+              onClick={() => setReviewPage((p) => Math.max(1, p - 1))}
+              disabled={reviewPage <= 1}
+              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
+              style={{
+                boxShadow:
+                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
+              }}
+              aria-label="Previous reviews page"
             >
-              Book Another Session
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4].map((p) => {
+                const isActive = p === reviewPage;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setReviewPage(p)}
+                    className={`w-2.5 h-2.5 rounded-full transition-all ${
+                      isActive ? 'bg-[#362519] scale-125' : 'bg-[#C58B3C]/80 hover:bg-[#362519]'
+                    }`}
+                    aria-label={`Go to review page ${p}`}
+                  />
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setReviewPage((p) => Math.min(4, p + 1))}
+              disabled={reviewPage >= 4}
+              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
+              style={{
+                boxShadow:
+                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
+              }}
+              aria-label="Next reviews page"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
             </button>
           </div>
         </div>
       )}
 
-      {/* ─── TAB 1: CONSULTATION BOOKING (Matches Screenshot) ──────────────── */}
+      {/* ─── TAB 3: CONSULTATION BOOKING (Matches Image 3) ───────────────────── */}
       {activeTab === 'booking' && (
         <form onSubmit={handleSubmitBooking} className="space-y-8 animate-in fade-in duration-150">
+          {/* Confirmation Feedback */}
+          {bookingStatus === 'saved' && (
+            <div className="p-4 rounded-2xl bg-amber-100/90 border border-amber-300 text-amber-900 text-xs sm:text-sm flex items-center justify-between">
+              <span>✓ Consultation draft details saved. You can complete your submission anytime.</span>
+              <button type="button" onClick={() => setBookingStatus('idle')} className="font-bold">✕</button>
+            </div>
+          )}
+
+          {bookingStatus === 'submitted' && (
+            <div className="p-6 rounded-3xl bg-emerald-100/95 border border-emerald-300 text-emerald-950 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">✅</span>
+                <h3 className="font-cormorant font-bold text-lg">Consultation Request Confirmed</h3>
+              </div>
+              <p className="text-xs sm:text-sm">
+                Your booking request for <strong>{lawyer.fullName}</strong> on <strong>September {selectedDay}, 2026 ({selectedTimeSlot})</strong> has been received under confidential attorney-client privilege.
+              </p>
+              <div className="flex items-center gap-4 pt-2">
+                <Link
+                  href="/client/consultations"
+                  className="px-5 py-2.5 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-semibold hover:bg-[#352219]"
+                >
+                  View My Consultations
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setBookingStatus('idle')}
+                  className="text-xs text-[#5C4535] underline"
+                >
+                  Book Another Session
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Calendar & Time Slots Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
             {/* Calendar Card (Left - 8 cols) */}
             <div
-              className="lg:col-span-8 rounded-2xl p-6 bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 shadow-[5px_5px_14px_rgba(0,0,0,0.06),-5px_-5px_14px_rgba(255,255,255,0.7)] flex flex-col justify-between"
+              className="lg:col-span-8 rounded-[28px] p-6 sm:p-8 bg-[#ECE1D2] flex flex-col justify-between"
+              style={{
+                boxShadow:
+                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
+              }}
             >
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 pb-4">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-10">
                 {/* Big Date Highlight */}
-                <div className="space-y-1 sm:pr-8 sm:border-r border-[#D1BEA8]/70">
-                  <span className="font-cinzel text-xs font-bold uppercase tracking-widest text-[#7D6855]">
+                <div className="text-center sm:text-left sm:pr-8 sm:border-r border-[#D1BEA8]/80 shrink-0">
+                  <div className="font-cormorant text-base font-bold uppercase tracking-widest text-[#4A3525]">
                     SEPT
-                  </span>
-                  <div className="font-cormorant text-5xl sm:text-6xl font-bold text-[#C58B3C] leading-none">
+                  </div>
+                  <div className="font-cormorant text-6xl sm:text-7xl font-bold text-[#C58B3C] leading-none my-1">
                     {selectedDay}
                   </div>
-                  <span className="font-cinzel text-[10px] font-bold tracking-widest uppercase text-[#5C4535]">
+                  <div className="font-cormorant text-xs sm:text-sm font-bold tracking-widest uppercase text-[#4A3525]">
                     WEDNESDAY
-                  </span>
+                  </div>
                 </div>
 
                 {/* Mini Calendar Grid */}
-                <div className="flex-1">
-                  <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center pb-2 text-[10px] sm:text-xs font-bold text-[#7D6855] uppercase tracking-wider">
+                <div className="flex-1 w-full max-w-sm sm:max-w-none">
+                  <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center pb-3 text-[11px] sm:text-xs font-bold text-[#4A3525] uppercase tracking-wider">
                     <span>SUN</span>
                     <span>MON</span>
                     <span>TUE</span>
@@ -289,8 +881,8 @@ export function LawyerDetailView({
                           onClick={() => setSelectedDay(item.day!)}
                           className={`h-8 w-8 mx-auto rounded-full flex items-center justify-center font-medium text-xs transition-all ${
                             isSelected
-                              ? 'bg-[#D4C1AB] text-[#34150F] font-bold border-2 border-[#C58B3C] shadow-[inset_1px_1px_3px_rgba(0,0,0,0.18)] scale-105'
-                              : 'text-[#3E2A1E] hover:bg-[#DECEB8] hover:text-[#34150F]'
+                              ? 'bg-[#DFC5A4] text-[#C58B3C] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.18)] scale-105'
+                              : 'text-[#3E2A1E] hover:bg-[#DECEB8] hover:text-[#23150F]'
                           }`}
                         >
                           {String(item.day).padStart(2, '0')}
@@ -304,12 +896,12 @@ export function LawyerDetailView({
 
             {/* Time Slots Card (Right - 4 cols) */}
             <div
-              className="lg:col-span-4 rounded-2xl p-5 bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 shadow-[5px_5px_14px_rgba(0,0,0,0.06),-5px_-5px_14px_rgba(255,255,255,0.7)] flex flex-col justify-center space-y-2.5"
+              className="lg:col-span-4 rounded-[28px] p-6 bg-[#ECE1D2] flex flex-col justify-center space-y-3"
+              style={{
+                boxShadow:
+                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
+              }}
             >
-              <div className="text-[11px] font-bold uppercase tracking-wider text-[#7D6855] pb-1">
-                Available Time Slots
-              </div>
-
               {timeSlots.map((slot) => {
                 const isSelected = selectedTimeSlot === slot;
                 return (
@@ -317,10 +909,10 @@ export function LawyerDetailView({
                     key={slot}
                     type="button"
                     onClick={() => setSelectedTimeSlot(slot)}
-                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium transition-all text-center ${
+                    className={`w-full py-2.5 px-3 rounded-full text-xs font-medium transition-all text-center ${
                       isSelected
-                        ? 'bg-[#D4C1AB] text-[#34150F] font-bold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)] border border-[#C58B3C]/50'
-                        : 'bg-[#DECEB8]/70 text-[#5C4535] hover:bg-[#D4C1AB]/40 shadow-[2px_2px_5px_rgba(0,0,0,0.03),-2px_-2px_5px_rgba(255,255,255,0.6)]'
+                        ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
+                        : 'bg-[#E6D7C3] hover:bg-[#DFC5A4]/60 text-[#5C4535] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
                     }`}
                   >
                     {slot}
@@ -332,39 +924,45 @@ export function LawyerDetailView({
 
           {/* Mode of Communication Section */}
           <div className="space-y-3">
-            <h2 className="font-cormorant text-xl font-bold text-[#34150F]">Mode of Communication</h2>
+            <h2 className="font-cormorant text-2xl font-bold text-[#23150F]">Mode of Communication</h2>
             <div
-              className="rounded-2xl p-4 sm:p-5 bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 shadow-[5px_5px_14px_rgba(0,0,0,0.06),-5px_-5px_14px_rgba(255,255,255,0.7)] space-y-3"
+              className="rounded-[28px] p-5 sm:p-6 bg-[#ECE1D2] space-y-3"
+              style={{
+                boxShadow:
+                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
+              }}
             >
               {/* Option 1: Video Consultation */}
               <div
                 onClick={() => setCommunicationMode('video')}
-                className={`flex items-start gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all ${
+                className={`flex items-start gap-3.5 p-4 rounded-[20px] cursor-pointer transition-all ${
                   communicationMode === 'video'
-                    ? 'bg-[#D4C1AB]/80 border border-[#C58B3C]/60 shadow-[inset_1px_1px_3px_rgba(0,0,0,0.1)]'
-                    : 'bg-[#DECEB8]/40 border border-transparent hover:bg-[#DECEB8]'
+                    ? 'bg-[#DFC5A4] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
+                    : 'bg-transparent hover:bg-[#E5D5C1]/50'
                 }`}
               >
                 <div className="mt-0.5">
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                    communicationMode === 'video' ? 'border-[#34150F]' : 'border-[#7D6855]'
-                  }`}>
-                    {communicationMode === 'video' && <div className="w-2 h-2 rounded-full bg-[#34150F]" />}
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                      communicationMode === 'video' ? 'border-[#23150F]' : 'border-[#7D6855]'
+                    }`}
+                  >
+                    {communicationMode === 'video' && <div className="w-2 h-2 rounded-full bg-[#23150F]" />}
                   </div>
                 </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-[#34150F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="w-4 h-4 text-[#23150F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
-                    <span className="text-xs sm:text-sm font-bold text-[#34150F]">Video Consultation</span>
-                    <span className="text-[9px] font-bold text-[#9E6C28] uppercase tracking-wider bg-[#C58B3C]/20 px-2 py-0.5 rounded-full">
+                    <span className="text-xs sm:text-sm font-bold text-[#23150F]">Video Consultation</span>
+                    <span className="text-[9px] uppercase tracking-wider font-bold bg-[#ECE1D2] text-[#9E6C28] px-2 py-0.5 rounded-full ml-1">
                       Recommended
                     </span>
                   </div>
                   <p className="text-[11px] sm:text-xs text-[#5C4535] leading-relaxed">
-                    End-to-end encrypted video meeting with integrated document sharing and interactive legal intake.
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
                   </p>
                 </div>
               </div>
@@ -372,29 +970,31 @@ export function LawyerDetailView({
               {/* Option 2: Audio Call */}
               <div
                 onClick={() => setCommunicationMode('audio')}
-                className={`flex items-start gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all ${
+                className={`flex items-start gap-3.5 p-4 rounded-[20px] cursor-pointer transition-all ${
                   communicationMode === 'audio'
-                    ? 'bg-[#D4C1AB]/80 border border-[#C58B3C]/60 shadow-[inset_1px_1px_3px_rgba(0,0,0,0.1)]'
-                    : 'bg-[#DECEB8]/40 border border-transparent hover:bg-[#DECEB8]'
+                    ? 'bg-[#DFC5A4] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
+                    : 'bg-transparent hover:bg-[#E5D5C1]/50'
                 }`}
               >
                 <div className="mt-0.5">
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                    communicationMode === 'audio' ? 'border-[#34150F]' : 'border-[#7D6855]'
-                  }`}>
-                    {communicationMode === 'audio' && <div className="w-2 h-2 rounded-full bg-[#34150F]" />}
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                      communicationMode === 'audio' ? 'border-[#23150F]' : 'border-[#7D6855]'
+                    }`}
+                  >
+                    {communicationMode === 'audio' && <div className="w-2 h-2 rounded-full bg-[#23150F]" />}
                   </div>
                 </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-[#34150F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="w-4 h-4 text-[#23150F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                     </svg>
-                    <span className="text-xs sm:text-sm font-bold text-[#34150F]">Audio Call</span>
+                    <span className="text-xs sm:text-sm font-bold text-[#23150F]">Audio Call</span>
                   </div>
                   <p className="text-[11px] sm:text-xs text-[#5C4535] leading-relaxed">
-                    Direct secure cellular or voice consultation over private encrypted voice channels.
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
                   </p>
                 </div>
               </div>
@@ -403,9 +1003,13 @@ export function LawyerDetailView({
 
           {/* Purpose of Consultation Section */}
           <div className="space-y-3">
-            <h2 className="font-cormorant text-xl font-bold text-[#34150F]">Purpose of Consultation</h2>
+            <h2 className="font-cormorant text-2xl font-bold text-[#23150F]">Purpose of Consultation</h2>
             <div
-              className="rounded-2xl p-5 sm:p-7 bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 shadow-[5px_5px_14px_rgba(0,0,0,0.06),-5px_-5px_14px_rgba(255,255,255,0.7)] space-y-5"
+              className="rounded-[28px] p-6 sm:p-8 bg-[#ECE1D2] space-y-5"
+              style={{
+                boxShadow:
+                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
+              }}
             >
               {/* Subject Input */}
               <div className="space-y-1.5">
@@ -415,7 +1019,11 @@ export function LawyerDetailView({
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="e.g., Makati Residential Lease: Deposit Dispute & Formal Notice to Vacate"
-                  className="w-full px-4 py-3 rounded-xl bg-[#DECEB8]/70 border border-[#D1BEA8] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.08),inset_-2px_-2px_4px_rgba(255,255,255,0.6)] text-xs sm:text-sm text-[#34150F] placeholder:text-[#A69584] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
+                  className="w-full rounded-2xl py-3 px-4 bg-[#E4D5C2] text-xs sm:text-sm text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none"
+                  style={{
+                    boxShadow:
+                      'inset 3px 3px 6px rgba(165, 140, 115, 0.45), inset -3px -3px 6px rgba(255, 255, 255, 0.85)',
+                  }}
                 />
               </div>
 
@@ -427,7 +1035,11 @@ export function LawyerDetailView({
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Provide concise facts, key contract dates, and specific legal queries for counsel to review..."
-                  className="w-full px-4 py-3 rounded-xl bg-[#DECEB8]/70 border border-[#D1BEA8] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.08),inset_-2px_-2px_4px_rgba(255,255,255,0.6)] text-xs sm:text-sm text-[#34150F] placeholder:text-[#A69584] focus:outline-none focus:ring-1 focus:ring-[#C58B3C] resize-y"
+                  className="w-full rounded-2xl py-3 px-4 bg-[#E4D5C2] text-xs sm:text-sm text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none resize-y"
+                  style={{
+                    boxShadow:
+                      'inset 3px 3px 6px rgba(165, 140, 115, 0.45), inset -3px -3px 6px rgba(255, 255, 255, 0.85)',
+                  }}
                 />
               </div>
 
@@ -435,16 +1047,20 @@ export function LawyerDetailView({
               <div className="space-y-2">
                 <label className="block text-xs font-semibold text-[#5C4535]">File Attachments</label>
                 <div
-                  className="w-full py-8 px-4 border-2 border-dashed border-[#C8B59E] rounded-xl flex flex-col items-center justify-center text-center cursor-pointer hover:border-[#C58B3C] bg-[#DECEB8]/30 transition-all shadow-[inset_1px_1px_3px_rgba(0,0,0,0.04)]"
+                  className="w-full py-10 px-6 rounded-2xl bg-[#E4D5C2] flex flex-col items-center justify-center text-center cursor-pointer hover:bg-[#DECDBA] transition-all"
+                  style={{
+                    boxShadow:
+                      'inset 3px 3px 6px rgba(165, 140, 115, 0.45), inset -3px -3px 6px rgba(255, 255, 255, 0.85)',
+                  }}
                   onClick={() => {
                     const fileName = prompt('Enter document name to attach (e.g., Contract_Addendum.pdf):');
                     if (fileName) setAttachedFiles([...attachedFiles, fileName]);
                   }}
                 >
-                  <svg className="w-8 h-8 text-[#7D6855]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <svg className="w-10 h-10 text-[#7D6855]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
-                  <span className="text-xs text-[#7D6855] font-medium mt-2">
+                  <span className="text-xs text-[#7D6855] font-medium mt-3">
                     Drag and Drop, or Attach Relevant Files
                   </span>
                 </div>
@@ -453,7 +1069,7 @@ export function LawyerDetailView({
                 {attachedFiles.length > 0 && (
                   <div className="space-y-1.5 pt-1">
                     {attachedFiles.map((file, idx) => (
-                      <div key={idx} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#D4C1AB]/50 text-xs text-[#34150F]">
+                      <div key={idx} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#DFC5A4]/60 text-xs text-[#23150F]">
                         <span className="truncate">📎 {file}</span>
                         <button
                           type="button"
@@ -476,7 +1092,12 @@ export function LawyerDetailView({
                   onClick={() => {
                     alert('Documents from your client vault can be linked here.');
                   }}
-                  className="px-6 py-2.5 rounded-xl bg-[#D4C1AB] border border-[#C8B59E] shadow-[2px_2px_6px_rgba(0,0,0,0.06),-2px_-2px_6px_rgba(255,255,255,0.7)] text-xs sm:text-sm font-semibold text-[#34150F] hover:bg-[#DECEB8] transition-all mx-auto block"
+                  className="px-8 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-[#23150F] hover:bg-[#D4B892] transition-all mx-auto block"
+                  style={{
+                    backgroundColor: '#DFC5A4',
+                    boxShadow:
+                      '4px 5px 12px rgba(165, 135, 105, 0.35), -3px -3px 8px rgba(255, 255, 255, 0.85)',
+                  }}
                 >
                   Share Uploaded Files from your Documents
                 </button>
@@ -488,7 +1109,7 @@ export function LawyerDetailView({
                   type="checkbox"
                   checked={agreedToTerms}
                   onChange={(e) => setAgreedToTerms(e.target.checked)}
-                  className="mt-0.5 rounded border-[#C8B59E] text-[#C58B3C] focus:ring-[#C58B3C] w-4 h-4"
+                  className="mt-0.5 rounded border-[#C8B59E] text-[#C58B3C] focus:ring-[#C58B3C] w-4 h-4 cursor-pointer"
                 />
                 <span className="text-xs text-[#5C4535] leading-relaxed select-none">
                   I agree that this intake form and attached records will be reviewed strictly under confidential attorney-client privilege prior to the scheduled consultation session.
@@ -498,31 +1119,41 @@ export function LawyerDetailView({
           </div>
 
           {/* Action Buttons Row */}
-          <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-1">
             <button
               type="button"
               onClick={handleClearInputs}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-medium text-[#5C4535] hover:bg-[#DECEB8] transition-colors"
+              className="w-full sm:w-auto px-6 py-2 rounded-xl border border-[#C8B59E] text-xs font-medium text-[#5C4535] hover:bg-[#E5D5C1] transition-colors"
             >
               Clear All Inputs
             </button>
             <button
               type="button"
               onClick={handleSaveDraft}
-              className="w-full sm:w-auto px-7 py-2.5 rounded-xl bg-[#D4C1AB] text-xs font-semibold text-[#34150F] hover:bg-[#C8B59E] shadow-[2px_2px_6px_rgba(0,0,0,0.06),-2px_-2px_6px_rgba(255,255,255,0.7)] transition-all"
+              className="w-full sm:w-auto px-8 py-2 rounded-xl text-xs font-semibold text-[#23150F] hover:bg-[#D4B892] transition-all"
+              style={{
+                backgroundColor: '#DFC5A4',
+                boxShadow:
+                  '3px 4px 8px rgba(165, 135, 105, 0.3), -2px -2px 6px rgba(255, 255, 255, 0.85)',
+              }}
             >
               Save
             </button>
           </div>
 
-          {/* Divider */}
-          <hr className="border-[#D1BEA8] my-6" />
+          {/* Divider Line */}
+          <hr className="border-[#D1BEA8]/80 my-8" />
 
           {/* Centered Large Submit Button */}
           <div className="pt-2 pb-6">
             <button
               type="submit"
-              className="w-full max-w-sm mx-auto block py-3.5 px-8 rounded-2xl bg-gradient-to-r from-[#D4C1AB] via-[#DECEB8] to-[#D4C1AB] border border-[#C58B3C]/40 text-sm sm:text-base font-bold text-[#34150F] shadow-[4px_4px_12px_rgba(0,0,0,0.1),-4px_-4px_12px_rgba(255,255,255,0.7)] hover:shadow-[inset_2px_2px_4px_rgba(0,0,0,0.12)] transition-all text-center"
+              className="w-full max-w-xs mx-auto block py-3 px-10 rounded-2xl text-sm sm:text-base font-bold text-[#23150F] text-center transition-all hover:brightness-105"
+              style={{
+                backgroundColor: '#DFC5A4',
+                boxShadow:
+                  '6px 8px 18px rgba(165, 135, 105, 0.45), -4px -4px 12px rgba(255, 255, 255, 0.85)',
+              }}
             >
               Submit Booking
             </button>
@@ -530,199 +1161,81 @@ export function LawyerDetailView({
         </form>
       )}
 
-      {/* ─── TAB 2: ABOUT (Matches Previous Reference Screen) ──────────────── */}
-      {activeTab === 'about' && (
-        <div className="space-y-6 animate-in fade-in duration-150">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Bio Box (2 cols) */}
+      {/* ─── TAB 4: CASES HANDLED (Matches Image 2) ─────────────────────────── */}
+      {activeTab === 'cases' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          {/* Stack of 4 Case Cards matching Figma */}
+          {casesHandled.map((caseItem) => (
             <div
-              className="md:col-span-2 rounded-2xl p-6 bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 shadow-[5px_5px_14px_rgba(0,0,0,0.06),-5px_-5px_14px_rgba(255,255,255,0.7)]"
+              key={caseItem.id}
+              className="rounded-[28px] p-6 sm:p-8 bg-[#ECE1D2] space-y-2.5"
+              style={{
+                boxShadow:
+                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
+              }}
             >
-              <h3 className="font-cormorant text-xl font-bold text-[#34150F] mb-3">Overview & Bio</h3>
-              <p className="text-xs sm:text-sm text-[#3E2A1E] leading-relaxed">
-                {lawyer.about ||
-                  'Experienced litigation and dispute resolution counsel practicing before the trial courts, National Labor Relations Commission (NLRC), and appellate tribunals. Dedicated to advising both private individuals and corporate entities on contract negotiation, compliance matters, and residential dispute settlement with high adherence to Philippine ethical codes.'}
+              <div className="font-bold text-[10px] sm:text-[11px] text-[#C58B3C] uppercase tracking-wider">
+                {caseItem.docket}
+              </div>
+              <h3 className="font-cormorant text-lg sm:text-xl font-bold text-[#23150F] leading-tight">
+                {caseItem.title}
+              </h3>
+              <p className="text-xs sm:text-[13px] text-[#3E2A1E] leading-relaxed text-justify">
+                {caseItem.content}
               </p>
             </div>
+          ))}
 
-            {/* Rates Box (1 col) */}
-            <div
-              className="rounded-2xl p-6 bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 shadow-[5px_5px_14px_rgba(0,0,0,0.06),-5px_-5px_14px_rgba(255,255,255,0.7)] space-y-3"
-            >
-              <h3 className="font-cormorant text-xl font-bold text-[#34150F]">Consultation Rates:</h3>
-              <div className="space-y-2 text-xs sm:text-sm">
-                <div className="flex justify-between items-baseline">
-                  <span className="text-[#5C4535]">Initial Consultation (30 mins)</span>
-                  <span className="font-bold text-[#34150F]">₱{initialFee.toLocaleString()} <span className="text-[10px] text-[#7D6855]">/session</span></span>
-                </div>
-                <div className="flex justify-between items-baseline">
-                  <span className="text-[#5C4535]">Standard Consultation (1 hr)</span>
-                  <span className="font-bold text-[#34150F]">₱{standardFee.toLocaleString()} <span className="text-[10px] text-[#7D6855]">/per hour</span></span>
-                </div>
-                <div className="flex justify-between items-baseline">
-                  <span className="text-[#5C4535]">Extended Consultation (2 hrs)</span>
-                  <span className="font-bold text-[#34150F]">₱{extendedFee.toLocaleString()} <span className="text-[10px] text-[#7D6855]">/per hour</span></span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('booking')}
-                className="w-full mt-4 py-2.5 rounded-xl bg-[#D4C1AB] font-bold text-xs text-[#34150F] hover:bg-[#DECEB8] transition-all shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,0.7)]"
-              >
-                Book Consultation Now →
-              </button>
-            </div>
-          </div>
-
-          {/* Professional Background */}
-          <div className="space-y-3">
-            <h2 className="font-cormorant text-xl font-bold text-[#34150F]">Professional Background</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-5 rounded-xl bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 space-y-2 shadow-[4px_4px_10px_rgba(0,0,0,0.05),-4px_-4px_10px_rgba(255,255,255,0.7)]">
-                <h4 className="font-bold text-sm text-[#34150F]">Areas of Practice</h4>
-                <ul className="list-disc list-inside space-y-1 text-xs text-[#5C4535]">
-                  <li>Labor & Employment: Termination disputes, non-compete clauses, and CBA negotiation</li>
-                  <li>Corporate & Commercial: SEC compliance, vendor contracts, and entity structuring</li>
-                  <li>Civil Law & Property: Residential lease disputes, deeds of sale, and quiet title actions</li>
-                </ul>
-              </div>
-
-              <div className="p-5 rounded-xl bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 space-y-2 shadow-[4px_4px_10px_rgba(0,0,0,0.05),-4px_-4px_10px_rgba(255,255,255,0.7)]">
-                <h4 className="font-bold text-sm text-[#34150F]">Legal Experience</h4>
-                <ul className="list-disc list-inside space-y-1 text-xs text-[#5C4535]">
-                  <li>Senior Litigation Associate — Santos & Partners Law Offices (2018–Present)</li>
-                  <li>Legal Counsel — Philippine Arbitration & Mediation Center (2015–2018)</li>
-                  <li>Junior Associate — Metro Manila Law Chambers (2014–2015)</li>
-                </ul>
-              </div>
-
-              <div className="p-5 rounded-xl bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 space-y-2 shadow-[4px_4px_10px_rgba(0,0,0,0.05),-4px_-4px_10px_rgba(255,255,255,0.7)]">
-                <h4 className="font-bold text-sm text-[#34150F]">Consultation Services</h4>
-                <ul className="list-disc list-inside space-y-1 text-xs text-[#5C4535]">
-                  <li>Pre-litigation case evaluation and demand letter drafting</li>
-                  <li>Contract interpretation and risk assessment memorandums</li>
-                  <li>Representation before administrative regulatory agencies</li>
-                </ul>
-              </div>
-
-              <div className="p-5 rounded-xl bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 space-y-2 shadow-[4px_4px_10px_rgba(0,0,0,0.05),-4px_-4px_10px_rgba(255,255,255,0.7)]">
-                <h4 className="font-bold text-sm text-[#34150F]">Philippine Bar Examination Passer (2014)</h4>
-                <p className="text-xs text-[#5C4535] leading-relaxed">
-                  Admitted to the Philippine Bar in 2014. Member in good standing of the Integrated Bar of the Philippines (IBP {lawyer.ibpChapter || 'Makati Chapter'}).
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Educational Background */}
-          <div className="space-y-3">
-            <h2 className="font-cormorant text-xl font-bold text-[#34150F]">Educational Background</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-5 rounded-xl bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 space-y-2 shadow-[4px_4px_10px_rgba(0,0,0,0.05),-4px_-4px_10px_rgba(255,255,255,0.7)]">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">⚖️</span>
-                  <div>
-                    <h4 className="font-bold text-sm text-[#34150F]">Juris Doctor (2010 – 2014)</h4>
-                    <p className="text-xs text-[#7D6855]">University of the Philippines – College of Law</p>
-                  </div>
-                </div>
-                <p className="text-xs text-[#5C4535]">Graduated with honors, Philippine Law Journal Contributor.</p>
-              </div>
-
-              <div className="p-5 rounded-xl bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 space-y-2 shadow-[4px_4px_10px_rgba(0,0,0,0.05),-4px_-4px_10px_rgba(255,255,255,0.7)]">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">📜</span>
-                  <div>
-                    <h4 className="font-bold text-sm text-[#34150F]">Bachelor of Arts in Political Science (2006 – 2010)</h4>
-                    <p className="text-xs text-[#7D6855]">Ateneo de Manila University</p>
-                  </div>
-                </div>
-                <p className="text-xs text-[#5C4535]">Dean&apos;s List awardee, Magna Cum Laude honors.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── TAB 3: REVIEWS ────────────────────────────────────────────────── */}
-      {activeTab === 'reviews' && (
-        <div className="space-y-4 animate-in fade-in duration-150">
-          <div className="p-6 rounded-2xl bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 shadow-[5px_5px_14px_rgba(0,0,0,0.06),-5px_-5px_14px_rgba(255,255,255,0.7)] flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <span className="font-cormorant text-5xl font-bold text-[#C58B3C]">4.9</span>
-              <div>
-                <div className="text-amber-600 text-sm">★★★★★</div>
-                <p className="text-xs text-[#7D6855]">Based on 53 verified client consultations</p>
-              </div>
-            </div>
+          {/* Bottom Pagination matching Figma: < ● ● ● ● > */}
+          <div className="flex items-center justify-center gap-4 pt-3 pb-4">
             <button
               type="button"
-              onClick={() => setActiveTab('booking')}
-              className="px-5 py-2 rounded-xl bg-[#D4C1AB] text-xs font-semibold text-[#34150F] shadow-[2px_2px_5px_rgba(0,0,0,0.06),-2px_-2px_5px_rgba(255,255,255,0.7)]"
+              onClick={() => setCasePage((p) => Math.max(1, p - 1))}
+              disabled={casePage <= 1}
+              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
+              style={{
+                boxShadow:
+                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
+              }}
+              aria-label="Previous cases page"
             >
-              Book with this Lawyer
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
             </button>
-          </div>
 
-          <div className="space-y-3">
-            {[
-              {
-                client: 'Engr. Manuel C.',
-                date: 'October 12, 2026',
-                rating: 5,
-                comment: 'Atty. Santos was very thorough in evaluating our commercial lease agreement and spotting unilateral penalty clauses. Highly recommended for business operators.',
-              },
-              {
-                client: 'Clarissa P.',
-                date: 'September 28, 2026',
-                rating: 5,
-                comment: 'Prompt video consultation. She drafted the demand notice immediately and the security deposit dispute was resolved amicably within two weeks.',
-              },
-              {
-                client: 'David G.',
-                date: 'September 15, 2026',
-                rating: 5,
-                comment: 'Clear, compassionate advice on labor grievance procedures. Very well-versed in NLRC jurisprudence.',
-              },
-            ].map((rev, i) => (
-              <div
-                key={i}
-                className="p-4 rounded-xl bg-[#E8DAC8]/50 border border-[#D1BEA8]/50 space-y-1 shadow-[2px_2px_6px_rgba(0,0,0,0.03),-2px_-2px_6px_rgba(255,255,255,0.6)]"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-[#34150F]">{rev.client}</span>
-                  <span className="text-[10px] text-[#7D6855]">{rev.date}</span>
-                </div>
-                <div className="text-amber-600 text-xs">{'★'.repeat(rev.rating)}</div>
-                <p className="text-xs text-[#5C4535] leading-relaxed">{rev.comment}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ─── TAB 4: CASES HANDLED ─────────────────────────────────────────── */}
-      {activeTab === 'cases' && (
-        <div className="space-y-4 animate-in fade-in duration-150">
-          <div className="p-6 rounded-2xl bg-[#E8DAC8]/70 border border-[#D1BEA8]/70 shadow-[5px_5px_14px_rgba(0,0,0,0.06),-5px_-5px_14px_rgba(255,255,255,0.7)] space-y-4">
-            <h3 className="font-cormorant text-xl font-bold text-[#34150F]">Representative Matters & Outcomes</h3>
-            <div className="space-y-3">
-              <div className="p-4 rounded-xl bg-[#DECEB8]/50 border border-[#D1BEA8]/50 space-y-1">
-                <span className="text-[10px] uppercase font-bold text-[#9E6C28]">Real Estate & Tenancy</span>
-                <h4 className="font-bold text-xs sm:text-sm text-[#34150F]">Makati Commercial Arcade Lease Rescission</h4>
-                <p className="text-xs text-[#5C4535]">Successfully represented tenant in pre-litigation settlement, recovering 100% of advance rentals and security deposits.</p>
-              </div>
-              <div className="p-4 rounded-xl bg-[#DECEB8]/50 border border-[#D1BEA8]/50 space-y-1">
-                <span className="text-[10px] uppercase font-bold text-[#9E6C28]">Labor & Employment</span>
-                <h4 className="font-bold text-xs sm:text-sm text-[#34150F]">Corporate Reorganization Redundancy Appeal</h4>
-                <p className="text-xs text-[#5C4535]">Advising mid-sized BPO on lawful separation pay computation and mandatory DOLE notice protocols.</p>
-              </div>
-              <div className="p-4 rounded-xl bg-[#DECEB8]/50 border border-[#D1BEA8]/50 space-y-1">
-                <span className="text-[10px] uppercase font-bold text-[#9E6C28]">Civil & Estate</span>
-                <h4 className="font-bold text-xs sm:text-sm text-[#34150F]">Extrajudicial Settlement with Partition of Real Estate</h4>
-                <p className="text-xs text-[#5C4535]">Prepared deeds of partition and cleared estate tax liabilities for seven co-heirs without judicial intervention.</p>
-              </div>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4].map((p) => {
+                const isActive = p === casePage;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setCasePage(p)}
+                    className={`w-2.5 h-2.5 rounded-full transition-all ${
+                      isActive ? 'bg-[#362519] scale-125' : 'bg-[#C58B3C]/80 hover:bg-[#362519]'
+                    }`}
+                    aria-label={`Go to case page ${p}`}
+                  />
+                );
+              })}
             </div>
+
+            <button
+              type="button"
+              onClick={() => setCasePage((p) => Math.min(4, p + 1))}
+              disabled={casePage >= 4}
+              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
+              style={{
+                boxShadow:
+                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
+              }}
+              aria-label="Next cases page"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </div>
       )}

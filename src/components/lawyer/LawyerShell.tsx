@@ -20,6 +20,7 @@ import {
 
 import { LawyerDashboardView } from './views/LawyerDashboardView';
 import { LawyerConsultationsView } from './views/LawyerConsultationsView';
+import { DocumentsView } from '@/components/documents/DocumentsView';
 
 export type LawyerViewKey =
   | 'dashboard'
@@ -120,6 +121,8 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
         return <LawyerConsultationsView />;
       case 'dashboard':
         return <LawyerDashboardView />;
+      case 'documents':
+        return <DocumentsView role="lawyer" />;
       default:
         return children ?? <LawyerDashboardView />;
     }

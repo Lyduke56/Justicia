@@ -1,0 +1,6 @@
+import React from 'react';
+import { ConsultationsSkeleton } from '@/components/skeletons';
+
+export default function LawyerConsultationsLoading() {
+  return <ConsultationsSkeleton />;
+}
