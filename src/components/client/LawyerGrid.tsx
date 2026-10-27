@@ -77,8 +77,13 @@ export function LawyerGrid({
     return (
       <LawyerDetailView
         lawyer={selectedLawyer}
-        onBack={() => setSelectedLawyer(null)}
-        defaultTab="booking"
+        onBack={() => {
+          setSelectedLawyer(null);
+          if (typeof document !== 'undefined') {
+            document.getElementById('client-main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }}
+        defaultTab="about"
       />
     );
   }

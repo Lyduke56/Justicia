@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { LawyerGrid } from '@/components/client/LawyerGrid';
 import { LawyerSearchFilters } from '@/components/client/LawyerSearchFilters';
+import { LawyerGridSkeleton } from '@/components/skeletons';
 import type { PublicLawyerProfile } from '@/components/client/LawyerGrid';
 
 const PAGE_SIZE = 12;
@@ -171,15 +172,7 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
         languageOptions={languageOptions}
       />
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div
-              key={i}
-              className="rounded-2xl p-5 bg-[#EFE5D8] animate-pulse h-52"
-              style={{ boxShadow: '5px 5px 12px rgba(0,0,0,0.06),-5px -5px 12px rgba(255,255,255,0.9)' }}
-            />
-          ))}
-        </div>
+        <LawyerGridSkeleton count={12} />
       ) : (
         <LawyerGrid
           lawyers={lawyers}

@@ -22,6 +22,7 @@ import { DashboardView } from './views/DashboardView';
 import { FindLawyerView } from './views/FindLawyerView';
 import { MessagesView } from './views/MessagesView';
 import { CasesView } from './views/CasesView';
+import { DocumentsView } from '@/components/documents/DocumentsView';
 import { ConsultationsView } from './views/ConsultationsView';
 import { AIAssistantChat } from './AIAssistantChat';
 
@@ -56,12 +57,20 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'ai-assistant',   name: 'AI Legal Assistant',    href: '/client/ai-assistant',  icon: AIAssistantIcon },
   { key: 'lawyers',        name: 'Find a Lawyer',         href: '/client/lawyers',        icon: FindLawyerIcon },
   { key: 'messages',       name: 'Messages',              href: '/client/messages',       icon: MessagesIcon },
-  { key: 'cases',          name: 'My Cases & Documents',  href: '/client/cases',          icon: BriefcaseFolderIcon },
+  { key: 'cases',          name: 'My Documents',          href: '/client/documents',      icon: BriefcaseFolderIcon },
   { key: 'consultations',  name: 'Consultation Booking',  href: '/client/consultations',  icon: CalendarBookingIcon },
 ];
 
 /** Derive ViewKey from the current pathname */
 function pathnameToView(pathname: string): ViewKey {
+  if (
+    pathname === '/client/documents' ||
+    pathname.startsWith('/client/documents/') ||
+    pathname === '/client/cases' ||
+    pathname.startsWith('/client/cases/')
+  ) {
+    return 'cases';
+  }
   for (const item of NAV_ITEMS) {
     if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
       return item.key;
@@ -114,11 +123,14 @@ export function ClientShell({ user, children }: ClientShellProps) {
       case 'ai-assistant':
         return <AIAssistantChat userFirstName={firstName} />;
       case 'lawyers':
+        if (pathname.startsWith('/client/lawyers/') && pathname !== '/client/lawyers' && children) {
+          return children;
+        }
         return <FindLawyerView isLoggedIn={true} userId={user.id} />;
       case 'messages':
         return <MessagesView />;
       case 'cases':
-        return <CasesView />;
+        return <DocumentsView role="client" />;
       case 'consultations':
         return <ConsultationsView onNavigate={navigate} />;
       case 'dashboard':
