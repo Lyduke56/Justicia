@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface NavbarProps {
   onOpenSignIn?: () => void;
@@ -19,8 +20,12 @@ export function Navbar({ onOpenSignIn }: NavbarProps) {
       setIsScrolled(scrollPos > 30);
 
       const aboutEl = document.getElementById('about');
-      if (aboutEl && scrollPos >= aboutEl.offsetTop - 250) {
+      const featuresEl = document.getElementById('features');
+
+      if (aboutEl && scrollPos >= aboutEl.offsetTop - 300) {
         setActiveSection('about');
+      } else if (featuresEl && scrollPos >= featuresEl.offsetTop - 300) {
+        setActiveSection('features');
       } else {
         setActiveSection('home');
       }
@@ -31,35 +36,45 @@ export function Navbar({ onOpenSignIn }: NavbarProps) {
   }, []);
 
   return (
-    <header
+    <motion.header
+      initial={{ y: -40, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled
-          ? 'bg-[#160c0d]/90 backdrop-blur-md shadow-2xl py-3'
+          ? 'bg-[#160c0d]/90 backdrop-blur-md shadow-2xl py-3 border-b border-[#3c2a1c]/60'
           : 'bg-transparent py-5 lg:py-6'
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 flex items-center justify-between">
-        {/* Left: [LOGO HERE] */}
+        {/* Left: Brand Name / Logo */}
         <div className="flex items-center">
           <Link
             href="/"
-            className="font-cinzel text-sm sm:text-base tracking-[0.2em] text-[#d6cebf] hover:text-[#c5944e] transition-colors"
+            className="group flex items-center gap-2 font-cinzel text-sm sm:text-base tracking-[0.2em] text-[#ded7cb] hover:text-[#c5944e] transition-colors"
           >
-            [LOGO HERE]
+            <span className="w-2 h-2 rounded-full bg-[#c5944e] group-hover:scale-125 transition-transform" />
+            <span className="font-bold">JUSTICIA</span>
           </Link>
         </div>
 
-        {/* Center / Navigation Links */}
+        {/* Center / Navigation Links with Sliding Active Underline */}
         <nav className="hidden md:flex items-center gap-10 lg:gap-14">
           {/* HOME */}
           <a
             href="#home"
             onClick={() => setActiveSection('home')}
-            className="relative py-1 font-cinzel text-xs lg:text-sm font-semibold tracking-[0.2em] uppercase text-[#ded7cb] hover:text-[#c5944e] transition-colors"
+            className={`relative py-1 font-cinzel text-xs lg:text-sm font-semibold tracking-[0.2em] uppercase transition-colors ${
+              activeSection === 'home' ? 'text-[#c5944e]' : 'text-[#b8ada0] hover:text-[#ded7cb]'
+            }`}
           >
             HOME
             {activeSection === 'home' && (
-              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#c5944e]" />
+              <motion.span
+                layoutId="activeNavIndicator"
+                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#c5944e]"
+              />
             )}
           </a>
 
@@ -67,11 +82,17 @@ export function Navbar({ onOpenSignIn }: NavbarProps) {
           <a
             href="#features"
             onClick={() => setActiveSection('features')}
-            className="relative py-1 font-cinzel text-xs lg:text-sm font-semibold tracking-[0.2em] uppercase text-[#b8ada0] hover:text-[#c5944e] transition-colors"
+            className={`relative py-1 font-cinzel text-xs lg:text-sm font-semibold tracking-[0.2em] uppercase transition-colors ${
+              activeSection === 'features' ? 'text-[#c5944e]' : 'text-[#b8ada0] hover:text-[#ded7cb]'
+            }`}
           >
             FEATURES
             {activeSection === 'features' && (
-              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#c5944e]" />
+              <motion.span
+                layoutId="activeNavIndicator"
+                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#c5944e]"
+              />
             )}
           </a>
 
@@ -79,11 +100,17 @@ export function Navbar({ onOpenSignIn }: NavbarProps) {
           <a
             href="#about"
             onClick={() => setActiveSection('about')}
-            className="relative py-1 font-cinzel text-xs lg:text-sm font-semibold tracking-[0.2em] uppercase text-[#b8ada0] hover:text-[#c5944e] transition-colors"
+            className={`relative py-1 font-cinzel text-xs lg:text-sm font-semibold tracking-[0.2em] uppercase transition-colors ${
+              activeSection === 'about' ? 'text-[#c5944e]' : 'text-[#b8ada0] hover:text-[#ded7cb]'
+            }`}
           >
             ABOUT JUSTICIA
             {activeSection === 'about' && (
-              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#c5944e]" />
+              <motion.span
+                layoutId="activeNavIndicator"
+                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#c5944e]"
+              />
             )}
           </a>
         </nav>
@@ -91,30 +118,36 @@ export function Navbar({ onOpenSignIn }: NavbarProps) {
         {/* Right: Auth Action Buttons */}
         <div className="hidden sm:flex items-center gap-3">
           {/* SIGN UP Button */}
-          <Link
-            href="/register"
-            className="font-cinzel text-xs font-bold tracking-[0.15em] bg-[#c5944e] hover:bg-[#d6a25b] text-[#160c0d] px-5 py-2 rounded transition-all duration-200"
-          >
-            SIGN UP
-          </Link>
+          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
+            <Link
+              href="/register"
+              className="font-cinzel text-xs font-bold tracking-[0.15em] bg-[#c5944e] hover:bg-[#d6a25b] text-[#160c0d] px-5 py-2 rounded transition-all duration-200 block shadow-sm"
+            >
+              SIGN UP
+            </Link>
+          </motion.div>
 
-          {/* LOG IN Button — opens sign-in modal if onOpenSignIn provided, else links to /login */}
+          {/* LOG IN Button */}
           {onOpenSignIn ? (
-            <button
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
               onClick={onOpenSignIn}
               id="navbar-login-btn"
               className="font-cinzel text-xs font-bold tracking-[0.15em] border border-[#c5944e] text-[#c5944e] hover:bg-[#c5944e]/10 bg-transparent px-5 py-2 rounded transition-all duration-200 cursor-pointer"
             >
               LOG IN
-            </button>
+            </motion.button>
           ) : (
-            <Link
-              href="/login"
-              id="navbar-login-btn"
-              className="font-cinzel text-xs font-bold tracking-[0.15em] border border-[#c5944e] text-[#c5944e] hover:bg-[#c5944e]/10 bg-transparent px-5 py-2 rounded transition-all duration-200"
-            >
-              LOG IN
-            </Link>
+            <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
+              <Link
+                href="/login"
+                id="navbar-login-btn"
+                className="font-cinzel text-xs font-bold tracking-[0.15em] border border-[#c5944e] text-[#c5944e] hover:bg-[#c5944e]/10 bg-transparent px-5 py-2 rounded transition-all duration-200 block"
+              >
+                LOG IN
+              </Link>
+            </motion.div>
           )}
         </div>
 
@@ -153,53 +186,62 @@ export function Navbar({ onOpenSignIn }: NavbarProps) {
         </div>
       </div>
 
-      {/* Mobile Drawer */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-[#160c0d]/95 border-b border-[#3c2a1c] px-6 py-6 space-y-4 backdrop-blur-xl">
-          <div className="flex flex-col space-y-3 font-cinzel text-sm tracking-[0.15em]">
-            <a
-              href="#home"
-              onClick={() => {
-                setActiveSection('home');
-                setMobileMenuOpen(false);
-              }}
-              className="text-[#ded7cb] hover:text-[#c5944e] py-1 border-b border-[#291b10]"
-            >
-              HOME
-            </a>
-            <a
-              href="#features"
-              onClick={() => {
-                setActiveSection('features');
-                setMobileMenuOpen(false);
-              }}
-              className="text-[#ded7cb] hover:text-[#c5944e] py-1 border-b border-[#291b10]"
-            >
-              FEATURES
-            </a>
-            <a
-              href="#about"
-              onClick={() => {
-                setActiveSection('about');
-                setMobileMenuOpen(false);
-              }}
-              className="text-[#ded7cb] hover:text-[#c5944e] py-1 border-b border-[#291b10]"
-            >
-              ABOUT JUSTICIA
-            </a>
-          </div>
+      {/* Mobile Drawer with AnimatePresence */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="md:hidden bg-[#160c0d]/95 border-b border-[#3c2a1c] px-6 py-6 space-y-4 backdrop-blur-xl overflow-hidden"
+          >
+            <div className="flex flex-col space-y-3 font-cinzel text-sm tracking-[0.15em]">
+              <a
+                href="#home"
+                onClick={() => {
+                  setActiveSection('home');
+                  setMobileMenuOpen(false);
+                }}
+                className="text-[#ded7cb] hover:text-[#c5944e] py-1 border-b border-[#291b10]"
+              >
+                HOME
+              </a>
+              <a
+                href="#features"
+                onClick={() => {
+                  setActiveSection('features');
+                  setMobileMenuOpen(false);
+                }}
+                className="text-[#ded7cb] hover:text-[#c5944e] py-1 border-b border-[#291b10]"
+              >
+                FEATURES
+              </a>
+              <a
+                href="#about"
+                onClick={() => {
+                  setActiveSection('about');
+                  setMobileMenuOpen(false);
+                }}
+                className="text-[#ded7cb] hover:text-[#c5944e] py-1 border-b border-[#291b10]"
+              >
+                ABOUT JUSTICIA
+              </a>
+            </div>
 
-          <div className="pt-2 flex flex-col gap-3">
-            <Link
-              href="/register"
-              onClick={() => setMobileMenuOpen(false)}
-              className="font-cinzel text-center text-xs font-bold tracking-[0.15em] bg-[#c5944e] text-[#160c0d] py-2.5 rounded"
-            >
-              SIGN UP
-            </Link>
-          </div>
-        </div>
-      )}
-    </header>
+            <div className="pt-2 flex flex-col gap-3">
+              <Link
+                href="/register"
+                onClick={() => setMobileMenuOpen(false)}
+                className="font-cinzel text-center text-xs font-bold tracking-[0.15em] bg-[#c5944e] text-[#160c0d] py-2.5 rounded"
+              >
+                SIGN UP
+              </Link>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.header>
   );
 }
+

@@ -17,22 +17,22 @@ export function LandingPageClient() {
       {/* Top Navigation Bar */}
       <Navbar onOpenSignIn={() => setSignInOpen(true)} />
 
-      {/* Hero Section with its own dedicated book_bg.png instance & 75% #160C0D overlay */}
+      {/* Hero Section */}
       <HeroSection />
 
-      {/* Motto Section with its own dedicated book_bg.png instance & 75% #160C0D overlay */}
+      {/* Motto Section */}
       <MottoSection />
 
-      {/* Features Section (placed right before About section) */}
+      {/* Features Section */}
       <FeaturesSection />
 
-      {/* About Section with Hall of Justice Background */}
+      {/* About Section */}
       <AboutSection />
 
       {/* Footer */}
       <Footer />
 
-      {/* Sign In Modal from origin/main auth merge */}
+      {/* Sign In Modal */}
       <SignInModal isOpen={signInOpen} onClose={() => setSignInOpen(false)} />
     </div>
   );
