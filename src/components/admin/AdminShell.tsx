@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { signOutAction } from '@/app/actions/auth';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import {
@@ -19,65 +19,172 @@ import {
   LogoutIcon,
 } from './AdminIcons';
 
+// ─── View Components for Instant View Swapping ───────────────────────────────
+import { AdminDashboardView } from './views/AdminDashboardView';
+import { AdminVerificationQueueView } from './views/AdminVerificationQueueView';
+import { AdminLawyersView } from './views/AdminLawyersView';
+import { AdminUsersView } from './views/AdminUsersView';
+import { AdminKnowledgeBaseView } from './views/AdminKnowledgeBaseView';
+import { AdminAIManagementView } from './views/AdminAIManagementView';
+import { AdminSecurityAuditView } from './views/AdminSecurityAuditView';
+import { AdminSettingsView } from './views/AdminSettingsView';
+
+export type AdminViewKey =
+  | 'dashboard'
+  | 'verification-queue'
+  | 'lawyers'
+  | 'users'
+  | 'knowledge-base'
+  | 'ai-management'
+  | 'security-audit-log'
+  | 'settings'
+  | 'other';
+
+interface AdminNavItem {
+  key: Exclude<AdminViewKey, 'settings' | 'other'>;
+  name: string;
+  href: string;
+  icon: React.FC<{ className?: string }>;
+}
+
 interface AdminShellProps {
   user: {
     id: string;
     email?: string;
     fullName: string;
   };
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
-const ADMIN_NAV_ITEMS = [
+const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   {
+    key: 'dashboard',
     name: 'Dashboard',
     href: '/admin/dashboard',
     icon: HomeIcon,
   },
   {
+    key: 'verification-queue',
     name: 'Verification Queue',
     href: '/admin/lawyers/verification-queue',
     icon: ShieldCheckIcon,
   },
   {
+    key: 'lawyers',
     name: 'Lawyer Directory',
     href: '/admin/lawyers',
     icon: ScaleIcon,
   },
   {
+    key: 'users',
     name: 'User Accounts',
     href: '/admin/users',
     icon: UserGroupIcon,
   },
   {
+    key: 'knowledge-base',
     name: 'Knowledge Base',
     href: '/admin/knowledge-base',
     icon: BookOpenIcon,
   },
   {
+    key: 'ai-management',
     name: 'AI Management',
     href: '/admin/ai-management',
     icon: SparklesIcon,
   },
   {
+    key: 'security-audit-log',
     name: 'Security & Audit Log',
     href: '/admin/settings/security-audit-log',
     icon: DocumentTextIcon,
   },
 ];
 
+/** Derive AdminViewKey from the current pathname */
+function pathnameToView(pathname: string): AdminViewKey {
+  if (pathname === '/admin/dashboard') return 'dashboard';
+  if (pathname === '/admin/lawyers/verification-queue' || pathname.startsWith('/admin/lawyers/verification-queue/')) return 'verification-queue';
+  if (pathname === '/admin/lawyers') return 'lawyers';
+  if (pathname.startsWith('/admin/lawyers/')) return 'other';
+  if (pathname === '/admin/users') return 'users';
+  if (pathname.startsWith('/admin/users/')) return 'other';
+  if (pathname === '/admin/knowledge-base') return 'knowledge-base';
+  if (pathname.startsWith('/admin/knowledge-base/')) return 'other';
+  if (pathname === '/admin/ai-management' || pathname.startsWith('/admin/ai-management/')) return 'ai-management';
+  if (pathname === '/admin/settings/security-audit-log' || pathname.startsWith('/admin/settings/security-audit-log/')) return 'security-audit-log';
+  if (pathname === '/admin/settings' || pathname.startsWith('/admin/settings/')) return 'settings';
+  return 'dashboard';
+}
+
 export function AdminShell({ user, children }: AdminShellProps) {
   // Mount 30-min inactivity auto-logout
   useInactivityLogout();
 
+  const router = useRouter();
   const pathname = usePathname();
+
+  // Initialise view from current URL so hard-refresh works correctly
+  const [activeView, setActiveView] = useState<AdminViewKey>(() => pathnameToView(pathname));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
-  const isCurrentActive = (href: string) => {
-    return pathname === href || (href !== '/admin/dashboard' && pathname.startsWith(href));
-  };
+  // Keep view in sync when user navigates with browser back/forward
+  useEffect(() => {
+    setActiveView(pathnameToView(pathname));
+  }, [pathname]);
+
+  // Navigate: update client view state immediately (0ms) + update URL without full server trip
+  const navigate = useCallback(
+    (key: AdminViewKey) => {
+      const item = ADMIN_NAV_ITEMS.find((n) => n.key === key);
+      const href = item?.href ?? (key === 'settings' ? '/admin/settings' : '/admin/dashboard');
+      setActiveView(key);
+      router.push(href, { scroll: false });
+      setMobileMenuOpen(false);
+    },
+    [router]
+  );
+
+  const navigateToDashboard = useCallback(() => {
+    setActiveView('dashboard');
+    router.push('/admin/dashboard', { scroll: false });
+    setMobileMenuOpen(false);
+  }, [router]);
+
+  // Render active view instantly
+  function renderView() {
+    switch (activeView) {
+      case 'verification-queue':
+        return <AdminVerificationQueueView onNavigate={navigate} />;
+      case 'lawyers':
+        if (pathname.startsWith('/admin/lawyers/') && pathname !== '/admin/lawyers' && children) {
+          return children;
+        }
+        return <AdminLawyersView onNavigate={navigate} />;
+      case 'users':
+        if (pathname.startsWith('/admin/users/') && pathname !== '/admin/users' && children) {
+          return children;
+        }
+        return <AdminUsersView />;
+      case 'knowledge-base':
+        if (pathname.startsWith('/admin/knowledge-base/') && pathname !== '/admin/knowledge-base' && children) {
+          return children;
+        }
+        return <AdminKnowledgeBaseView />;
+      case 'ai-management':
+        return <AdminAIManagementView />;
+      case 'security-audit-log':
+        return <AdminSecurityAuditView />;
+      case 'settings':
+        return <AdminSettingsView />;
+      case 'dashboard':
+        return <AdminDashboardView onNavigate={navigate} />;
+      default:
+        return children ?? <AdminDashboardView onNavigate={navigate} />;
+    }
+  }
 
   return (
     <div className="flex flex-col h-screen bg-[#EFE5D8] text-[#34150F] selection:bg-[#C58B3C]/30">
@@ -101,26 +208,28 @@ export function AdminShell({ user, children }: AdminShellProps) {
             </svg>
           </button>
 
-          <Link
-            href="/admin/dashboard"
-            className="font-cinzel text-sm sm:text-base tracking-[0.2em] text-[#ded7cb] hover:text-[#C58B3C] transition-colors"
+          <button
+            type="button"
+            onClick={navigateToDashboard}
+            className="font-cinzel text-sm sm:text-base tracking-[0.2em] text-[#ded7cb] hover:text-[#C58B3C] transition-colors focus:outline-none text-left"
           >
-            [LOGO HERE]
-          </Link>
+            JUSTICIA ADMIN
+          </button>
         </div>
 
-        {/* Right: Icons (Home, Bell, Profile) - Settings icon removed */}
+        {/* Right: Icons (Home, Bell, Profile) */}
         <div className="flex items-center gap-4 sm:gap-6 text-[#ded7cb]">
-          <Link
-            href="/admin/dashboard"
-            className={`p-1.5 rounded-lg transition-colors hover:text-[#C58B3C] ${
-              pathname === '/admin/dashboard' ? 'text-[#C58B3C]' : ''
+          <button
+            type="button"
+            onClick={navigateToDashboard}
+            className={`p-1.5 rounded-lg transition-colors hover:text-[#C58B3C] focus:outline-none ${
+              activeView === 'dashboard' ? 'text-[#C58B3C]' : ''
             }`}
             title="Dashboard Home"
             aria-label="Dashboard Home"
           >
             <HomeIcon className="w-5 h-5 sm:w-6 sm:h-6" />
-          </Link>
+          </button>
 
           {/* Notifications button */}
           <div className="relative">
@@ -146,11 +255,23 @@ export function AdminShell({ user, children }: AdminShellProps) {
                   <span className="text-[10px] text-[#C58B3C]">Live</span>
                 </div>
                 <div className="py-3 space-y-2 text-[#C4B7A5]">
-                  <div className="p-2 rounded-lg bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer">
+                  <div
+                    onClick={() => {
+                      setNotificationsOpen(false);
+                      navigate('verification-queue');
+                    }}
+                    className="p-2 rounded-lg bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer"
+                  >
                     <p className="font-medium text-[#ded7cb]">Verification Queue</p>
                     <p className="text-[10px] text-[#A69584] mt-0.5">Lawyer credentials ready for review.</p>
                   </div>
-                  <div className="p-2 rounded-lg bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer">
+                  <div
+                    onClick={() => {
+                      setNotificationsOpen(false);
+                      navigate('security-audit-log');
+                    }}
+                    className="p-2 rounded-lg bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer"
+                  >
                     <p className="font-medium text-[#ded7cb]">Security & Audit</p>
                     <p className="text-[10px] text-[#A69584] mt-0.5">System audit log active and monitoring sessions.</p>
                   </div>
@@ -184,14 +305,17 @@ export function AdminShell({ user, children }: AdminShellProps) {
                   </span>
                 </div>
                 <div className="py-1">
-                  <Link
-                    href="/admin/settings"
-                    onClick={() => setUserDropdownOpen(false)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-[#ded7cb] hover:bg-[#3E271D] transition"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      navigate('settings');
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[#ded7cb] hover:bg-[#3E271D] transition text-left"
                   >
                     <GearIcon className="w-4 h-4 text-[#C58B3C]" />
                     <span>Admin Settings</span>
-                  </Link>
+                  </button>
                 </div>
                 <div className="pt-1 border-t border-[#3E271D]">
                   <form action={signOutAction}>
@@ -220,13 +344,14 @@ export function AdminShell({ user, children }: AdminShellProps) {
           <div className="space-y-6">
             <nav className="space-y-2" aria-label="Main navigation">
               {ADMIN_NAV_ITEMS.map((item) => {
-                const active = isCurrentActive(item.href);
+                const active = activeView === item.key;
                 const Icon = item.icon;
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                  <button
+                    type="button"
+                    key={item.key}
+                    onClick={() => navigate(item.key)}
+                    className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs sm:text-sm font-medium transition-all text-left ${
                       active
                         ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                         : 'text-[#3E2A1E] hover:bg-[#E5D7C5] hover:text-[#34150F]'
@@ -234,7 +359,7 @@ export function AdminShell({ user, children }: AdminShellProps) {
                   >
                     <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-[#C58B3C]' : 'text-[#5C4535]'}`} />
                     <span className="truncate">{item.name}</span>
-                  </Link>
+                  </button>
                 );
               })}
             </nav>
@@ -243,17 +368,18 @@ export function AdminShell({ user, children }: AdminShellProps) {
           {/* Bottom Sidebar: Divider + Settings + Logout */}
           <div className="space-y-2 pt-6">
             <hr className="border-[#C8B59E] mb-4" />
-            <Link
-              href="/admin/settings"
-              className={`flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
-                isCurrentActive('/admin/settings')
+            <button
+              type="button"
+              onClick={() => navigate('settings')}
+              className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all text-left ${
+                activeView === 'settings'
                   ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                   : 'text-[#3E2A1E] hover:bg-[#E5D7C5] hover:text-[#34150F]'
               }`}
             >
               <GearIcon className="w-5 h-5 text-[#5C4535]" />
               <span>Settings</span>
-            </Link>
+            </button>
 
             <form action={signOutAction}>
               <button
@@ -294,14 +420,14 @@ export function AdminShell({ user, children }: AdminShellProps) {
 
                 <nav className="space-y-2">
                   {ADMIN_NAV_ITEMS.map((item) => {
-                    const active = isCurrentActive(item.href);
+                    const active = activeView === item.key;
                     const Icon = item.icon;
                     return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setMobileMenuOpen(false)}
-                        className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                      <button
+                        type="button"
+                        key={item.key}
+                        onClick={() => navigate(item.key)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-left ${
                           active
                             ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                             : 'text-[#3E2A1E] hover:bg-[#E5D7C5]'
@@ -309,21 +435,21 @@ export function AdminShell({ user, children }: AdminShellProps) {
                       >
                         <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-[#C58B3C]' : 'text-[#5C4535]'}`} />
                         <span>{item.name}</span>
-                      </Link>
+                      </button>
                     );
                   })}
                 </nav>
               </div>
 
               <div className="space-y-2 pt-4 border-t border-[#C8B59E]">
-                <Link
-                  href="/admin/settings"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-[#3E2A1E] hover:bg-[#E5D7C5]"
+                <button
+                  type="button"
+                  onClick={() => navigate('settings')}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-[#3E2A1E] hover:bg-[#E5D7C5] text-left"
                 >
                   <GearIcon className="w-5 h-5 text-[#5C4535]" />
                   <span>Settings</span>
-                </Link>
+                </button>
                 <form action={signOutAction}>
                   <button
                     type="submit"
@@ -338,9 +464,9 @@ export function AdminShell({ user, children }: AdminShellProps) {
           </div>
         )}
 
-        {/* Main Content Area */}
+        {/* Main Content Area: Instant Swapped View */}
         <main className="flex-1 overflow-y-auto bg-[#EFE5D8]">
-          {children}
+          {renderView()}
         </main>
       </div>
     </div>
