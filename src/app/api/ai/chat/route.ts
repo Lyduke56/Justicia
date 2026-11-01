@@ -68,22 +68,60 @@ function isOffTopic(query: string): boolean {
  * Extracts suggested lawyer search filters from the AI response.
  * Returns filter params to pre-populate Find a Lawyer search.
  */
-function extractSuggestedFilters(text: string, query: string): Record<string, string> | null {
+function extractSuggestedFilters(text: string, query: string): Record<string, string> {
   const lower = (text + ' ' + query).toLowerCase();
-  const filters: Record<string, string> = {};
+  const filters: Record<string, string> = {
+    sort: 'desc',
+  };
 
-  // Practice area detection
+  // Practice area detection with multi-lingual Philippine terminology (English, Tagalog, Cebuano/Bisaya)
   const practiceAreaMap: Record<string, string[]> = {
-    'Labor & Employment': ['labor', 'dismissal', 'dole', 'nlrc', 'termination', 'employment', 'employee', 'employer', 'retrenchment'],
-    'Family Law': ['marriage', 'annulment', 'divorce', 'custody', 'support', 'family', 'spouse', 'wife', 'husband', 'child'],
-    'Corporate Law': ['corporation', 'company', 'sec', 'incorporation', 'shareholder', 'partnership', 'business'],
-    'Criminal Law': ['crime', 'criminal', 'arrest', 'warrant', 'bail', 'theft', 'estafa', 'homicide', 'murder', 'rape', 'libel'],
-    'Civil Law': ['contract', 'obligation', 'damages', 'breach', 'rescission', 'lease', 'sale', 'debt'],
-    'Real Estate': ['property', 'land', 'title', 'foreclosure', 'ejectment', 'tenancy', 'deed', 'renting'],
-    'Tax Law': ['tax', 'bir', 'vat', 'income tax', 'assessment'],
-    'Intellectual Property': ['trademark', 'patent', 'copyright', 'ip', 'infringement'],
-    'Immigration': ['visa', 'immigration', 'alien', 'deportation', 'citizenship'],
-    'Constitutional Law': ['constitution', 'rights', 'due process', 'equal protection', 'habeas corpus'],
+    'Labor & Employment': [
+      'labor', 'dismissal', 'dole', 'nlrc', 'termination', 'employment', 'employee', 'employer',
+      'retrenchment', 'sweldo', 'sahod', 'trabaho', 'overtime', 'illegal dismissal', 'separation pay',
+      '13th month', 'suhol', 'tangtang sa trabaho', 'panarbaho', 'holiday pay', 'constructive dismissal',
+    ],
+    'Family Law': [
+      'marriage', 'annulment', 'divorce', 'custody', 'support', 'family', 'spouse', 'wife', 'husband',
+      'child', 'kasal', 'asawa', 'bana', 'anak', 'sustento', 'battered', 'vawc', 'buwag', 'kabtangan',
+      'paternity', 'filiation', 'adoption', 'conjugal',
+    ],
+    'Criminal Law': [
+      'crime', 'criminal', 'arrest', 'warrant', 'bail', 'theft', 'estafa', 'homicide', 'murder',
+      'rape', 'libel', 'cyberlibel', 'kulong', 'pulis', 'blotter', 'nakaw', 'patay', 'droga',
+      'bailable', 'priso', 'kiha', 'kaso', 'inquest', 'preliminary investigation',
+    ],
+    'Real Estate': [
+      'property', 'land', 'title', 'foreclosure', 'ejectment', 'tenancy', 'deed', 'renting',
+      'lupa', 'bahay', 'titulo', 'palit', 'boundary', 'subdivision', 'yuta', 'abang', 'torrens',
+      'tct', 'oct', 'unlawful detainer', 'forcible entry',
+    ],
+    'Corporate Law': [
+      'corporation', 'company', 'sec', 'incorporation', 'shareholder', 'partnership', 'business',
+      'negosyo', 'stocks', 'board', 'dti', 'commercial', 'merger', 'dissolution',
+    ],
+    'Civil Law': [
+      'contract', 'obligation', 'damages', 'breach', 'rescission', 'lease', 'sale', 'debt',
+      'utang', 'kontrata', 'bayad', 'indemnification', 'kasabutan', 'prenda', 'sangla', 'promissory',
+    ],
+    'Tax Law': [
+      'tax', 'bir', 'vat', 'income tax', 'assessment', 'estate tax', 'buwis', 'donor tax', 'capital gains',
+    ],
+    'Intellectual Property': [
+      'trademark', 'patent', 'copyright', 'ip', 'infringement', 'intellectual property', 'ipo',
+    ],
+    'Immigration': [
+      'visa', 'immigration', 'alien', 'deportation', 'citizenship', 'passport', 'overstay', 'bureau of immigration',
+    ],
+    'Agrarian Reform': [
+      'agrarian', 'carp', 'dar', 'tenant', 'magsasaka', 'uma', 'cloa',
+    ],
+    'Maritime Law': [
+      'maritime', 'seaman', 'vessel', 'ship', 'poea', 'dmw', 'crewing', 'seafarer', 'barko',
+    ],
+    'Constitutional Law': [
+      'constitution', 'rights', 'due process', 'equal protection', 'habeas corpus', 'karapatan',
+    ],
   };
 
   for (const [area, keywords] of Object.entries(practiceAreaMap)) {
@@ -91,6 +129,11 @@ function extractSuggestedFilters(text: string, query: string): Record<string, st
       filters.specialization = area;
       break;
     }
+  }
+
+  // If no specific field was identified but query is legal, default to Civil Law as standard foundation
+  if (!filters.specialization) {
+    filters.specialization = 'Civil Law';
   }
 
   // Language detection from query
@@ -108,7 +151,7 @@ function extractSuggestedFilters(text: string, query: string): Record<string, st
     }
   }
 
-  return Object.keys(filters).length > 0 ? filters : null;
+  return filters;
 }
 
 export async function POST(request: NextRequest) {

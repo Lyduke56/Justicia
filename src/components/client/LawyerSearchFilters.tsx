@@ -10,6 +10,7 @@ interface Filters {
   feeRange: string;
   languages: string[];
   favoritesOnly: boolean;
+  sort?: string;
 }
 
 interface LawyerSearchFiltersProps {
@@ -49,17 +50,19 @@ export function LawyerSearchFilters({
     (overrides: Partial<Filters & { page: number }>) => {
       const merged = { ...filters, ...overrides };
       const params = new URLSearchParams();
+      if (fromAI) params.set('from', 'ai');
       if (merged.query) params.set('q', merged.query);
       if (merged.specialization && merged.specialization !== 'all') params.set('specialization', merged.specialization);
       if (merged.chapter && merged.chapter !== 'all') params.set('chapter', merged.chapter);
       if (merged.feeRange && merged.feeRange !== 'all') params.set('fee', merged.feeRange);
       merged.languages.forEach(l => params.append('lang', l));
       if (merged.favoritesOnly) params.set('favorites', 'true');
+      if (merged.sort) params.set('sort', merged.sort);
       const p = (overrides as { page?: number }).page;
       if (p && p > 1) params.set('page', String(p));
       return `${pathname}?${params.toString()}`;
     },
-    [filters, pathname]
+    [filters, pathname, fromAI]
   );
 
   const navigate = useCallback(
@@ -77,22 +80,25 @@ export function LawyerSearchFilters({
   };
 
   const clearAIFilters = () => {
-    navigate({ specialization: '', chapter: '', languages: [], query: '' });
+    navigate({ specialization: '', chapter: '', languages: [], query: '', sort: '' });
   };
 
   return (
     <div className="space-y-3">
       {/* AI redirect banner */}
-      {fromAI && (filters.specialization || filters.languages.length > 0) && (
+      {fromAI && (filters.specialization || filters.languages.length > 0 || filters.sort === 'desc') && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#E8DAC9] border border-[#C58B3C]/40 text-sm text-[#34150F]">
           <span className="text-base">⚖️</span>
           <div className="flex-1">
-            <span className="font-semibold">AI-suggested filters applied: </span>
+            <span className="font-semibold">AI-suggested filter applied: </span>
             {filters.specialization && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#C58B3C]/15 text-xs font-medium text-[#34150F] border border-[#C58B3C]/30 mr-1">
-                {filters.specialization}
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#C58B3C]/15 text-xs font-semibold text-[#34150F] border border-[#C58B3C]/30 mr-1.5">
+                Specialization: {filters.specialization}
               </span>
             )}
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#34150F]/10 text-xs font-medium text-[#34150F] border border-[#34150F]/20 mr-1.5">
+              Order: Descending ↓
+            </span>
             {filters.languages.map(lang => (
               <span key={lang} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#C58B3C]/15 text-xs font-medium text-[#34150F] border border-[#C58B3C]/30 mr-1">
                 {lang}
@@ -102,7 +108,7 @@ export function LawyerSearchFilters({
           <button
             type="button"
             onClick={clearAIFilters}
-            className="text-xs text-[#7D6855] hover:text-[#C58B3C] underline underline-offset-2 transition-colors shrink-0"
+            className="text-xs text-[#7D6855] hover:text-[#C58B3C] underline underline-offset-2 transition-colors shrink-0 font-medium"
           >
             Clear filters
           </button>
@@ -204,6 +210,25 @@ export function LawyerSearchFilters({
             {languageOptions.map(l => (
               <option key={l} value={l}>{l}</option>
             ))}
+          </select>
+        </div>
+
+        {/* Sort Order */}
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[11px] text-[#7D6855] font-medium uppercase tracking-wide">Sort Order:</label>
+          <select
+            id="filter-sort"
+            value={filters.sort || (fromAI ? 'desc' : 'default')}
+            onChange={e => navigate({ sort: e.target.value })}
+            disabled={isPending}
+            className="px-3 py-2 rounded-lg text-[#34150F] text-xs bg-[#EFE5D8] border border-[#D8CAAD]/70 focus:outline-none focus:ring-2 focus:ring-[#C58B3C]/40 shadow-[2px_2px_5px_rgba(0,0,0,0.06),-2px_-2px_5px_rgba(255,255,255,0.85)] min-w-[170px]"
+            aria-label="Filter by sort order"
+          >
+            <option value="desc">Descending (High Exp/Rating)</option>
+            <option value="default">Default</option>
+            <option value="asc">Ascending (Name A–Z)</option>
+            <option value="fee-asc">Fee: Low to High</option>
+            <option value="fee-desc">Fee: High to Low</option>
           </select>
         </div>
 
