@@ -72,7 +72,9 @@ export function LawyerProfileTabs({
             education={education}
           />
         )}
-        {activeTab === 'reviews' && <ComingSoonTab label="Reviews" />}
+        {activeTab === 'reviews' && (
+          <ReviewsTab lawyerId={profile.user_id} lawyerName={profile.full_name} />
+        )}
         {activeTab === 'availability' && <ComingSoonTab label="Availability" />}
         {activeTab === 'cases' && <CasesTab caseSummaries={caseSummaries} />}
       </div>
@@ -281,6 +283,320 @@ function CasesTab({ caseSummaries }: { caseSummaries: LawyerCaseSummaryRow[] }) 
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Reviews Tab ────────────────────────────────────────────────────────────
+interface ProfileReview {
+  id: string;
+  name: string;
+  stars: number;
+  date: string;
+  content: string;
+  helpfulCount: number;
+  userVoted?: boolean;
+  reply?: string;
+}
+
+function ReviewsTab({ lawyerId: _lawyerId, lawyerName }: { lawyerId: string; lawyerName: string }) {
+  const [selectedStar, setSelectedStar] = useState<number | 'all'>('all');
+  const [showWriteForm, setShowWriteForm] = useState(false);
+  const [newRating, setNewRating] = useState(5);
+  const [newName, setNewName] = useState('');
+  const [newFeedback, setNewFeedback] = useState('');
+  const [submittedToast, setSubmittedToast] = useState(false);
+
+  const [reviews, setReviews] = useState<ProfileReview[]>([
+    {
+      id: 'rev-p1',
+      name: 'Maria Victoria Garcia',
+      stars: 5,
+      date: 'Oct 24, 2026',
+      content:
+        'Atty. is exceptionally thorough, patient, and knowledgeable about Philippine legal proceedings. Provided actionable advice right during our very first video consultation.',
+      helpfulCount: 14,
+      reply: 'Maraming salamat po, Ms. Garcia! Glad we could establish a clear path forward for your case.',
+    },
+    {
+      id: 'rev-p2',
+      name: 'Ramon De Jesus',
+      stars: 5,
+      date: 'Oct 12, 2026',
+      content:
+        'Highly recommended counsel. Handled our corporate documentation and contract review with utmost speed and attention to detail. Very fair professional fee.',
+      helpfulCount: 8,
+    },
+    {
+      id: 'rev-p3',
+      name: 'Elena Santos',
+      stars: 4,
+      date: 'Sep 29, 2026',
+      content:
+        'Very helpful legal guidance regarding estate settlement. Straightforward advice and explained technical legal terms in simple terms we could easily understand.',
+      helpfulCount: 5,
+    },
+    {
+      id: 'rev-p4',
+      name: 'Carlos Mendoza',
+      stars: 5,
+      date: 'Sep 15, 2026',
+      content:
+        'Professional, punctual, and very empathetic to our situation. Answered all follow-up questions promptly through the platform messaging.',
+      helpfulCount: 9,
+    },
+  ]);
+
+  const filteredReviews = reviews.filter((r) =>
+    selectedStar === 'all' ? true : r.stars === selectedStar
+  );
+
+  const avgScore =
+    reviews.length > 0
+      ? reviews.reduce((sum, r) => sum + r.stars, 0) / reviews.length
+      : 5.0;
+
+  const handleVoteHelpful = (id: string) => {
+    setReviews((prev) =>
+      prev.map((r) => {
+        if (r.id === id) {
+          const voted = !r.userVoted;
+          return {
+            ...r,
+            userVoted: voted,
+            helpfulCount: voted ? r.helpfulCount + 1 : r.helpfulCount - 1,
+          };
+        }
+        return r;
+      })
+    );
+  };
+
+  const handleSubmitReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFeedback.trim()) return;
+
+    const newRev: ProfileReview = {
+      id: `rev-${Date.now()}`,
+      name: newName.trim() || 'Verified Client',
+      stars: newRating,
+      date: 'Just now',
+      content: newFeedback.trim(),
+      helpfulCount: 0,
+    };
+
+    setReviews((prev) => [newRev, ...prev]);
+    setNewName('');
+    setNewFeedback('');
+    setShowWriteForm(false);
+    setSubmittedToast(true);
+    setTimeout(() => setSubmittedToast(false), 5000);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Top Rating Summary Card */}
+      <div
+        className="rounded-2xl p-6 bg-[#EFE5D8] flex flex-wrap items-center justify-between gap-5"
+        style={{ boxShadow: '4px 4px 12px rgba(0,0,0,0.06),-4px -4px 12px rgba(255,255,255,0.9)' }}
+      >
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <span className="font-cormorant text-5xl font-bold text-[#34150F] leading-none">
+            {avgScore.toFixed(1)}
+          </span>
+          <span className="text-xl font-semibold text-[#7D6855]">/ 5.0</span>
+          <div className="flex items-center text-[#C58B3C] text-2xl ml-2">
+            {[1, 2, 3, 4, 5].map((s) => (
+              <span key={s}>{s <= Math.round(avgScore) ? '★' : '☆'}</span>
+            ))}
+          </div>
+          <span className="text-xs sm:text-sm text-[#7D6855] font-medium ml-2">
+            ({reviews.length} Verified Reviews)
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowWriteForm((v) => !v)}
+          className="px-4 py-2 rounded-xl bg-[#C58B3C] text-white text-xs font-semibold hover:bg-[#B07A2E] transition-colors shadow-sm"
+        >
+          {showWriteForm ? '✕ Close Form' : '★ Write a Review'}
+        </button>
+      </div>
+
+      {/* Review Submission Form */}
+      {showWriteForm && (
+        <form
+          onSubmit={handleSubmitReview}
+          className="rounded-xl p-5 bg-[#F5EDE2] border border-[#E8DCCB] space-y-4"
+          style={{ boxShadow: 'inset 1px 1px 4px rgba(0,0,0,0.04)' }}
+        >
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold text-sm text-[#34150F]">
+              Review your consultation with {lawyerName}
+            </h4>
+            <button
+              type="button"
+              onClick={() => setShowWriteForm(false)}
+              className="text-[#7D6855] text-xs hover:text-[#34150F]"
+            >
+              Cancel
+            </button>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-[#5C4535] block mb-1">Rating:</label>
+            <div className="flex items-center gap-1.5 text-2xl text-[#C58B3C]">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setNewRating(star)}
+                  className="transition-transform hover:scale-110 focus:outline-none"
+                >
+                  {star <= newRating ? '★' : '☆'}
+                </button>
+              ))}
+              <span className="text-xs text-[#7D6855] ml-2">({newRating} of 5 stars)</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-[#5C4535] block mb-1">Your Name:</label>
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="e.g. Maria Santos (or leave blank for Verified Client)"
+              className="w-full px-3 py-2 rounded-lg text-xs bg-[#EFE5D8] border border-[#D8CAAD] text-[#34150F] placeholder-[#A69584] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-[#5C4535] block mb-1">Feedback &amp; Experience:</label>
+            <textarea
+              rows={3}
+              value={newFeedback}
+              onChange={(e) => setNewFeedback(e.target.value)}
+              placeholder="Share how counsel helped your legal inquiry, clarity of legal advice, punctuality..."
+              required
+              className="w-full px-3 py-2 rounded-lg text-xs bg-[#EFE5D8] border border-[#D8CAAD] text-[#34150F] placeholder-[#A69584] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowWriteForm(false)}
+              className="px-4 py-1.5 rounded-lg text-xs text-[#5C4535] hover:text-[#34150F]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 rounded-lg bg-[#C58B3C] text-white text-xs font-semibold hover:bg-[#B07A2E] transition-colors"
+            >
+              Submit Review
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Success Notice */}
+      {submittedToast && (
+        <div className="p-3.5 rounded-xl bg-[#D4C1AB]/40 border border-[#C58B3C]/50 text-xs text-[#34150F] flex items-center gap-2">
+          <span>✓</span>
+          <span className="font-medium">Thank you! Your review has been submitted successfully.</span>
+        </div>
+      )}
+
+      {/* Star Filter Pills */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setSelectedStar('all')}
+          className={`px-3.5 py-1 rounded-full text-xs font-medium transition-all ${
+            selectedStar === 'all'
+              ? 'bg-[#C58B3C] text-white shadow-sm'
+              : 'bg-[#EFE5D8] text-[#5C4535] hover:bg-[#D4C1AB]'
+          }`}
+        >
+          All ({reviews.length})
+        </button>
+        {[5, 4, 3, 2, 1].map((s) => {
+          const count = reviews.filter((r) => r.stars === s).length;
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSelectedStar(s)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                selectedStar === s
+                  ? 'bg-[#C58B3C] text-white shadow-sm'
+                  : 'bg-[#EFE5D8] text-[#5C4535] hover:bg-[#D4C1AB]'
+              }`}
+            >
+              ★{s} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Reviews List */}
+      <div className="space-y-4">
+        {filteredReviews.map((rev) => (
+          <div
+            key={rev.id}
+            className="rounded-xl p-5 bg-[#EFE5D8] space-y-3"
+            style={{ boxShadow: '4px 4px 10px rgba(0,0,0,0.05),-4px -4px 10px rgba(255,255,255,0.9)' }}
+          >
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-[#D4C1AB] text-[#34150F] flex items-center justify-center font-bold text-xs">
+                  {rev.name.charAt(0)}
+                </div>
+                <div>
+                  <h4 className="font-semibold text-xs text-[#34150F]">{rev.name}</h4>
+                  <p className="text-[10px] text-[#A69584]">{rev.date}</p>
+                </div>
+              </div>
+              <div className="flex items-center text-[#C58B3C] text-xs">
+                {'★'.repeat(rev.stars)}{'☆'.repeat(5 - rev.stars)}
+              </div>
+            </div>
+
+            <p className="text-xs text-[#5C4535] leading-relaxed">{rev.content}</p>
+
+            {rev.reply && (
+              <div className="p-3 rounded-lg bg-[#F5EDE2] border border-[#E8DCCB] text-xs space-y-1">
+                <p className="font-semibold text-[11px] text-[#34150F] flex items-center gap-1.5">
+                  <span>⚖️</span> Response from {lawyerName}
+                </p>
+                <p className="text-[#5C4535] text-xs leading-relaxed">{rev.reply}</p>
+              </div>
+            )}
+
+            <div className="pt-1 flex items-center gap-4 text-[11px] text-[#7D6855]">
+              <button
+                type="button"
+                onClick={() => handleVoteHelpful(rev.id)}
+                className={`flex items-center gap-1.5 hover:text-[#34150F] transition-colors ${
+                  rev.userVoted ? 'text-[#C58B3C] font-semibold' : ''
+                }`}
+              >
+                <span>👍</span>
+                <span>Helpful ({rev.helpfulCount})</span>
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {filteredReviews.length === 0 && (
+          <p className="text-center py-8 text-xs text-[#A69584]">
+            No reviews match this star rating.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

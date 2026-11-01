@@ -84,6 +84,9 @@ export default async function PublicLawyerProfilePage({ params }: Props) {
             Roll No. {profile.roll_number}{profile.ibp_chapter && ` | IBP ${profile.ibp_chapter}`}
           </p>
           <p className="text-xs text-[#A69584] flex items-center gap-3 flex-wrap">
+            <span className="text-[#C58B3C] font-semibold flex items-center gap-1">
+              ★ 4.9 <span className="text-[#7D6855] font-normal">(53 Reviews)</span>
+            </span>
             {profile.experience_years && (
               <span>● {profile.experience_years} years of practice</span>
             )}

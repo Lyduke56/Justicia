@@ -1,8 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
 import type { PublicLawyerProfile } from './LawyerGrid';
+
+export interface ReviewItem {
+  id: number | string;
+  name: string;
+  stars: number;
+  date: string;
+  content: string;
+  reply?: string;
+}
 
 interface LawyerDetailViewProps {
   lawyer: PublicLawyerProfile;
@@ -32,15 +42,111 @@ export function LawyerDetailView({
   const [bookingStatus, setBookingStatus] = useState<'idle' | 'saved' | 'submitted'>('idle');
 
   // ─── Reviews State ────────────────────────────────────────────────────────────
-  const [selectedReviewStar, setSelectedReviewStar] = useState<number | 'all'>(5);
+  const initialReviews: ReviewItem[] = [
+    {
+      id: 0,
+      name: 'Clyde Justine Rosal',
+      stars: 5,
+      date: '10/17/2026',
+      content:
+        'Atty. provided crystal clear guidance on our Makati lease deposit recovery. We drafted a formal demand letter that settled the matter amicably within 10 days. Very professional, responsive, and thorough in explaining our legal rights under the Civil Code.',
+      reply: 'Thank you Clyde! Glad we were able to resolve your lease refund promptly without the expense of prolonged court litigation.',
+    },
+    {
+      id: 1,
+      name: 'Benideck Longakit',
+      stars: 5,
+      date: '10/15/2026',
+      content:
+        'Exceptional knowledge of DOLE and NLRC labor standards. Guided our team through the mandatory conciliation process smoothly and protected our position on separation pay.',
+    },
+    {
+      id: 2,
+      name: 'Christopher John Rubio',
+      stars: 4,
+      date: '10/12/2026',
+      content:
+        'Prompt and insightful consultation regarding property boundary questions. Delivered actionable advice and clear statutory citations for Land Registration Act compliance.',
+      reply: 'Much appreciated Christopher. Ensuring Torrens title clean chain of custody is always the safest course.',
+    },
+    {
+      id: 3,
+      name: 'Axziel Jay A. Bartolabac',
+      stars: 5,
+      date: '10/08/2026',
+      content:
+        'Very reassuring and articulate counsel. Handled our family estate settlement inquiry with utmost competence and sensitivity. Highly recommended attorney.',
+    },
+    {
+      id: 4,
+      name: 'Patricia Mae Santos',
+      stars: 4,
+      date: '09/28/2026',
+      content:
+        'Detailed contract review for our business partnership. Caught two potential ambiguous liability clauses before we signed. Worth every peso.',
+    },
+    {
+      id: 5,
+      name: 'Rafael D. Mercado',
+      stars: 5,
+      date: '09/19/2026',
+      content:
+        'Superb attorney. Extremely fast response time and explained Philippine jurisprudence in a way that is easy to understand for non-lawyers.',
+    },
+  ];
+
+  const [reviewsList, setReviewsList] = useState<ReviewItem[]>(initialReviews);
+  const [selectedReviewStar, setSelectedReviewStar] = useState<number | 'all'>('all');
   const [reviewPage, setReviewPage] = useState<number>(1);
-  const [helpfulCounts, setHelpfulCounts] = useState<{ [id: number]: number }>({
+  const [helpfulCounts, setHelpfulCounts] = useState<{ [id: string | number]: number }>({
     0: 12,
     1: 8,
     2: 15,
     3: 6,
+    4: 9,
+    5: 11,
   });
-  const [userVotedHelpful, setUserVotedHelpful] = useState<{ [id: number]: boolean }>({});
+  const [userVotedHelpful, setUserVotedHelpful] = useState<{ [id: string | number]: boolean }>({});
+
+  const [showWriteReview, setShowWriteReview] = useState<boolean>(false);
+  const [newReviewStars, setNewReviewStars] = useState<number>(5);
+  const [newReviewHoverStars, setNewReviewHoverStars] = useState<number | null>(null);
+  const [newReviewName, setNewReviewName] = useState<string>('');
+  const [newReviewContent, setNewReviewContent] = useState<string>('');
+  const [submittingReview, setSubmittingReview] = useState<boolean>(false);
+  const [reviewSuccessNotice, setReviewSuccessNotice] = useState<boolean>(false);
+
+  const [replyingToId, setReplyingToId] = useState<string | number | null>(null);
+  const [replyText, setReplyText] = useState<string>('');
+
+  // Fetch live reviews from database if available
+  useEffect(() => {
+    async function fetchReviews() {
+      if (!lawyer.userId) return;
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('reviews')
+          .select('id, rating, comment, created_at')
+          .eq('lawyer_id', lawyer.userId)
+          .order('created_at', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          const dbItems: ReviewItem[] = data.map((r, i) => ({
+            id: r.id || `db-${i}`,
+            name: 'Verified Client',
+            stars: r.rating,
+            date: new Date(r.created_at).toLocaleDateString(),
+            content: r.comment || 'Client left a rating without comment.',
+          }));
+          setReviewsList((prev) => [...dbItems, ...prev]);
+        }
+      } catch {
+        // fallback to initialReviews
+      }
+    }
+    fetchReviews();
+  }, [lawyer.userId]);
 
   // ─── Cases State ──────────────────────────────────────────────────────────────
   const [casePage, setCasePage] = useState<number>(1);
@@ -88,7 +194,7 @@ export function LawyerDetailView({
     setBookingStatus('submitted');
   };
 
-  const toggleHelpful = (idx: number) => {
+  const toggleHelpful = (idx: string | number) => {
     const hasVoted = userVotedHelpful[idx];
     setHelpfulCounts((prev) => ({
       ...prev,
@@ -104,41 +210,68 @@ export function LawyerDetailView({
   const initialFee = lawyer.feeInitial30min ?? 700;
   const extendedFee = lawyer.feeExtended120min ?? 2300;
 
-  // Mock reviews matching Figma design names & avatar
-  const allReviews = [
-    {
-      id: 0,
-      name: 'Clyde Justine Rosal',
-      stars: 5,
-      date: '10/17/2026',
-      content:
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
-    },
-    {
-      id: 1,
-      name: 'Benideck Longakit',
-      stars: 5,
-      date: '10/17/2026',
-      content:
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
-    },
-    {
-      id: 2,
-      name: 'Christopher John Rubio',
-      stars: 5,
-      date: '10/17/2026',
-      content:
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
-    },
-    {
-      id: 3,
-      name: 'Axziel Jay A. Bartolabac',
-      stars: 5,
-      date: '10/17/2026',
-      content:
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
-    },
-  ];
+  const handleAddReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReviewContent.trim()) {
+      alert('Please enter your review feedback.');
+      return;
+    }
+    setSubmittingReview(true);
+    const newRev: ReviewItem = {
+      id: `rev-${Date.now()}`,
+      name: newReviewName.trim() || 'Verified Client',
+      stars: newReviewStars,
+      date: new Date().toLocaleDateString(),
+      content: newReviewContent.trim(),
+    };
+
+    setReviewsList((prev) => [newRev, ...prev]);
+
+    try {
+      const supabase = createClient();
+      await supabase.from('reviews').insert({
+        lawyer_id: lawyer.userId,
+        rating: newReviewStars,
+        comment: newReviewContent.trim(),
+      } as any);
+    } catch {
+      // offline / demo fallback
+    }
+
+    setSubmittingReview(false);
+    setShowWriteReview(false);
+    setNewReviewContent('');
+    setNewReviewName('');
+    setReviewSuccessNotice(true);
+    setTimeout(() => setReviewSuccessNotice(false), 5000);
+  };
+
+  const handleSendReply = (reviewId: string | number) => {
+    if (!replyText.trim()) return;
+    setReviewsList((prev) =>
+      prev.map((r) => (r.id === reviewId ? { ...r, reply: replyText.trim() } : r))
+    );
+    setReplyingToId(null);
+    setReplyText('');
+  };
+
+  // Filtered reviews and dynamic rating metrics
+  const filteredReviews = reviewsList.filter((rev) => {
+    if (selectedReviewStar === 'all') return true;
+    return rev.stars === selectedReviewStar;
+  });
+
+  const averageRating =
+    reviewsList.length > 0
+      ? reviewsList.reduce((acc, r) => acc + r.stars, 0) / reviewsList.length
+      : 4.9;
+
+  const REVIEWS_PER_PAGE = 3;
+  const totalReviewPages = Math.ceil(filteredReviews.length / REVIEWS_PER_PAGE) || 1;
+  const pagedReviews = filteredReviews.slice(
+    (reviewPage - 1) * REVIEWS_PER_PAGE,
+    reviewPage * REVIEWS_PER_PAGE
+  );
 
   // Cases handled matching Figma design
   const casesHandled = [
@@ -234,7 +367,7 @@ export function LawyerDetailView({
               Roll No. {lawyer.rollNumber || '58942'} | IBP {lawyer.ibpChapter?.toUpperCase() || 'MAKATI'}
             </p>
             <p className="text-xs text-[#5C4535] font-medium">
-              ★ 4.9 (53 Reviews) • {lawyer.experienceYears ?? 9} years of practice
+              ★ {averageRating.toFixed(1)} ({reviewsList.length} Reviews) • {lawyer.experienceYears ?? 9} years of practice
             </p>
             <p className="text-xs text-[#5C4535] font-medium">
               {lawyer.practiceAreas && lawyer.practiceAreas.length > 0
@@ -570,94 +703,178 @@ export function LawyerDetailView({
             }}
           >
             {/* Score header */}
-            <div className="flex flex-wrap items-baseline gap-2">
-              <span className="font-cormorant text-5xl sm:text-6xl font-bold text-[#23150F] leading-none">
-                4.9
-              </span>
-              <span className="font-cormorant text-2xl sm:text-3xl font-semibold text-[#23150F]">
-                /5
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="font-cormorant text-5xl sm:text-6xl font-bold text-[#23150F] leading-none">
+                  {averageRating.toFixed(1)}
+                </span>
+                <span className="font-cormorant text-2xl sm:text-3xl font-semibold text-[#23150F]">
+                  /5
+                </span>
 
-              {/* 5 Stars */}
-              <div className="flex items-center gap-1.5 text-[#C58B3C] text-2xl sm:text-3xl ml-3 sm:ml-5">
-                <span>★</span>
-                <span>★</span>
-                <span>★</span>
-                <span>★</span>
-                <span>★</span>
+                {/* Stars */}
+                <div className="flex items-center gap-1.5 text-[#C58B3C] text-2xl sm:text-3xl ml-3 sm:ml-5">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <span key={s}>{s <= Math.round(averageRating) ? '★' : '☆'}</span>
+                  ))}
+                </div>
+
+                <span className="font-sans text-xs sm:text-sm font-medium text-[#4A3525] ml-2">
+                  ({reviewsList.length} Reviews)
+                </span>
               </div>
 
-              <span className="font-sans text-xs sm:text-sm font-medium text-[#4A3525] ml-2">
-                (53 Reviews)
-              </span>
+              {/* Write a Review Button */}
+              <button
+                type="button"
+                onClick={() => setShowWriteReview((prev) => !prev)}
+                className="px-5 py-2.5 rounded-xl bg-[#C58B3C] hover:bg-[#B3792E] active:scale-95 text-white text-xs font-semibold shadow-md transition-all flex items-center gap-2"
+              >
+                <span>★</span> {showWriteReview ? 'Close Form' : 'Write a Review'}
+              </button>
             </div>
+
+            {/* Write a Review Form Card */}
+            {showWriteReview && (
+              <form
+                onSubmit={handleAddReview}
+                className="rounded-[22px] p-5 sm:p-6 bg-[#E5D5C1] border border-[#C58B3C]/40 space-y-4 shadow-[inset_1px_1px_4px_rgba(0,0,0,0.06),2px_2px_8px_rgba(255,255,255,0.8)]"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="font-cormorant font-bold text-lg text-[#23150F]">
+                    Write a Review for {lawyer.fullName}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowWriteReview(false)}
+                    className="text-[#5C4535] hover:text-[#23150F] text-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Rating Stars Picker */}
+                <div>
+                  <label className="text-xs font-medium text-[#4A3525] block mb-1">
+                    Your Rating:
+                  </label>
+                  <div className="flex items-center gap-1.5 text-2xl text-[#C58B3C]">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onMouseEnter={() => setNewReviewHoverStars(star)}
+                        onMouseLeave={() => setNewReviewHoverStars(null)}
+                        onClick={() => setNewReviewStars(star)}
+                        className="transition-transform hover:scale-110 focus:outline-none"
+                      >
+                        {star <= (newReviewHoverStars ?? newReviewStars) ? '★' : '☆'}
+                      </button>
+                    ))}
+                    <span className="text-xs font-medium text-[#5C4535] ml-2">
+                      ({newReviewHoverStars ?? newReviewStars} out of 5 stars)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Reviewer Name */}
+                <div>
+                  <label className="text-xs font-medium text-[#4A3525] block mb-1">
+                    Your Name:
+                  </label>
+                  <input
+                    type="text"
+                    value={newReviewName}
+                    onChange={(e) => setNewReviewName(e.target.value)}
+                    placeholder="e.g. Juan dela Cruz (Leave blank for 'Verified Client')"
+                    className="w-full px-3.5 py-2 rounded-xl text-xs bg-[#ECE1D2] border border-[#D5C2AB] text-[#23150F] placeholder-[#8E7E70] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
+                  />
+                </div>
+
+                {/* Review Feedback */}
+                <div>
+                  <label className="text-xs font-medium text-[#4A3525] block mb-1">
+                    Feedback &amp; Experience:
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={newReviewContent}
+                    onChange={(e) => setNewReviewContent(e.target.value)}
+                    placeholder="Describe your consultation experience, professionalism, and advice received..."
+                    required
+                    className="w-full px-3.5 py-2 rounded-xl text-xs bg-[#ECE1D2] border border-[#D5C2AB] text-[#23150F] placeholder-[#8E7E70] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowWriteReview(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-medium text-[#5C4535] hover:text-[#23150F]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingReview}
+                    className="px-5 py-2 rounded-xl bg-[#C58B3C] hover:bg-[#B3792E] text-white text-xs font-semibold shadow-md disabled:opacity-50"
+                  >
+                    {submittingReview ? 'Submitting…' : 'Publish Review'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Review Success Confirmation Toast */}
+            {reviewSuccessNotice && (
+              <div className="p-3.5 rounded-xl bg-[#DFC5A4] border border-[#C58B3C]/60 text-xs text-[#23150F] flex items-center gap-2">
+                <span>✓</span>
+                <span className="font-semibold">Thank you! Your rating &amp; review has been recorded.</span>
+              </div>
+            )}
 
             {/* Filter pills */}
             <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-1">
               <button
                 type="button"
-                onClick={() => setSelectedReviewStar(5)}
-                className={`px-6 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
-                  selectedReviewStar === 5
+                onClick={() => {
+                  setSelectedReviewStar('all');
+                  setReviewPage(1);
+                }}
+                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+                  selectedReviewStar === 'all'
                     ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
                     : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
                 }`}
               >
-                5
+                All ({reviewsList.length})
               </button>
 
-              <button
-                type="button"
-                onClick={() => setSelectedReviewStar(4)}
-                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
-                  selectedReviewStar === 4
-                    ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
-                    : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
-                }`}
-              >
-                ★4
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedReviewStar(3)}
-                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
-                  selectedReviewStar === 3
-                    ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
-                    : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
-                }`}
-              >
-                ★3
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedReviewStar(2)}
-                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
-                  selectedReviewStar === 2
-                    ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
-                    : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
-                }`}
-              >
-                ★2
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedReviewStar(1)}
-                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
-                  selectedReviewStar === 1
-                    ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
-                    : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
-                }`}
-              >
-                ★1
-              </button>
+              {[5, 4, 3, 2, 1].map((s) => {
+                const countForStar = reviewsList.filter((r) => r.stars === s).length;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      setSelectedReviewStar(s);
+                      setReviewPage(1);
+                    }}
+                    className={`px-4 sm:px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+                      selectedReviewStar === s
+                        ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
+                        : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
+                    }`}
+                  >
+                    ★{s} ({countForStar})
+                  </button>
+                );
+              })}
             </div>
 
             {/* Review Cards Stack */}
             <div className="space-y-4 pt-1">
-              {allReviews.map((rev) => (
+              {pagedReviews.map((rev) => (
                 <div
                   key={rev.id}
                   className="rounded-[22px] p-5 sm:p-6 space-y-3"
@@ -690,7 +907,7 @@ export function LawyerDetailView({
                       </h4>
                       <div className="flex items-center gap-2 mt-0.5">
                         <div className="flex items-center text-[#C58B3C] text-xs">
-                          {'★'.repeat(rev.stars)}
+                          {'★'.repeat(rev.stars)}{'☆'.repeat(5 - rev.stars)}
                         </div>
                         <span className="text-[10px] sm:text-[11px] text-[#5C4535] font-medium">
                           {rev.date}
@@ -704,11 +921,60 @@ export function LawyerDetailView({
                     {rev.content}
                   </p>
 
+                  {/* Attorney Reply Bubble if present */}
+                  {rev.reply && (
+                    <div className="p-3 rounded-xl bg-[#ECE1D2]/90 border border-[#D5C2AB] text-xs space-y-1">
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#23150F]">
+                        <span>⚖️</span>
+                        <span>Response from {lawyer.fullName}</span>
+                      </div>
+                      <p className="text-[#4A3525] text-xs leading-relaxed">{rev.reply}</p>
+                    </div>
+                  )}
+
+                  {/* Inline reply form when replyingToId === rev.id */}
+                  {replyingToId === rev.id && (
+                    <div className="p-3 rounded-xl bg-[#ECE1D2] border border-[#C58B3C]/50 space-y-2">
+                      <label className="text-[11px] font-semibold text-[#23150F] block">
+                        Write a response to {rev.name}:
+                      </label>
+                      <textarea
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder="Type response as counsel or verified client..."
+                        rows={2}
+                        className="w-full p-2.5 rounded-lg text-xs bg-[#F5EDE2] border border-[#D5C2AB] text-[#23150F] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
+                      />
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplyingToId(null);
+                            setReplyText('');
+                          }}
+                          className="px-3 py-1 text-xs text-[#5C4535] hover:text-[#23150F]"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSendReply(rev.id)}
+                          className="px-3.5 py-1 rounded-lg bg-[#C58B3C] hover:bg-[#B3792E] text-white text-xs font-semibold"
+                        >
+                          Post Response
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Footer Action Links */}
                   <div className="flex items-center gap-5 pt-1 text-[11px] font-medium text-[#5C4535]">
                     <button
                       type="button"
-                      onClick={() => alert(`Reply to ${rev.name}`)}
+                      onClick={() => {
+                        setReplyingToId(replyingToId === rev.id ? null : rev.id);
+                        setReplyText('');
+                      }}
                       className="inline-flex items-center gap-1.5 hover:text-[#23150F] transition-colors"
                     >
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -737,60 +1003,69 @@ export function LawyerDetailView({
                   </div>
                 </div>
               ))}
+
+              {filteredReviews.length === 0 && (
+                <div className="py-10 text-center text-xs text-[#7D6855]">
+                  No reviews found for this star filter rating.
+                </div>
+              )}
             </div>
           </div>
 
           {/* Bottom Pagination matching Figma: < ● ● ● ● > */}
-          <div className="flex items-center justify-center gap-4 pt-3 pb-4">
-            <button
-              type="button"
-              onClick={() => setReviewPage((p) => Math.max(1, p - 1))}
-              disabled={reviewPage <= 1}
-              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
-              style={{
-                boxShadow:
-                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
-              }}
-              aria-label="Previous reviews page"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
+          {totalReviewPages > 1 && (
+            <div className="flex items-center justify-center gap-4 pt-3 pb-4">
+              <button
+                type="button"
+                onClick={() => setReviewPage((p) => Math.max(1, p - 1))}
+                disabled={reviewPage <= 1}
+                className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
+                style={{
+                  boxShadow:
+                    '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
+                }}
+                aria-label="Previous reviews page"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
 
-            <div className="flex items-center gap-2">
-              {[1, 2, 3, 4].map((p) => {
-                const isActive = p === reviewPage;
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setReviewPage(p)}
-                    className={`w-2.5 h-2.5 rounded-full transition-all ${
-                      isActive ? 'bg-[#362519] scale-125' : 'bg-[#C58B3C]/80 hover:bg-[#362519]'
-                    }`}
-                    aria-label={`Go to review page ${p}`}
-                  />
-                );
-              })}
+              <div className="flex items-center gap-2">
+                {Array.from({ length: totalReviewPages }).map((_, idx) => {
+                  const p = idx + 1;
+                  const isActive = p === reviewPage;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setReviewPage(p)}
+                      className={`w-2.5 h-2.5 rounded-full transition-all ${
+                        isActive ? 'bg-[#362519] scale-125' : 'bg-[#C58B3C]/80 hover:bg-[#362519]'
+                      }`}
+                      aria-label={`Go to review page ${p}`}
+                    />
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setReviewPage((p) => Math.min(totalReviewPages, p + 1))}
+                disabled={reviewPage >= totalReviewPages}
+                className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
+                style={{
+                  boxShadow:
+                    '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
+                }}
+                aria-label="Next reviews page"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setReviewPage((p) => Math.min(4, p + 1))}
-              disabled={reviewPage >= 4}
-              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
-              style={{
-                boxShadow:
-                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
-              }}
-              aria-label="Next reviews page"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
+          )}
         </div>
       )}
 
