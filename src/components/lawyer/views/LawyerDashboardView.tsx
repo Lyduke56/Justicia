@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
+import Link from 'next/link';
 
 /* ─── Types ────────────────────────────────────────────────────────────────── */
 
@@ -184,14 +185,16 @@ function FigmaKPICard({
   value,
   subtitle,
   icon,
+  href,
 }: {
   label: string;
   value: string;
   subtitle: string;
   icon: React.ReactNode;
+  href?: string;
 }) {
-  return (
-    <div className="neu-card-md rounded-[28px] p-5 flex flex-col justify-between">
+  const cardContent = (
+    <div className={`neu-card-md rounded-[28px] p-5 flex flex-col justify-between h-full ${href ? 'hover:scale-[1.01] active:scale-[0.99] transition-transform cursor-pointer' : ''}`}>
       {/* Top Title */}
       <h3 className="font-cormorant text-base sm:text-lg font-bold text-[#34150F]">{label}</h3>
 
@@ -209,6 +212,12 @@ function FigmaKPICard({
       </div>
     </div>
   );
+
+  if (href) {
+    return <Link href={href} className="block">{cardContent}</Link>;
+  }
+
+  return cardContent;
 }
 
 /* ─── Authentic Neumorphic Consultation Card (Exact User Spec) ────────────── */
@@ -382,6 +391,7 @@ export function LawyerDashboardView({
           value={clientRating.toFixed(2)}
           subtitle="124 reviews, 99% response rate as of Oct. 2026."
           icon={<StarCircleIcon className="w-6 h-6 text-[#34150F]" />}
+          href="/lawyer/reviews"
         />
       </div>
 

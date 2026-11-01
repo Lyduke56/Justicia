@@ -22,6 +22,7 @@ interface SuggestedFilters {
   chapter?: string;
   lang?: string;
   fee?: string;
+  sort?: string;
 }
 
 interface ChatMessage {
@@ -47,6 +48,7 @@ function buildFindLawyerUrl(filters: SuggestedFilters): string {
   if (filters.chapter) params.set('chapter', filters.chapter);
   if (filters.lang) params.append('lang', filters.lang);
   if (filters.fee) params.set('fee', filters.fee);
+  params.set('sort', filters.sort || 'desc');
   return `/client/lawyers?${params.toString()}`;
 }
 
@@ -177,7 +179,10 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
             },
           ],
           escalate: true,
-          suggestedFilters: null,
+          suggestedFilters: {
+            specialization: 'Civil Law',
+            sort: 'desc',
+          },
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
         setMessages((prev) => [...prev, fallbackMsg]);
@@ -205,7 +210,14 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
   };
 
   const handleFindLawyer = (filters: SuggestedFilters | null | undefined) => {
-    const url = buildFindLawyerUrl(filters ?? {});
+    const effectiveFilters: SuggestedFilters = {
+      sort: 'desc',
+      ...(filters || {}),
+    };
+    if (!effectiveFilters.specialization) {
+      effectiveFilters.specialization = 'Civil Law';
+    }
+    const url = buildFindLawyerUrl(effectiveFilters);
     router.push(url);
   };
 
@@ -405,16 +417,22 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
                 </div>
               )}
 
-              {/* Find a Lawyer Banner (Escalation) — with smart filters */}
-              {(msg.escalate || Boolean(msg.suggestedFilters)) && !msg.offTopic && (
-                <div className="mt-4 p-3 rounded-xl bg-[#E8DAC9] border border-[#C58B3C]/40 flex items-start sm:items-center justify-between gap-3 flex-col sm:flex-row">
-                  <div className="flex items-start gap-2 text-xs text-[#34150F]">
-                    <FindLawyerIcon className="w-4 h-4 text-[#C58B3C] shrink-0 mt-0.5" />
+              {/* Find a Lawyer Banner (Escalation / Post-Prompt Action) — with smart field filter & descending sort */}
+              {msg.role === 'assistant' && !msg.offTopic && (
+                <div className="mt-4 p-3.5 rounded-xl bg-[#E8DAC9] border border-[#C58B3C]/40 flex items-start sm:items-center justify-between gap-3 flex-col sm:flex-row shadow-[inset_1px_1px_3px_rgba(255,255,255,0.7),2px_2px_6px_rgba(0,0,0,0.05)]">
+                  <div className="flex items-start gap-2.5 text-xs text-[#34150F]">
+                    <div className="p-1.5 rounded-lg bg-[#DFC5A4] text-[#34150F] shrink-0 mt-0.5 shadow-sm">
+                      <FindLawyerIcon className="w-4 h-4 text-[#C58B3C]" />
+                    </div>
                     <div>
-                      <span>This matter involves nuanced legal implications. Would you like to consult a licensed attorney?</span>
+                      <span className="font-medium">
+                        {msg.escalate
+                          ? 'This matter involves nuanced legal implications. Would you like to consult a licensed attorney?'
+                          : 'Need formal legal counsel for this matter? Connect with a verified attorney.'}
+                      </span>
                       {msg.suggestedFilters?.specialization && (
-                        <p className="text-[10px] text-[#7D6855] mt-0.5">
-                          We&apos;ll filter for <strong>{msg.suggestedFilters.specialization}</strong> lawyers near you.
+                        <p className="text-[11px] text-[#7D6855] mt-0.5">
+                          Filtered for <strong>{msg.suggestedFilters.specialization}</strong> lawyers (sorted in descending order).
                         </p>
                       )}
                     </div>
@@ -422,7 +440,7 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
                   <button
                     type="button"
                     onClick={() => handleFindLawyer(msg.suggestedFilters)}
-                    className="shrink-0 px-3 py-1.5 rounded-lg bg-[#C58B3C] hover:bg-[#B3792E] text-white text-[11px] font-semibold transition-colors flex items-center gap-1.5"
+                    className="shrink-0 px-4 py-2 rounded-lg bg-[#C58B3C] hover:bg-[#B3792E] active:scale-95 text-white text-xs font-semibold transition-all flex items-center gap-1.5 shadow-md"
                   >
                     <FindLawyerIcon className="w-3.5 h-3.5" />
                     Find a Lawyer

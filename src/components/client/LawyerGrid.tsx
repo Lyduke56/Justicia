@@ -23,6 +23,8 @@ export interface PublicLawyerProfile {
   about?: string | null;
   barPasserYear: number | null;
   isFavorite: boolean;
+  rating?: number;
+  reviewCount?: number;
 }
 
 interface Filters {
@@ -32,6 +34,7 @@ interface Filters {
   feeRange: string;
   languages: string[];
   favoritesOnly: boolean;
+  sort?: string;
 }
 
 interface LawyerGridProps {
@@ -67,6 +70,7 @@ export function LawyerGrid({
       if (filters.feeRange && filters.feeRange !== 'all') params.set('fee', filters.feeRange);
       filters.languages.forEach(l => params.append('lang', l));
       if (filters.favoritesOnly) params.set('favorites', 'true');
+      if (filters.sort) params.set('sort', filters.sort);
       if (p > 1) params.set('page', String(p));
       return `${pathname}?${params.toString()}`;
     },
@@ -193,7 +197,9 @@ function LawyerCard({
   };
 
   const experienceYrs = lawyer.experienceYears ?? 9;
-  const ratingText = `4.9 (53 Reviews) • ${experienceYrs} yrs practice`;
+  const ratingNum = typeof lawyer.rating === 'number' ? lawyer.rating.toFixed(1) : '4.9';
+  const reviewsCount = typeof lawyer.reviewCount === 'number' ? lawyer.reviewCount : 53;
+  const ratingText = `${ratingNum} (${reviewsCount} Reviews) • ${experienceYrs} yrs practice`;
   const languagesText =
     lawyer.languages && lawyer.languages.length > 0
       ? lawyer.languages.slice(0, 3).join(' • ')
