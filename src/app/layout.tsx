@@ -1,5 +1,13 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono, Cinzel, Cormorant_Garamond } from 'next/font/google';
+import {
+  Geist,
+  Geist_Mono,
+  Cinzel,
+  Cormorant_Garamond,
+  Lora,
+  Inter,
+  Cormorant_Unicase,
+} from 'next/font/google';
 import './globals.css';
 
 const geistSans = Geist({
@@ -24,6 +32,27 @@ const cormorant = Cormorant_Garamond({
   weight: ['400', '500', '600', '700'],
 });
 
+const cormorantUnicase = Cormorant_Unicase({
+  variable: '--font-cormorant-unicase',
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+});
+
+const lora = Lora({
+  variable: '--font-lora',
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+});
+
+const inter = Inter({
+  variable: '--font-inter',
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
   title: {
     template: '%s | Justicia',
@@ -44,7 +73,7 @@ export const metadata: Metadata = {
  * Root Layout
  *
  * Wraps the entire app with:
- * - Google Fonts (Geist family)
+ * - Google Fonts (Geist family, Cinzel, Cormorant Garamond, Cormorant Unicase, Lora, Inter)
  * - Global CSS
  *
  * TODO: Add i18n context provider (locale detection & dictionary)
@@ -59,7 +88,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${cinzel.variable} ${cormorant.variable} h-full antialiased scroll-smooth`}
+      className={`${geistSans.variable} ${geistMono.variable} ${cinzel.variable} ${cormorant.variable} ${cormorantUnicase.variable} ${lora.variable} ${inter.variable} h-full antialiased scroll-smooth`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         {/* TODO: <I18nProvider> */}
