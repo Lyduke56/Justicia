@@ -1,9 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { LawyerVerificationQueue, type LawyerQueueItem } from '@/components/admin/LawyerVerificationQueue';
-import { MOCK_ADMIN_LAWYERS } from '@/lib/mock/adminMockData';
+import { getVerificationQueueData } from '@/app/actions/adminData';
 
 interface AdminVerificationQueueViewProps {
   onNavigate?: (key: any) => void;
@@ -11,27 +11,16 @@ interface AdminVerificationQueueViewProps {
 }
 
 export function AdminVerificationQueueView({ onNavigate, lawyers: initialLawyers }: AdminVerificationQueueViewProps) {
-  const queueItems: LawyerQueueItem[] = initialLawyers ?? MOCK_ADMIN_LAWYERS.map((p) => ({
-    user_id: p.user_id,
-    email: p.email,
-    full_name: p.full_name,
-    roll_number: p.roll_number,
-    ibp_chapter: p.ibp_chapter,
-    bar_passer_year: p.bar_passer_year,
-    about: p.about,
-    practice_areas: p.practice_areas,
-    languages: p.languages,
-    experience_years: p.experience_years,
-    fee_initial_30min: p.fee_initial_30min,
-    fee_standard_60min: p.fee_standard_60min,
-    fee_extended_120min: p.fee_extended_120min,
-    verification_status: p.verification_status,
-    admin_notes: p.admin_notes,
-    rejection_reason: p.rejection_reason,
-    submitted_at: p.submitted_at,
-    reviewed_at: p.reviewed_at,
-    created_at: p.created_at,
-  }));
+  const [queueItems, setQueueItems] = useState<LawyerQueueItem[]>(initialLawyers ?? []);
+  const [loaded, setLoaded] = useState(initialLawyers !== undefined);
+
+  useEffect(() => {
+    // Always fetch fresh from DB (covers both SPA nav and direct page load)
+    getVerificationQueueData().then((rows) => {
+      setQueueItems(rows);
+      setLoaded(true);
+    });
+  }, []);
 
   const pendingCount = queueItems.filter((q) => q.verification_status === 'pending').length;
 
@@ -76,14 +65,16 @@ export function AdminVerificationQueueView({ onNavigate, lawyers: initialLawyers
             className="px-5 py-3 rounded-2xl bg-[#EFE5D8] border border-[#E8DCCB] text-xs font-semibold text-[#34150F] shadow-sm flex items-center gap-2.5"
             style={{ boxShadow: '4px 4px 10px rgba(0,0,0,0.06), -3px -3px 10px rgba(255,255,255,0.9)' }}
           >
-            <div className={`w-2.5 h-2.5 rounded-full ${pendingCount > 0 ? 'bg-[#C58B3C] animate-ping' : 'bg-emerald-500'}`} />
-            <span>{pendingCount} Pending Verification{pendingCount === 1 ? '' : 's'}</span>
+            <div className={`w-2.5 h-2.5 rounded-full ${!loaded ? 'bg-gray-400' : pendingCount > 0 ? 'bg-[#C58B3C] animate-ping' : 'bg-emerald-500'}`} />
+            <span>
+              {!loaded ? 'Loading…' : `${pendingCount} Pending Verification${pendingCount === 1 ? '' : 's'}`}
+            </span>
           </div>
         </div>
       </div>
 
       {/* ─── Queue Component ──────────────────────────────────────────────── */}
-      <LawyerVerificationQueue lawyers={queueItems} />
+      <LawyerVerificationQueue key={queueItems.length} lawyers={queueItems} />
     </div>
   );
 }

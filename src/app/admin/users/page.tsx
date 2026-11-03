@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getAdminUsersData } from '@/app/actions/adminData';
 import { AdminUsersView } from '@/components/admin/views/AdminUsersView';
 
 export const metadata: Metadata = {
@@ -6,6 +7,7 @@ export const metadata: Metadata = {
   description: 'Manage registered clients, lawyers, and platform administrators.',
 };
 
-export default function AdminUsersPage() {
-  return <AdminUsersView />;
+export default async function AdminUsersPage() {
+  const users = await getAdminUsersData();
+  return <AdminUsersView initialUsers={users} />;
 }

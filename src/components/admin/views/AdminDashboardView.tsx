@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   ShieldCheckIcon,
@@ -9,30 +9,62 @@ import {
   SparklesIcon,
   BookOpenIcon,
 } from '@/components/client/ClientIcons';
-import {
-  MOCK_ADMIN_USERS,
-  MOCK_ADMIN_AUDIT_LOGS,
-  MOCK_ADMIN_LAWYERS,
-} from '@/lib/mock/adminMockData';
+import { getAdminDashboardData, type DashboardData } from '@/app/actions/adminData';
+
+interface PendingLawyerPreview {
+  user_id: string;
+  full_name: string;
+  roll_number: string;
+  ibp_chapter: string | null;
+}
+
+interface RecentAuditEntry {
+  id: string;
+  action: string;
+  targetType?: string;
+  timestamp: string;
+}
 
 interface AdminDashboardViewProps {
   onNavigate?: (key: any) => void;
+  // Optional SSR-provided props (used by the standalone page route)
   pendingLawyersCount?: number;
   approvedLawyersCount?: number;
   totalUsersCount?: number;
+  pendingLawyersPreview?: PendingLawyerPreview[];
+  recentAuditEntries?: RecentAuditEntry[];
 }
 
 export function AdminDashboardView({
   onNavigate,
-  pendingLawyersCount,
-  approvedLawyersCount,
-  totalUsersCount,
+  pendingLawyersCount: initPending,
+  approvedLawyersCount: initApproved,
+  totalUsersCount: initTotal,
+  pendingLawyersPreview: initPendingList,
+  recentAuditEntries: initAudit,
 }: AdminDashboardViewProps) {
-  const pendingCount = pendingLawyersCount ?? MOCK_ADMIN_LAWYERS.filter((l) => l.verification_status === 'pending').length;
-  const approvedCount = approvedLawyersCount ?? MOCK_ADMIN_LAWYERS.filter((l) => l.verification_status === 'approved').length;
-  const totalUsers = totalUsersCount ?? MOCK_ADMIN_USERS.length;
-  const pendingLawyers = MOCK_ADMIN_LAWYERS.filter((l) => l.verification_status === 'pending').slice(0, 5);
-  const recentAudit = MOCK_ADMIN_AUDIT_LOGS.slice(0, 4);
+  const [data, setData] = useState<DashboardData | null>(
+    initPending !== undefined
+      ? {
+          pendingLawyersCount: initPending ?? 0,
+          approvedLawyersCount: initApproved ?? 0,
+          totalUsersCount: initTotal ?? 0,
+          pendingLawyersPreview: initPendingList ?? [],
+          recentAuditEntries: initAudit ?? [],
+        }
+      : null
+  );
+
+  useEffect(() => {
+    // Always fetch fresh data from DB on mount (catches SPA navigation case)
+    getAdminDashboardData().then(setData);
+  }, []);
+
+  const pendingCount = data?.pendingLawyersCount ?? 0;
+  const approvedCount = data?.approvedLawyersCount ?? 0;
+  const totalUsers = data?.totalUsersCount ?? 0;
+  const pendingLawyers = data?.pendingLawyersPreview ?? [];
+  const recentAudit = data?.recentAuditEntries ?? [];
 
   const handleClick = (e: React.MouseEvent, key: string, href: string) => {
     if (onNavigate) {
@@ -114,7 +146,7 @@ export function AdminDashboardView({
             <span className="font-cormorant text-3xl font-bold text-[#34150F]">
               {approvedCount}
             </span>
-            <span className="text-[11px] font-medium text-emerald-700">Verified & Visible</span>
+            <span className="text-[11px] font-medium text-emerald-700">Verified &amp; Visible</span>
           </div>
           <p className="text-[11px] text-[#A69584] mt-1">Integrated Bar of the Philippines</p>
         </Link>
@@ -138,16 +170,14 @@ export function AdminDashboardView({
             <span className="font-cormorant text-3xl font-bold text-[#34150F]">
               {totalUsers}
             </span>
-            <span className="text-[11px] font-medium text-[#7D6855]">Clients & Lawyers</span>
+            <span className="text-[11px] font-medium text-[#7D6855]">Clients &amp; Lawyers</span>
           </div>
           <p className="text-[11px] text-[#A69584] mt-1">Authenticated user profiles</p>
         </Link>
 
         {/* Tile 4: Gemini AI Intelligence */}
-        <Link
-          href="/admin/ai-management"
-          onClick={(e) => handleClick(e, 'ai-management', '/admin/ai-management')}
-          className="p-5 rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB]/80 transition-all hover:scale-[1.01] cursor-pointer"
+        <div
+          className="p-5 rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB]/80 transition-all"
           style={{ boxShadow: '6px 6px 14px rgba(0,0,0,0.06), -6px -6px 14px rgba(255,255,255,0.9)' }}
         >
           <div className="flex items-center justify-between">
@@ -165,7 +195,7 @@ export function AdminDashboardView({
             <span className="text-[11px] font-medium text-emerald-700">100%</span>
           </div>
           <p className="text-[11px] text-[#A69584] mt-1">Google Gemini 3.8 Flash</p>
-        </Link>
+        </div>
       </div>
 
       {/* ─── Two-Column Main Content Section ──────────────────────────────── */}
@@ -223,9 +253,11 @@ export function AdminDashboardView({
               ) : (
                 <div className="py-10 text-center space-y-2">
                   <div className="text-3xl">⚖️</div>
-                  <p className="text-xs font-semibold text-[#5C4535]">Verification Queue is Clear</p>
+                  <p className="text-xs font-semibold text-[#5C4535]">
+                    {data === null ? 'Loading queue…' : 'Verification Queue is Clear'}
+                  </p>
                   <p className="text-[11px] text-[#A69584] max-w-sm mx-auto">
-                    All submitted lawyer profiles have been processed. New registrations will automatically appear here.
+                    {data !== null && 'All submitted lawyer profiles have been processed. New registrations will automatically appear here.'}
                   </p>
                 </div>
               )}
@@ -239,7 +271,7 @@ export function AdminDashboardView({
           >
             <div className="flex items-center justify-between pb-3 border-b border-[#E8DCCB]">
               <h3 className="font-cormorant text-xl font-bold text-[#34150F]">
-                Security & Audit Trail
+                Security &amp; Audit Trail
               </h3>
               <Link
                 href="/admin/settings/security-audit-log"
@@ -265,7 +297,7 @@ export function AdminDashboardView({
                 ))
               ) : (
                 <p className="py-4 text-center text-xs text-[#7D6855]">
-                  Audit log is recording all administrative actions.
+                  {data === null ? 'Loading audit trail…' : 'Audit log is recording all administrative actions.'}
                 </p>
               )}
             </div>
@@ -308,25 +340,25 @@ export function AdminDashboardView({
               </Link>
 
               <Link
-                href="/admin/knowledge-base"
-                onClick={(e) => handleClick(e, 'knowledge-base', '/admin/knowledge-base')}
+                href="/admin/users"
+                onClick={(e) => handleClick(e, 'users', '/admin/users')}
                 className="flex items-center justify-between p-3 rounded-2xl bg-[#E8DAC8] text-xs font-semibold text-[#34150F] hover:bg-[#DFCDB9] transition-all shadow-[2px_2px_5px_rgba(0,0,0,0.04)] cursor-pointer"
               >
                 <div className="flex items-center gap-2.5">
-                  <BookOpenIcon className="w-4 h-4 text-[#C58B3C]" />
-                  <span>Philippine Legal Knowledge Base</span>
+                  <UserGroupIcon className="w-4 h-4 text-[#C58B3C]" />
+                  <span>Manage User Accounts</span>
                 </div>
                 <span>→</span>
               </Link>
 
               <Link
-                href="/admin/ai-management"
-                onClick={(e) => handleClick(e, 'ai-management', '/admin/ai-management')}
+                href="/admin/settings/security-audit-log"
+                onClick={(e) => handleClick(e, 'security-audit-log', '/admin/settings/security-audit-log')}
                 className="flex items-center justify-between p-3 rounded-2xl bg-[#E8DAC8] text-xs font-semibold text-[#34150F] hover:bg-[#DFCDB9] transition-all shadow-[2px_2px_5px_rgba(0,0,0,0.04)] cursor-pointer"
               >
                 <div className="flex items-center gap-2.5">
-                  <SparklesIcon className="w-4 h-4 text-[#C58B3C]" />
-                  <span>AI Prompt & Model Configurations</span>
+                  <BookOpenIcon className="w-4 h-4 text-[#C58B3C]" />
+                  <span>Security &amp; Audit Log</span>
                 </div>
                 <span>→</span>
               </Link>

@@ -13,8 +13,6 @@ import {
   ShieldCheckIcon,
   ScaleIcon,
   UserGroupIcon,
-  BookOpenIcon,
-  SparklesIcon,
   DocumentTextIcon,
   LogoutIcon,
 } from './AdminIcons';
@@ -24,8 +22,6 @@ import { AdminDashboardView } from './views/AdminDashboardView';
 import { AdminVerificationQueueView } from './views/AdminVerificationQueueView';
 import { AdminLawyersView } from './views/AdminLawyersView';
 import { AdminUsersView } from './views/AdminUsersView';
-import { AdminKnowledgeBaseView } from './views/AdminKnowledgeBaseView';
-import { AdminAIManagementView } from './views/AdminAIManagementView';
 import { AdminSecurityAuditView } from './views/AdminSecurityAuditView';
 import { AdminSettingsView } from './views/AdminSettingsView';
 
@@ -34,8 +30,6 @@ export type AdminViewKey =
   | 'verification-queue'
   | 'lawyers'
   | 'users'
-  | 'knowledge-base'
-  | 'ai-management'
   | 'security-audit-log'
   | 'settings'
   | 'other';
@@ -82,18 +76,6 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     icon: UserGroupIcon,
   },
   {
-    key: 'knowledge-base',
-    name: 'Knowledge Base',
-    href: '/admin/knowledge-base',
-    icon: BookOpenIcon,
-  },
-  {
-    key: 'ai-management',
-    name: 'AI Management',
-    href: '/admin/ai-management',
-    icon: SparklesIcon,
-  },
-  {
     key: 'security-audit-log',
     name: 'Security & Audit Log',
     href: '/admin/settings/security-audit-log',
@@ -109,9 +91,6 @@ function pathnameToView(pathname: string): AdminViewKey {
   if (pathname.startsWith('/admin/lawyers/')) return 'other';
   if (pathname === '/admin/users') return 'users';
   if (pathname.startsWith('/admin/users/')) return 'other';
-  if (pathname === '/admin/knowledge-base') return 'knowledge-base';
-  if (pathname.startsWith('/admin/knowledge-base/')) return 'other';
-  if (pathname === '/admin/ai-management' || pathname.startsWith('/admin/ai-management/')) return 'ai-management';
   if (pathname === '/admin/settings/security-audit-log' || pathname.startsWith('/admin/settings/security-audit-log/')) return 'security-audit-log';
   if (pathname === '/admin/settings' || pathname.startsWith('/admin/settings/')) return 'settings';
   return 'dashboard';
@@ -168,13 +147,6 @@ export function AdminShell({ user, children }: AdminShellProps) {
           return children;
         }
         return <AdminUsersView />;
-      case 'knowledge-base':
-        if (pathname.startsWith('/admin/knowledge-base/') && pathname !== '/admin/knowledge-base' && children) {
-          return children;
-        }
-        return <AdminKnowledgeBaseView />;
-      case 'ai-management':
-        return <AdminAIManagementView />;
       case 'security-audit-log':
         return <AdminSecurityAuditView />;
       case 'settings':
@@ -222,9 +194,8 @@ export function AdminShell({ user, children }: AdminShellProps) {
           <button
             type="button"
             onClick={navigateToDashboard}
-            className={`p-1.5 rounded-lg transition-colors hover:text-[#C58B3C] focus:outline-none ${
-              activeView === 'dashboard' ? 'text-[#C58B3C]' : ''
-            }`}
+            className={`p-1.5 rounded-lg transition-colors hover:text-[#C58B3C] focus:outline-none ${activeView === 'dashboard' ? 'text-[#C58B3C]' : ''
+              }`}
             title="Dashboard Home"
             aria-label="Dashboard Home"
           >
@@ -351,11 +322,10 @@ export function AdminShell({ user, children }: AdminShellProps) {
                     type="button"
                     key={item.key}
                     onClick={() => navigate(item.key)}
-                    className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs sm:text-sm font-medium transition-all text-left ${
-                      active
+                    className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs sm:text-sm font-medium transition-all text-left ${active
                         ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                         : 'text-[#3E2A1E] hover:bg-[#E5D7C5] hover:text-[#34150F]'
-                    }`}
+                      }`}
                   >
                     <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-[#C58B3C]' : 'text-[#5C4535]'}`} />
                     <span className="truncate">{item.name}</span>
@@ -371,11 +341,10 @@ export function AdminShell({ user, children }: AdminShellProps) {
             <button
               type="button"
               onClick={() => navigate('settings')}
-              className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all text-left ${
-                activeView === 'settings'
+              className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all text-left ${activeView === 'settings'
                   ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                   : 'text-[#3E2A1E] hover:bg-[#E5D7C5] hover:text-[#34150F]'
-              }`}
+                }`}
             >
               <GearIcon className="w-5 h-5 text-[#5C4535]" />
               <span>Settings</span>
@@ -427,11 +396,10 @@ export function AdminShell({ user, children }: AdminShellProps) {
                         type="button"
                         key={item.key}
                         onClick={() => navigate(item.key)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-left ${
-                          active
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-left ${active
                             ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                             : 'text-[#3E2A1E] hover:bg-[#E5D7C5]'
-                        }`}
+                          }`}
                       >
                         <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-[#C58B3C]' : 'text-[#5C4535]'}`} />
                         <span>{item.name}</span>
