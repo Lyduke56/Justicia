@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { reviewLawyerApplicationAction, type ReviewDecision } from '@/app/actions/adminLawyerReview';
@@ -36,6 +36,10 @@ type TabKey = 'all' | 'pending' | 'needs_resubmission' | 'approved' | 'rejected'
 export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
   const router = useRouter();
   const [lawyers, setLawyers] = useState<LawyerQueueItem[]>(initialLawyers);
+
+  useEffect(() => {
+    setLawyers(initialLawyers);
+  }, [initialLawyers]);
   const [activeTab, setActiveTab] = useState<TabKey>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [isPending, startTransition] = useTransition();

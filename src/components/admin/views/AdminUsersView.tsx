@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { getAdminUsersData, updateUserRoleAction, toggleUserStatusAction, sendUserPasswordResetAction } from '@/app/actions/adminData';
 import Link from 'next/link';
 import {
   MOCK_ADMIN_USERS,
@@ -49,8 +50,18 @@ function XIcon({ className = 'w-4 h-4' }: { className?: string }) {
   );
 }
 
-export function AdminUsersView() {
-  const [users, setUsers] = useState<AdminUserAccount[]>(MOCK_ADMIN_USERS);
+export function AdminUsersView({ initialUsers }: { initialUsers?: AdminUserAccount[] } = {}) {
+  const [users, setUsers] = useState<AdminUserAccount[]>(initialUsers ?? []);
+
+  useEffect(() => {
+    getAdminUsersData().then(setUsers);
+  }, []);
+
+  useEffect(() => {
+    if (initialUsers && initialUsers.length > 0) {
+      setUsers(initialUsers);
+    }
+  }, [initialUsers]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'client' | 'lawyer' | 'admin'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended' | 'unverified'>('all');
@@ -90,34 +101,42 @@ export function AdminUsersView() {
   }, [users, roleFilter, statusFilter, searchQuery]);
 
   // User Actions
-  const handleToggleStatus = (userId: string) => {
+  const handleToggleStatus = async (userId: string) => {
+    const targetUser = users.find((u) => u.id === userId);
+    if (!targetUser) return;
+    const nextStatus = targetUser.status === 'suspended' ? 'active' : 'suspended';
+
     setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          const nextStatus = u.status === 'suspended' ? 'active' : 'suspended';
-          showToast(`Account for ${u.fullName} is now ${nextStatus.toUpperCase()}.`);
-          return { ...u, status: nextStatus };
-        }
-        return u;
-      })
+      prev.map((u) => (u.id === userId ? { ...u, status: nextStatus } : u))
     );
     if (selectedUser?.id === userId) {
-      setSelectedUser((prev) => (prev ? { ...prev, status: prev.status === 'suspended' ? 'active' : 'suspended' } : null));
+      setSelectedUser((prev) => (prev ? { ...prev, status: nextStatus } : null));
+    }
+
+    const res = await toggleUserStatusAction(userId, nextStatus);
+    if (res?.error) {
+      showToast(`Failed: ${res.error}`);
+    } else {
+      showToast(`Account for ${targetUser.fullName} is now ${nextStatus.toUpperCase()}.`);
     }
   };
 
-  const handleRoleChange = (userId: string, newRole: 'client' | 'lawyer' | 'admin') => {
+  const handleRoleChange = async (userId: string, newRole: 'client' | 'lawyer' | 'admin') => {
+    const targetUser = users.find((u) => u.id === userId);
+    if (!targetUser) return;
+
     setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          showToast(`Updated ${u.fullName} role to ${newRole.toUpperCase()}.`);
-          return { ...u, role: newRole };
-        }
-        return u;
-      })
+      prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
     );
     if (selectedUser?.id === userId) {
       setSelectedUser((prev) => (prev ? { ...prev, role: newRole } : null));
+    }
+
+    const res = await updateUserRoleAction(userId, newRole);
+    if (res?.error) {
+      showToast(`Failed: ${res.error}`);
+    } else {
+      showToast(`Updated ${targetUser.fullName} role to ${newRole.toUpperCase()}.`);
     }
   };
 
@@ -171,9 +190,8 @@ export function AdminUsersView() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div
           onClick={() => { setRoleFilter('all'); setStatusFilter('all'); }}
-          className={`cursor-pointer p-5 rounded-3xl bg-[#EFE5D8] border transition-all ${
-            roleFilter === 'all' && statusFilter === 'all' ? 'border-[#C58B3C]' : 'border-[#E8DCCB]'
-          }`}
+          className={`cursor-pointer p-5 rounded-3xl bg-[#EFE5D8] border transition-all ${roleFilter === 'all' && statusFilter === 'all' ? 'border-[#C58B3C]' : 'border-[#E8DCCB]'
+            }`}
           style={{ boxShadow: '6px 6px 14px rgba(0,0,0,0.05), -6px -6px 14px rgba(255,255,255,0.9)' }}
         >
           <div className="flex items-center justify-between">
@@ -186,9 +204,8 @@ export function AdminUsersView() {
 
         <div
           onClick={() => setRoleFilter('client')}
-          className={`cursor-pointer p-5 rounded-3xl bg-[#EFE5D8] border transition-all ${
-            roleFilter === 'client' ? 'border-[#C58B3C]' : 'border-[#E8DCCB]'
-          }`}
+          className={`cursor-pointer p-5 rounded-3xl bg-[#EFE5D8] border transition-all ${roleFilter === 'client' ? 'border-[#C58B3C]' : 'border-[#E8DCCB]'
+            }`}
           style={{ boxShadow: '6px 6px 14px rgba(0,0,0,0.05), -6px -6px 14px rgba(255,255,255,0.9)' }}
         >
           <div className="flex items-center justify-between">
@@ -201,9 +218,8 @@ export function AdminUsersView() {
 
         <div
           onClick={() => setRoleFilter('lawyer')}
-          className={`cursor-pointer p-5 rounded-3xl bg-[#EFE5D8] border transition-all ${
-            roleFilter === 'lawyer' ? 'border-[#C58B3C]' : 'border-[#E8DCCB]'
-          }`}
+          className={`cursor-pointer p-5 rounded-3xl bg-[#EFE5D8] border transition-all ${roleFilter === 'lawyer' ? 'border-[#C58B3C]' : 'border-[#E8DCCB]'
+            }`}
           style={{ boxShadow: '6px 6px 14px rgba(0,0,0,0.05), -6px -6px 14px rgba(255,255,255,0.9)' }}
         >
           <div className="flex items-center justify-between">
@@ -216,9 +232,8 @@ export function AdminUsersView() {
 
         <div
           onClick={() => setRoleFilter('admin')}
-          className={`cursor-pointer p-5 rounded-3xl bg-[#EFE5D8] border transition-all ${
-            roleFilter === 'admin' ? 'border-[#C58B3C]' : 'border-[#E8DCCB]'
-          }`}
+          className={`cursor-pointer p-5 rounded-3xl bg-[#EFE5D8] border transition-all ${roleFilter === 'admin' ? 'border-[#C58B3C]' : 'border-[#E8DCCB]'
+            }`}
           style={{ boxShadow: '6px 6px 14px rgba(0,0,0,0.05), -6px -6px 14px rgba(255,255,255,0.9)' }}
         >
           <div className="flex items-center justify-between">
@@ -262,11 +277,10 @@ export function AdminUsersView() {
               <button
                 key={r}
                 onClick={() => setRoleFilter(r)}
-                className={`px-3 py-1.5 rounded-xl capitalize font-semibold transition ${
-                  roleFilter === r
-                    ? 'bg-[#EFE5D8] text-[#34150F] shadow-sm'
-                    : 'text-[#7D6855] hover:text-[#34150F]'
-                }`}
+                className={`px-3 py-1.5 rounded-xl capitalize font-semibold transition ${roleFilter === r
+                  ? 'bg-[#EFE5D8] text-[#34150F] shadow-sm'
+                  : 'text-[#7D6855] hover:text-[#34150F]'
+                  }`}
               >
                 {r === 'all' ? 'All Roles' : `${r}s`}
               </button>
@@ -334,13 +348,12 @@ export function AdminUsersView() {
                       {/* Role Pill */}
                       <td className="py-4 px-4">
                         <span
-                          className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-                            u.role === 'admin'
-                              ? 'bg-[#23150F] text-[#C58B3C] border-[#3E271D]'
-                              : u.role === 'lawyer'
+                          className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${u.role === 'admin'
+                            ? 'bg-[#23150F] text-[#C58B3C] border-[#3E271D]'
+                            : u.role === 'lawyer'
                               ? 'bg-[#C58B3C]/15 text-[#8A5A1B] border-[#C58B3C]/30'
                               : 'bg-[#E5D7C5] text-[#5C4535] border-[#D8CAAD]'
-                          }`}
+                            }`}
                         >
                           {u.role}
                         </span>
@@ -349,13 +362,12 @@ export function AdminUsersView() {
                       {/* Standing Status */}
                       <td className="py-4 px-4">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                            u.status === 'active'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                              : u.status === 'suspended'
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${u.status === 'active'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : u.status === 'suspended'
                               ? 'bg-rose-100 text-rose-800 border border-rose-300'
                               : 'bg-amber-100 text-amber-800 border border-amber-300'
-                          }`}
+                            }`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'active' ? 'bg-emerald-500' : u.status === 'suspended' ? 'bg-rose-500' : 'bg-amber-500'}`} />
                           <span className="capitalize">{u.status}</span>
@@ -400,11 +412,10 @@ export function AdminUsersView() {
                           </button>
                           <button
                             onClick={() => handleToggleStatus(u.id)}
-                            className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold border transition ${
-                              isSuspended
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                                : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
-                            }`}
+                            className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold border transition ${isSuspended
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                              : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
+                              }`}
                           >
                             {isSuspended ? 'Reinstate' : 'Suspend'}
                           </button>
@@ -491,11 +502,10 @@ export function AdminUsersView() {
                     <button
                       key={r}
                       onClick={() => handleRoleChange(selectedUser.id, r)}
-                      className={`p-3 rounded-xl text-xs font-semibold capitalize border transition ${
-                        selectedUser.role === r
-                          ? 'bg-[#23150F] text-[#C58B3C] border-[#3E271D] shadow-inner'
-                          : 'bg-[#F5EDE2] text-[#5C4535] border-[#D8CAAD] hover:bg-[#E5D7C5]'
-                      }`}
+                      className={`p-3 rounded-xl text-xs font-semibold capitalize border transition ${selectedUser.role === r
+                        ? 'bg-[#23150F] text-[#C58B3C] border-[#3E271D] shadow-inner'
+                        : 'bg-[#F5EDE2] text-[#5C4535] border-[#D8CAAD] hover:bg-[#E5D7C5]'
+                        }`}
                     >
                       {r}
                     </button>
@@ -510,7 +520,11 @@ export function AdminUsersView() {
                 </h3>
                 <div className="space-y-2">
                   <button
-                    onClick={() => showToast(`Password reset link dispatched to ${selectedUser.email}`)}
+                    onClick={async () => {
+                      const res = await sendUserPasswordResetAction(selectedUser.email);
+                      if (res?.error) showToast(`Error: ${res.error}`);
+                      else showToast(`Password reset email sent to ${selectedUser.email}`);
+                    }}
                     className="w-full text-left p-3 rounded-xl bg-[#F5EDE2] border border-[#D8CAAD] text-xs font-semibold text-[#34150F] hover:bg-[#E8DCCB] transition flex items-center justify-between"
                   >
                     <span>Send Password Reset Email</span>
@@ -518,11 +532,10 @@ export function AdminUsersView() {
                   </button>
                   <button
                     onClick={() => handleToggleStatus(selectedUser.id)}
-                    className={`w-full text-left p-3 rounded-xl border text-xs font-semibold transition flex items-center justify-between ${
-                      selectedUser.status === 'suspended'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                        : 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
-                    }`}
+                    className={`w-full text-left p-3 rounded-xl border text-xs font-semibold transition flex items-center justify-between ${selectedUser.status === 'suspended'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                      : 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+                      }`}
                   >
                     <span>{selectedUser.status === 'suspended' ? 'Reinstate Account Access' : 'Suspend Account Immediately'}</span>
                     <span>{selectedUser.status === 'suspended' ? '✓' : '⚠'}</span>

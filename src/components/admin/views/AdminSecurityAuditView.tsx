@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { getAdminAuditLogsData } from '@/app/actions/adminData';
 import Link from 'next/link';
 import {
   MOCK_ADMIN_AUDIT_LOGS,
@@ -40,13 +41,32 @@ function XIcon({ className = 'w-4 h-4' }: { className?: string }) {
   );
 }
 
-export function AdminSecurityAuditView() {
-  const [logs, setLogs] = useState<AdminAuditEntry[]>(MOCK_ADMIN_AUDIT_LOGS);
+export function AdminSecurityAuditView({ initialLogs }: { initialLogs?: AdminAuditEntry[] } = {}) {
+  const [logs, setLogs] = useState<AdminAuditEntry[]>(initialLogs ?? []);
+
+  useEffect(() => {
+    getAdminAuditLogsData().then(setLogs);
+  }, []);
+
+  useEffect(() => {
+    if (initialLogs && initialLogs.length > 0) {
+      setLogs(initialLogs);
+    }
+  }, [initialLogs]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
   const [activeEntry, setActiveEntry] = useState<AdminAuditEntry | null>(null);
   const [isLiveTail, setIsLiveTail] = useState(true);
+  // Live polling tail if active
+  useEffect(() => {
+    if (!isLiveTail) return;
+    const interval = setInterval(() => {
+      getAdminAuditLogsData().then(setLogs);
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [isLiveTail]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {

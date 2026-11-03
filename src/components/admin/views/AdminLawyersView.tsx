@@ -1,10 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { LawyerDirectoryTable, type LawyerDirectoryItem } from '@/components/admin/LawyerDirectoryTable';
 import { ShieldCheckIcon } from '@/components/admin/AdminIcons';
-import { MOCK_ADMIN_LAWYERS } from '@/lib/mock/adminMockData';
+import { getLawyerDirectoryData } from '@/app/actions/adminData';
 
 interface AdminLawyersViewProps {
   onNavigate?: (key: any) => void;
@@ -12,24 +12,14 @@ interface AdminLawyersViewProps {
 }
 
 export function AdminLawyersView({ onNavigate, lawyers: initialLawyers }: AdminLawyersViewProps) {
-  const lawyers: LawyerDirectoryItem[] = initialLawyers ?? MOCK_ADMIN_LAWYERS.map((p) => ({
-    user_id: p.user_id,
-    email: p.email,
-    full_name: p.full_name,
-    roll_number: p.roll_number,
-    ibp_chapter: p.ibp_chapter,
-    bar_passer_year: p.bar_passer_year,
-    practice_areas: p.practice_areas,
-    languages: p.languages,
-    experience_years: p.experience_years,
-    fee_standard_60min: p.fee_standard_60min,
-    verification_status: p.verification_status,
-    is_visible: p.is_visible,
-    is_available: p.is_available,
-    submitted_at: p.submitted_at,
-    reviewed_at: p.reviewed_at,
-    created_at: p.created_at,
-  }));
+  const [lawyers, setLawyers] = useState<LawyerDirectoryItem[]>(initialLawyers ?? []);
+
+  useEffect(() => {
+    // Always fetch fresh from DB (handles SPA view switching and direct load)
+    getLawyerDirectoryData().then((rows) => {
+      setLawyers(rows);
+    });
+  }, []);
 
   const pendingCount = lawyers.filter((l) => l.verification_status === 'pending').length;
 
