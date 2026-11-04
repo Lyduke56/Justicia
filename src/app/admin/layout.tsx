@@ -1,6 +1,5 @@
 import React from 'react';
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { AdminShell } from '@/components/admin/AdminShell';
 
@@ -20,34 +19,17 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies();
-  const demoCookie = cookieStore.get('justicia_demo_session')?.value;
-  const isDemo = demoCookie === 'admin' || demoCookie === 'true';
-
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    if (isDemo) {
-      return (
-        <AdminShell
-          user={{
-            id: '7f89c251-82fe-4ead-a33d-681ec14c4022',
-            email: 'admin@justicia.ph',
-            fullName: 'Atty. Eleanor Vance (System Admin)',
-          }}
-        >
-          {children}
-        </AdminShell>
-      );
-    }
     redirect('/login?redirectTo=/admin/dashboard');
   }
 
-  // Verify role
-  let role = (user.user_metadata?.role as string) || '';
+  // The database account is the source of truth for privileged access.
+  let role = '';
   let fullName = (user.user_metadata?.full_name as string) || 'Administrator';
 
   try {
