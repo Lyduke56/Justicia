@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
-import Image from 'next/image';
+import React, { useState } from 'react';
 import { Navbar } from './Navbar';
 import { HeroSection } from './HeroSection';
 import { MottoSection } from './MottoSection';
@@ -9,15 +8,10 @@ import { AboutSection } from './AboutSection';
 import { FeaturesSection } from './FeaturesSection';
 import { Footer } from './Footer';
 import { SignInModal } from '@/components/auth/SignInModal';
-import {
-  SpotlightProvider,
-  GlobalCursorSpotlight,
-  BookshelfSpotlight,
-} from './LibrarySpotlight';
+import { SpotlightProvider, GlobalCursorSpotlight } from './LibrarySpotlight';
 
 export function LandingPageClient() {
   const [signInOpen, setSignInOpen] = useState(false);
-  const runwayRef = useRef<HTMLDivElement>(null);
 
   return (
     <SpotlightProvider>
@@ -34,35 +28,24 @@ export function LandingPageClient() {
         {/* Motto Section */}
         <MottoSection />
 
-        {/* Atmospheric Scroll Runway between Motto and About */}
+        {/* Scroll runway between Motto and About: plain dark spacer (no books).
+            Motto dims into #0d0705 on exit and About lifts out of #0d0705 on entry,
+            so this gap is solid #0d0705 on purpose. Adjust the height classes to
+            lengthen or shorten the pause. */}
         <div
-          ref={runwayRef}
-          className="relative h-[140vh] sm:h-[170vh] lg:h-[200vh] w-full overflow-hidden pointer-events-none"
-        >
-          <div className="absolute inset-0 z-0">
-            <Image
-              src="/actual_images/book_bg.png"
-              alt="Antique law library bookshelf background"
-              fill
-              priority={false}
-              className="object-cover object-top filter contrast-110"
-              sizes="100vw"
-            />
-            <div
-              className="absolute inset-0"
-              style={{ backgroundColor: 'rgba(20, 11, 12, 0.90)' }}
-            />
-            {/* Bookshelf Spotlight Reveal */}
-            <BookshelfSpotlight
-              containerRef={runwayRef}
-              oversizedClassName="inset-0"
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-[#0d0705] via-transparent to-[#0d0705]" />
-          </div>
-        </div>
+          aria-hidden="true"
+          className="h-[110vh] sm:h-[135vh] lg:h-[160vh] w-full bg-[#0d0705] pointer-events-none"
+        />
 
         {/* About Section */}
         <AboutSection />
+
+        {/* Scroll runway between About and Features: plain dark spacer.
+            About dims into #0d0705 on exit, so this gap blends in seamlessly. */}
+        <div
+          aria-hidden="true"
+          className="h-[60vh] sm:h-[80vh] lg:h-[100vh] w-full bg-[#0d0705] pointer-events-none"
+        />
 
         {/* Features Section */}
         <FeaturesSection />

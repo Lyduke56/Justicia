@@ -28,7 +28,7 @@ const revealEase = cubicBezier(0.22, 1, 0.36, 1);
  * After the pin releases, an exit phase (parallax + dim) carries the scene into Features.
  * To make the whole sequence longer or shorter, change SECTION_HEIGHT — the timings are relative.
  */
-const SECTION_HEIGHT = 'h-[480vh] sm:h-[520vh]';
+const SECTION_HEIGHT = 'h-[420vh] sm:h-[450vh]';
 
 const T = {
   facade: [0.04, 0.34],
@@ -172,8 +172,10 @@ export function AboutSection() {
   const smoothEntry = useSpring(entryProgress, { stiffness: 60, damping: 28, restDelta: 0.0005 });
   const smoothExit = useSpring(exitProgress, { stiffness: 60, damping: 28, restDelta: 0.0005 });
 
-  // ENTRY — starts as solid #0d0705 (Motto's final colour) and lifts, so the library emerges from the dark
-  const veilOpacity = useTransform(smoothEntry, [0.1, 1], [1, 0]);
+  // ENTRY — starts as solid #0d0705 (Motto's final colour) and stays dark while the section slides up.
+  // The veil only lifts during the last 30% of the entry, so the books don't show in the gap
+  // between Motto and About, and appear once About has nearly settled.
+  const veilOpacity = useTransform(smoothEntry, [0.7, 1], [1, 0]);
 
   // PINNED — background: slow push-in + upward drift (farthest layer)
   const bgScale = useTransform(smoothProgress, [0, 1], [1.02, 1.08]);
@@ -248,7 +250,7 @@ export function AboutSection() {
           {/* Bottom gradient transition into Features section */}
           <div className="absolute bottom-0 left-0 right-0 h-44 sm:h-56 bg-gradient-to-t from-[#0d0705] via-[#0d0705]/70 to-transparent" />
 
-          {/* Entry veil: lifts as the section arrives, revealing the library out of darkness */}
+          {/* Entry veil: stays solid while the section slides up, then lifts at the end of the entry */}
           <motion.div
             style={{ opacity: prefersReducedMotion ? 0 : veilOpacity }}
             className="absolute inset-0 bg-[#0d0705]"
