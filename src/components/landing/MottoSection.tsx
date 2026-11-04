@@ -26,10 +26,13 @@ const revealEase = cubicBezier(0.22, 1, 0.36, 1);
  *   0.88 – 0.94   bottom hairline draws
  *   0.94 – 1.00   HOLD: everything is visible, the section stays pinned, then releases
  *
+ * After the pin releases, an exit phase dims the library into #0d0705 so no books
+ * are visible in the gap between this section and the next.
+ *
  * To make the whole sequence longer or shorter, change the section height below
  * (SECTION_HEIGHT) — the timings are relative, so nothing else needs editing.
  */
-const SECTION_HEIGHT = 'h-[440vh] sm:h-[480vh]';
+const SECTION_HEIGHT = 'h-[380vh] sm:h-[410vh]';
 
 const MAXIM_WORDS = [
   { word: 'NEMO', start: 0.18, end: 0.33, isGold: false },
@@ -129,6 +132,12 @@ export function MottoSection() {
     offset: ['start end', 'start start'],
   });
 
+  // Exit track: runs while the section scrolls away after unpinning (into About).
+  const { scrollYProgress: exitProgress } = useScroll({
+    target: containerRef,
+    offset: ['end end', 'end start'],
+  });
+
   // Heavy, overdamped spring: deliberate and smooth, so fast scrolling can't skip words
   const smoothProgress = useSpring(scrollYProgress, {
     stiffness: 40,
@@ -140,10 +149,19 @@ export function MottoSection() {
     damping: 28,
     restDelta: 0.0005,
   });
+  const smoothExit = useSpring(exitProgress, {
+    stiffness: 60,
+    damping: 28,
+    restDelta: 0.0005,
+  });
 
   // Veil: starts as solid #0d0705 (the hero's final colour) and lifts during entry,
   // so the library bookshelf emerges out of the dark before the pin even begins
   const veilOpacity = useTransform(smoothEntry, [0.1, 1], [1, 0]);
+
+  // Exit dim: sinks the library into #0d0705 as the section leaves,
+  // so no books are visible in the gap between Motto and About
+  const exitDim = useTransform(smoothExit, [0, 0.6], [0, 1]);
 
   // Background: slow settle while pinned (subtle push-in + upward drift)
   const bgScale = useTransform(smoothProgress, [0, 1], [1.02, 1.1]);
@@ -228,6 +246,12 @@ export function MottoSection() {
             className="absolute inset-0 bg-[#0d0705]"
           />
         </div>
+
+        {/* Exit dim: covers the books completely as the section leaves */}
+        <motion.div
+          style={{ opacity: prefersReducedMotion ? 0 : exitDim }}
+          className="absolute inset-0 z-[5] bg-[#0d0705] pointer-events-none"
+        />
 
         {/* Foreground content: revealed sequentially during the pinned scroll */}
         <motion.div

@@ -53,13 +53,16 @@ body {
 ::-webkit-scrollbar {
   width: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: #0e0906;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #35261b;
   border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #c59341;
 }
@@ -76,6 +79,7 @@ body {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -91,52 +95,45 @@ body {
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
 }
 
 .neu-skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(223, 197, 164, 0.35) 0%,
-    rgba(248, 243, 236, 0.85) 50%,
-    rgba(223, 197, 164, 0.35) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(223, 197, 164, 0.35) 0%,
+      rgba(248, 243, 236, 0.85) 50%,
+      rgba(223, 197, 164, 0.35) 100%);
   background-size: 200% 100%;
   animation: neuShimmer 1.8s ease-in-out infinite;
 }
 
 .neu-skeleton-plate {
-  background: linear-gradient(
-    90deg,
-    rgba(212, 184, 146, 0.5) 0%,
-    rgba(238, 224, 204, 0.9) 50%,
-    rgba(212, 184, 146, 0.5) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(212, 184, 146, 0.5) 0%,
+      rgba(238, 224, 204, 0.9) 50%,
+      rgba(212, 184, 146, 0.5) 100%);
   background-size: 200% 100%;
   animation: neuShimmer 1.8s ease-in-out infinite;
 }
 
 .neu-skeleton-inset {
-  background: linear-gradient(
-    90deg,
-    rgba(230, 215, 195, 0.5) 0%,
-    rgba(245, 238, 228, 0.9) 50%,
-    rgba(230, 215, 195, 0.5) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(230, 215, 195, 0.5) 0%,
+      rgba(245, 238, 228, 0.9) 50%,
+      rgba(230, 215, 195, 0.5) 100%);
   background-size: 200% 100%;
   animation: neuShimmer 1.8s ease-in-out infinite;
   box-shadow: inset 2px 2px 5px rgba(165, 140, 115, 0.4), inset -2px -2px 5px rgba(255, 255, 255, 0.8);
 }
 
 .neu-skeleton-text {
-  background: linear-gradient(
-    90deg,
-    rgba(165, 140, 115, 0.25) 0%,
-    rgba(212, 184, 146, 0.5) 50%,
-    rgba(165, 140, 115, 0.25) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(165, 140, 115, 0.25) 0%,
+      rgba(212, 184, 146, 0.5) 50%,
+      rgba(165, 140, 115, 0.25) 100%);
   background-size: 200% 100%;
   animation: neuShimmer 1.8s ease-in-out infinite;
   border-radius: 6px;
@@ -147,15 +144,18 @@ body {
 #lawyer-main-content::-webkit-scrollbar {
   width: 6px;
 }
+
 #client-main-content::-webkit-scrollbar-track,
 #lawyer-main-content::-webkit-scrollbar-track {
   background: #EFE5D8;
 }
+
 #client-main-content::-webkit-scrollbar-thumb,
 #lawyer-main-content::-webkit-scrollbar-thumb {
   background: #C8B59E;
   border-radius: 3px;
 }
+
 #client-main-content::-webkit-scrollbar-thumb:hover,
 #lawyer-main-content::-webkit-scrollbar-thumb:hover {
   background: #c59341;
@@ -218,9 +218,11 @@ body {
   border: none;
   transition: all 140ms ease;
 }
+
 .neu-btn-peach:hover {
   filter: brightness(1.02);
 }
+
 .neu-btn-peach:active {
   box-shadow:
     inset 3px 3px 6px rgba(145, 115, 88, 0.5),
@@ -260,9 +262,11 @@ body {
   border: none;
   transition: all 140ms ease;
 }
+
 .neu-btn:hover {
   filter: brightness(1.01);
 }
+
 .neu-btn:active {
   box-shadow:
     inset 2px 2px 5px rgba(182, 155, 130, 0.5),
@@ -278,9 +282,11 @@ body {
   border: none;
   transition: all 140ms ease;
 }
+
 .neu-btn-caramel:hover {
   background-color: #C58B3C;
 }
+
 .neu-btn-caramel:active {
   box-shadow: inset 2px 2px 6px rgba(140, 96, 32, 0.6);
 }
@@ -294,9 +300,11 @@ body {
   border: none;
   transition: all 140ms ease;
 }
+
 .neu-btn-espresso:hover {
   background-color: #3D251D;
 }
+
 .neu-btn-espresso:active {
   box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.6);
 }
@@ -310,6 +318,125 @@ body {
   border: none;
 }
 
+/* Raised role buttons (Figma spec, same recipe as .neu-raised) */
+.neu-raised-sm {
+  background-color: #E5D8CB;
+  border: none;
+  box-shadow:
+    5px 5px 13px 0 rgba(206, 194, 183, 0.90),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.20),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
+  transition: box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.neu-raised-sm:hover {
+  filter: brightness(1.02);
+}
+
+/* Pressed-in version (selected role), same recipe as .neu-input */
+.neu-pressed {
+  background-color: #E5D8CB;
+  border: none;
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20);
+}
+
+/* CREATE ACCOUNT button (Figma spec: orange-950 + raised shadows) */
+.neu-btn-create {
+  background-color: #431407;
+  /* orange-950 */
+  color: #D6D3D1;
+  /* stone-300 */
+  border: none;
+  box-shadow:
+    5px 5px 13px 0 rgba(206, 194, 183, 0.90),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.20),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
+  transition: box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.neu-btn-create:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+/* Pressed state: sinks in when clicked */
+.neu-btn-create:active:not(:disabled) {
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
+    inset 3px 3px 8px 0 rgba(0, 0, 0, 0.45),
+    inset -3px -3px 8px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Soft recessed neumorphic field (matches #E5D8CB surface) */
+.neu-input {
+  background-color: #E5D8CB;
+  border: none;
+  outline: none;
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20);
+  transition: box-shadow 0.25s ease;
+}
+
+.neu-input::placeholder {
+  color: rgba(154, 130, 112, 0.5);
+}
+
+.neu-input:focus {
+  background-color: #E5D8CB;
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
+    0 0 0 2px rgba(185, 131, 60, 0.30);
+}
+
+.neu-input-error,
+.neu-input-error:focus {
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
+    0 0 0 2px rgba(220, 38, 38, 0.35);
+}
+
+/* Sign-in modal container (Figma spec: inset body + outer rim, #D39758 outline) */
+.neu-modal {
+  background-color: #E5D8CB;
+  border-radius: 20px;
+  outline: 4px solid #D39758;
+
+  box-shadow:
+    -1px -1px 2px 0 rgba(188, 177, 166, 0.50),
+    1px 1px 2px 0 rgba(255, 255, 240, 0.30),
+    inset 8px 8px 20px 0 rgba(188, 177, 166, 0.90),
+    inset -8px -8px 16px 0 rgba(255, 255, 240, 0.90),
+    inset 8px -8px 16px 0 rgba(188, 177, 166, 0.20),
+    inset -8px 8px 16px 0 rgba(188, 177, 166, 0.20);
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    Neumorphic Parchment Skeletal Loading System
    Emphasizes UX: warm harmonious palette, zero CLS, realistic shimmer sweep
@@ -319,20 +446,19 @@ body {
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
 }
 
 .neu-skeleton {
-  background: linear-gradient(
-    90deg,
-    #ECE1D2 0%,
-    #F5EDE2 35%,
-    #FDFBF7 50%,
-    #F5EDE2 65%,
-    #ECE1D2 100%
-  );
+  background: linear-gradient(90deg,
+      #ECE1D2 0%,
+      #F5EDE2 35%,
+      #FDFBF7 50%,
+      #F5EDE2 65%,
+      #ECE1D2 100%);
   background-size: 200% 100%;
   animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   box-shadow:
@@ -342,14 +468,12 @@ body {
 }
 
 .neu-skeleton-plate {
-  background: linear-gradient(
-    90deg,
-    #DFC5A4 0%,
-    #E8D3B8 35%,
-    #F3E4CF 50%,
-    #E8D3B8 65%,
-    #DFC5A4 100%
-  );
+  background: linear-gradient(90deg,
+      #DFC5A4 0%,
+      #E8D3B8 35%,
+      #F3E4CF 50%,
+      #E8D3B8 65%,
+      #DFC5A4 100%);
   background-size: 200% 100%;
   animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   box-shadow:
@@ -359,14 +483,12 @@ body {
 }
 
 .neu-skeleton-inset {
-  background: linear-gradient(
-    90deg,
-    #E6D7C3 0%,
-    #EDE1D0 35%,
-    #F6EFE5 50%,
-    #EDE1D0 65%,
-    #E6D7C3 100%
-  );
+  background: linear-gradient(90deg,
+      #E6D7C3 0%,
+      #EDE1D0 35%,
+      #F6EFE5 50%,
+      #EDE1D0 65%,
+      #E6D7C3 100%);
   background-size: 200% 100%;
   animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   box-shadow:
@@ -376,14 +498,24 @@ body {
 }
 
 .neu-skeleton-text {
-  background: linear-gradient(
-    90deg,
-    rgba(140, 122, 106, 0.22) 0%,
-    rgba(140, 122, 106, 0.38) 50%,
-    rgba(140, 122, 106, 0.22) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(140, 122, 106, 0.22) 0%,
+      rgba(140, 122, 106, 0.38) 50%,
+      rgba(140, 122, 106, 0.22) 100%);
   background-size: 200% 100%;
   animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   border-radius: 9999px;
 }
 
+
+/* ─── Neumorphic text field autofill fix to preserve #E5D8CB background ─── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow:
+    0 0 0 1000px #E5D8CB inset,
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90) !important;
+  -webkit-text-fill-color: #34150F !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
