@@ -20,46 +20,54 @@ export function LawyerCard({ lawyer }: LawyerCardProps) {
   return (
     <Link
       href={`/client/lawyers/${lawyer.id}`}
-      className="group block rounded-2xl p-4 bg-[#EFE5D8] shadow-[5px_5px_12px_rgba(0,0,0,0.06),-5px_-5px_12px_rgba(255,255,255,0.9)] border border-[#E8DCCB]/60 hover:shadow-[7px_7px_18px_rgba(0,0,0,0.1),-7px_-7px_18px_rgba(255,255,255,1)] transition-all duration-200"
+      className="neu-card-interactive group block rounded-[22px] py-4 pl-3 pr-5 select-none"
     >
-      <div className="flex items-center gap-3.5">
-        {/* Silhouette Avatar Circle */}
-        <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full border-2 border-[#5C4535]/75 flex items-center justify-center shrink-0 group-hover:border-[#C58B3C] transition-colors">
+      <div className="flex items-center gap-2">
+        {/* Silhouette Avatar Circle - height aligns with IBP Verified capsule & Specializations line */}
+        <div className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] shrink-0 flex items-center justify-center text-[#4A3528] group-hover:text-[#C58B3C] transition-colors">
           <svg
-            className="w-8 h-8 text-[#5C4535] group-hover:text-[#C58B3C] transition-colors"
+            className="w-full h-full"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="1.5"
+            strokeWidth="1.6"
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <circle cx="12" cy="8" r="4" />
-            <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
+            <path d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
           </svg>
         </div>
 
-        {/* Lawyer Details */}
-        <div className="min-w-0 flex-1">
-          {/* IBP Verified Badge */}
-          <div className="flex items-center gap-1 text-[10px] font-semibold text-[#C58B3C] tracking-wide uppercase">
-            <span>IBP Verified</span>
+        {/* Lawyer Details - height matches profile icon; justify-between aligns top and bottom */}
+        <div className="min-w-0 flex-1 flex flex-col justify-between h-[64px] sm:h-[68px]">
+          {/* Encapsulated IBP Verified Badge with Raised Look */}
+          <div className="flex items-center">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full neu-raised-sm bg-[#E5D8CB] text-[9.5px] sm:text-[10px] font-lora font-semibold text-[#D39758] tracking-wide select-none leading-none">
+              IBP Verified
+            </span>
           </div>
 
-          {/* Full Name */}
-          <h3 className="font-cormorant font-bold text-sm sm:text-[15px] text-[#34150F] truncate group-hover:text-[#C58B3C] transition-colors leading-tight mt-0.5">
+          {/* Full Name in Lora */}
+          <h3 className="font-lora font-bold text-xs sm:text-[13.5px] lg:text-[14px] text-[#34150F] truncate group-hover:text-[#C58B3C] transition-colors leading-tight">
             {lawyer.name}
           </h3>
 
-          {/* Roll No & IBP Chapter */}
-          <p className="text-[10px] text-[#7D6855] uppercase tracking-wider font-medium mt-0.5 truncate">
-            Roll No. {lawyer.rollNumber} <span className="opacity-60">|</span> IBP {lawyer.chapter}
-          </p>
+          {/* Roll No & IBP Chapter in Inter with generous horizontal spacing */}
+          <div className="flex items-center gap-2 text-[10px] sm:text-[10.5px] text-[#5C4535] font-inter font-normal truncate leading-none">
+            <span>Roll No. {lawyer.rollNumber}</span>
+            <span className="text-[#A89685] select-none">|</span>
+            <span>IBP {lawyer.chapter}</span>
+          </div>
 
-          {/* Specializations */}
-          <p className="text-[10px] text-[#695444] font-normal truncate mt-0.5">
-            {lawyer.specializations.join(' • ')}
-          </p>
+          {/* Specializations in Inter with generous horizontal spacing */}
+          <div className="flex items-center gap-1.5 text-[9.5px] sm:text-[10.5px] text-[#5C4535] font-inter font-normal truncate leading-none">
+            {lawyer.specializations.map((spec, index) => (
+              <React.Fragment key={spec}>
+                {index > 0 && <span className="text-[#A89685] select-none">•</span>}
+                <span className="shrink-0">{spec}</span>
+              </React.Fragment>
+            ))}
+          </div>
         </div>
       </div>
     </Link>

@@ -149,7 +149,7 @@ export function ClientShell({ user, children }: ClientShellProps) {
      *     aside (overflow-y-auto)→ locked column, scrollable only if nav items overflow
      *     main  (overflow-y-auto)→ THE ONLY scrollable zone
      */
-    <div className="flex flex-col h-screen bg-[#EFE5D8] text-[#34150F] selection:bg-[#C58B3C]/30">
+    <div className="flex flex-col h-screen bg-[#E5D8CB] text-[#34150F] selection:bg-[#C58B3C]/30">
 
       {/* ─── Top Navigation Bar ──────────────────────────────────────────────── */}
       <header className="shrink-0 h-16 w-full bg-[#23150F] border-b border-[#352219] flex items-center justify-between px-4 sm:px-8 shadow-md z-40">
@@ -422,7 +422,7 @@ export function ClientShell({ user, children }: ClientShellProps) {
 
         {/* ── Main Content Viewport (ONLY scrollable zone) ─────────────────────── */}
         <main
-          className="flex-1 overflow-y-auto bg-[#EFE5D8]"
+          className="flex-1 overflow-y-auto bg-[#E5D8CB]"
           id="client-main-content"
         >
           {/*

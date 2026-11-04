@@ -25,35 +25,47 @@ export function LawyerGridSection({ initialLawyers }: LawyerGridSectionProps) {
   };
 
   return (
-    <section className="space-y-6" aria-label="Recommended Lawyers section">
+    <section className="space-y-4" aria-label="Recommended Lawyers section">
       {/* Capsule Pill Header */}
       <div>
-        <span className="inline-block px-6 py-2 rounded-full bg-[#EFE5D8] text-[#34150F] font-cormorant text-lg sm:text-xl font-semibold shadow-[3px_3px_8px_rgba(0,0,0,0.06),-3px_-3px_8px_rgba(255,255,255,0.85)] border border-[#E5D7C5] select-none">
+        <span
+          className="inline-block px-4.5 py-3 rounded-full neu-raised-sm bg-[#D39758]/30 text-[#34150F] font-lora text-sm sm:text-[18px] font-semibold select-none mb-4"
+          style={{ backgroundColor: 'rgba(211, 151, 88, 0.30)' }}
+        >
           Recommended Lawyers
         </span>
       </div>
 
       {/* 3x3 Lawyer Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
         {currentLawyers.map((lawyer) => (
           <LawyerCard key={lawyer.id} lawyer={lawyer} />
         ))}
       </div>
 
       {/* Pagination Controls */}
-      <div className="flex items-center justify-center gap-4 pt-4 pb-8">
-        <button
-          type="button"
-          onClick={handlePrev}
-          disabled={currentPage === 1}
-          className="w-8 h-8 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] disabled:opacity-30 disabled:hover:text-[#5C4535] transition-colors focus:outline-none"
-          aria-label="Previous lawyers page"
-        >
-          <ChevronLeftIcon className="w-5 h-5" />
-        </button>
+      <div className="flex items-center justify-center gap-6 sm:gap-7 pt-6">
+        {/* Previous Page Button - circle only when there are remaining previous pages */}
+        {currentPage > 1 ? (
+          <button
+            type="button"
+            onClick={handlePrev}
+            className="size-11 rounded-full neu-raised-sm bg-[#E5D8CB] flex items-center justify-center text-[#583C37] hover:text-[#C58B3C] active:scale-95 transition-all cursor-pointer focus:outline-none"
+            aria-label="Previous lawyers page"
+          >
+            <ChevronLeftIcon className="w-8 h-8 stroke-[2.5]" />
+          </button>
+        ) : (
+          <div
+            className="size-11 flex items-center justify-center text-[#583C37] select-none"
+            aria-hidden="true"
+          >
+            <ChevronLeftIcon className="w-8 h-8 stroke-[2.5]" />
+          </div>
+        )}
 
         {/* Dots */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {Array.from({ length: totalPages }).map((_, idx) => {
             const pageNum = idx + 1;
             const isActive = pageNum === currentPage;
@@ -62,24 +74,34 @@ export function LawyerGridSection({ initialLawyers }: LawyerGridSectionProps) {
                 key={pageNum}
                 type="button"
                 onClick={() => setCurrentPage(pageNum)}
-                className={`w-2.5 h-2.5 rounded-full transition-all ${
-                  isActive ? 'bg-[#C58B3C] scale-125' : 'bg-[#3E2A1E]/70 hover:bg-[#3E2A1E]'
-                }`}
+                className={`rounded-full transition-all cursor-pointer focus:outline-none ${isActive
+                  ? 'w-3.5 h-3.5 bg-[#D39758]'
+                  : 'w-2.5 h-2.5 bg-[#34150F] hover:bg-[#C58B3C]'
+                  }`}
                 aria-label={`Go to page ${pageNum}`}
               />
             );
           })}
         </div>
 
-        <button
-          type="button"
-          onClick={handleNext}
-          disabled={currentPage === totalPages}
-          className="w-8 h-8 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] disabled:opacity-30 disabled:hover:text-[#5C4535] transition-colors focus:outline-none"
-          aria-label="Next lawyers page"
-        >
-          <ChevronRightIcon className="w-5 h-5" />
-        </button>
+        {/* Next Page Button - circle only when there are remaining next pages */}
+        {currentPage < totalPages ? (
+          <button
+            type="button"
+            onClick={handleNext}
+            className="size-11 rounded-full neu-raised-sm bg-[#E5D8CB] flex items-center justify-center text-[#583C37] hover:text-[#C58B3C] active:scale-95 transition-all cursor-pointer focus:outline-none"
+            aria-label="Next lawyers page"
+          >
+            <ChevronRightIcon className="w-8 h-8 stroke-[2.5]" />
+          </button>
+        ) : (
+          <div
+            className="size-11 flex items-center justify-center text-[#583C37] select-none"
+            aria-hidden="true"
+          >
+            <ChevronRightIcon className="w-8 h-8 stroke-[2.5]" />
+          </div>
+        )}
       </div>
     </section>
   );

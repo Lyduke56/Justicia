@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 
 /**
  * DashboardCalendar — Neumorphic calendar widget matching Figma design.
- * Displays current month, large day highlight in gold, and interactive mini calendar grid.
+ * Surface: #E5D8CB | Text: #341512 @ 80% | Highlight: #D39758
  */
 export function DashboardCalendar() {
   const [currentDate] = useState(() => new Date());
@@ -17,66 +17,61 @@ export function DashboardCalendar() {
   const dayNumber = currentDate.getDate();
   const dayOfWeekName = daysOfWeek[currentDate.getDay()];
 
-  // Generate calendar days for the current month
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
   const firstDayIndex = new Date(year, month, 1).getDay();
   const totalDays = new Date(year, month + 1, 0).getDate();
 
-  // Build grid items (padding before first day + days)
-  const calendarCells = [];
-  for (let i = 0; i < firstDayIndex; i++) {
-    calendarCells.push(null);
-  }
-  for (let d = 1; d <= totalDays; d++) {
-    calendarCells.push(d);
-  }
+  const calendarCells: (number | null)[] = [];
+  for (let i = 0; i < firstDayIndex; i++) calendarCells.push(null);
+  for (let d = 1; d <= totalDays; d++) calendarCells.push(d);
 
   return (
-    <div className="w-full bg-[#EFE5D8] rounded-3xl p-5 sm:p-6 shadow-[6px_6px_16px_rgba(0,0,0,0.06),-6px_-6px_16px_rgba(255,255,255,0.9)] border border-[#E8DCCB]/60 flex flex-col sm:flex-row items-center gap-6">
-      {/* Left Column: Month, Giant Day Number, Weekday */}
-      <div className="flex flex-col items-center justify-center sm:border-r border-[#D9C7B2]/70 sm:pr-8 sm:min-w-[130px]">
-        <span className="font-sans text-xs font-bold tracking-[0.2em] text-[#7D6855] uppercase">
+    <div className="neu-raised bg-[#E5D8CB] w-full flex flex-col sm:flex-row items-center gap-5 sm:gap-6 lg:gap-5 rounded-[24px] px-5 py-5 sm:px-6 sm:py-5">
+      {/* Left column: month, giant day number, weekday */}
+      <div className="flex flex-col items-center justify-center sm:min-w-[110px] lg:min-w-[120px] shrink-0 select-none pl-1 sm:pl-2">
+        <span className="font-lora text-sm sm:text-base lg:text-[28px] font-semibold tracking-wide text-[#341512]/80 uppercase">
           {monthName}
         </span>
-        <span className="font-cormorant text-5xl sm:text-6xl font-bold text-[#C58B3C] leading-none my-1.5 select-none">
+        <span className="font-lora text-5xl sm:text-6xl mb-2 lg:text-[120px] font-semibold text-[#D39758] leading-none my-0.5 select-none">
           {String(dayNumber).padStart(2, '0')}
         </span>
-        <span className="font-sans text-[10px] font-semibold tracking-[0.2em] text-[#7D6855] uppercase">
+        <span className="font-lora text-[11px] sm:text-[18px] font-semibold tracking-wider text-[#341512]/80 uppercase pt-1">
           {dayOfWeekName}
         </span>
       </div>
 
-      {/* Right Column: Mini Calendar Month Grid */}
-      <div className="flex-1 w-full">
-        <div className="grid grid-cols-7 gap-1 text-center mb-2">
+      {/* Right column: month grid */}
+      <div className="flex-1 w-full min-w-0">
+        <div className="grid grid-cols-7 justify-items-center mb-2">
           {shortDays.map((d) => (
-            <span key={d} className="text-[10px] font-bold text-[#4A3528] tracking-wider">
+            <span
+              key={d}
+              className="font-lora text-xs sm:text-[16px] font-semibold text-[#341512]/80 tracking-wide text-center"
+            >
               {d}
             </span>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-y-1.5 gap-x-1 text-center text-xs">
+        <div className="grid grid-cols-7 justify-items-center gap-y-1">
           {calendarCells.map((cell, idx) => {
             if (cell === null) {
-              return <div key={`empty-${idx}`} className="h-7 w-7" />;
+              return <div key={`empty-${idx}`} className="size-7 sm:size-8 lg:size-8.5" />;
             }
 
             const isToday = cell === dayNumber;
 
             return (
-              <div key={`day-${cell}`} className="flex items-center justify-center">
-                <span
-                  className={`w-7 h-7 flex items-center justify-center rounded-full text-[11px] transition-all select-none ${
-                    isToday
-                      ? 'bg-[#E5D5C1] text-[#34150F] font-bold ring-2 ring-[#C58B3C]/50 shadow-[2px_2px_5px_rgba(0,0,0,0.08),-2px_-2px_5px_rgba(255,255,255,0.8)]'
-                      : 'text-[#695444] hover:bg-[#E8D9C7]'
+              <div
+                key={`day-${cell}`}
+                className={`size-7 sm:size-8 lg:size-9 flex items-center justify-center rounded-full font-lora text-xs sm:text-[15px] select-none transition-all ${isToday
+                  ? 'neu-raised-sm bg-[#E5D8CB] text-[#D39758] font-bold'
+                  : 'text-[#341512]/80 hover:bg-[#DDCFC0]/60'
                   }`}
-                >
-                  {String(cell).padStart(2, '0')}
-                </span>
+              >
+                {String(cell).padStart(2, '0')}
               </div>
             );
           })}
