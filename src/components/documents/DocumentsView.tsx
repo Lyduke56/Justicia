@@ -1,6 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import {
+  getUserDocumentsDataAction,
+  createDocumentFolderAction,
+  uploadDocumentFileAction,
+} from '@/app/actions/consultationActions';
+import { useRef } from 'react';
 import Image from 'next/image';
 
 export interface DocumentItem {
@@ -22,92 +28,10 @@ interface DocumentsViewProps {
   role?: 'client' | 'lawyer';
 }
 
-const DEFAULT_FOLDERS: FolderItem[] = [
-  {
-    id: 'divorce-case',
-    name: 'Divorce Case',
-    isRecentlyCreated: false,
-    files: [
-      { id: 'f-1', name: 'Divorce Papers.pdf', size: '2.4 MB', type: 'pdf', updatedAt: 'Oct 14, 2026' },
-      { id: 'f-2', name: 'Evidence.docx', size: '1.1 MB', type: 'doc', updatedAt: 'Oct 15, 2026' },
-      { id: 'f-3', name: 'Legal Ownership.docx', size: '890 KB', type: 'doc', updatedAt: 'Oct 16, 2026' },
-    ],
-  },
-  {
-    id: 'land-ownership',
-    name: 'Land Ownership Case',
-    isRecentlyCreated: true, // Marked as recently created to demonstrate NEW badge
-    files: [
-      { id: 'f-4', name: 'Land Title Transfer.pdf', size: '3.8 MB', type: 'pdf', updatedAt: 'Oct 20, 2026' },
-      { id: 'f-5', name: 'Survey Coordinates.xlsx', size: '512 KB', type: 'excel', updatedAt: 'Oct 21, 2026' },
-    ],
-  },
-  {
-    id: 'criminal-case',
-    name: 'Criminal Case',
-    isRecentlyCreated: false,
-    files: [
-      { id: 'f-6', name: 'Blotter Report.pdf', size: '1.7 MB', type: 'pdf', updatedAt: 'Sep 29, 2026' },
-      { id: 'f-7', name: 'Incident Timeline.doc', size: '420 KB', type: 'doc', updatedAt: 'Oct 02, 2026' },
-    ],
-  },
-  {
-    id: 'business-legal',
-    name: 'Business Legal Owners',
-    isRecentlyCreated: false,
-    files: [
-      { id: 'f-8', name: 'SEC Articles of Incorporation.pdf', size: '4.2 MB', type: 'pdf', updatedAt: 'Sep 12, 2026' },
-      { id: 'f-9', name: 'Shareholders Registry.csv', size: '150 KB', type: 'csv', updatedAt: 'Sep 15, 2026' },
-      { id: 'f-10', name: 'Board Resolution 2026.pdf', size: '940 KB', type: 'pdf', updatedAt: 'Sep 18, 2026' },
-    ],
-  },
-  {
-    id: 'defamation-case',
-    name: 'Defamation Case',
-    isRecentlyCreated: false,
-    files: [
-      { id: 'f-11', name: 'Social Media Evidence.png', size: '3.1 MB', type: 'png', updatedAt: 'Oct 08, 2026' },
-      { id: 'f-12', name: 'Cease and Desist Notice.pdf', size: '820 KB', type: 'pdf', updatedAt: 'Oct 10, 2026' },
-    ],
-  },
-  {
-    id: 'school-shooting',
-    name: 'School Shooting Case',
-    isRecentlyCreated: false,
-    files: [
-      { id: 'f-13', name: 'Witness Affidavit.pdf', size: '2.1 MB', type: 'pdf', updatedAt: 'Aug 24, 2026' },
-    ],
-  },
-  {
-    id: 'bullying-case',
-    name: 'Bullying Case',
-    isRecentlyCreated: false,
-    files: [
-      { id: 'f-14', name: 'Administrative Complaint.pdf', size: '1.3 MB', type: 'pdf', updatedAt: 'Sep 04, 2026' },
-    ],
-  },
-  {
-    id: 'fraud-case',
-    name: 'Fraud Case',
-    isRecentlyCreated: false,
-    files: [
-      { id: 'f-15', name: 'Bank Transaction Receipts.pdf', size: '5.6 MB', type: 'pdf', updatedAt: 'Oct 01, 2026' },
-      { id: 'f-16', name: 'Audit Summary.xlsx', size: '940 KB', type: 'excel', updatedAt: 'Oct 03, 2026' },
-    ],
-  },
-  {
-    id: 'juvenile-employment',
-    name: 'Juvenile Employment Case',
-    isRecentlyCreated: true, // Marked as recently created to demonstrate NEW badge
-    files: [
-      { id: 'f-17', name: 'DOLE Special Permit.pdf', size: '890 KB', type: 'pdf', updatedAt: 'Oct 25, 2026' },
-      { id: 'f-18', name: 'Apprenticeship Contract.docx', size: '750 KB', type: 'doc', updatedAt: 'Oct 26, 2026' },
-    ],
-  },
-];
 
 export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
-  const [folders, setFolders] = useState<FolderItem[]>(DEFAULT_FOLDERS);
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState<boolean>(true);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -127,8 +51,14 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const [newFolderName, setNewFolderName] = useState<string>('');
   const [newFileName, setNewFileName] = useState<string>('');
   const [newFileType, setNewFileType] = useState<DocumentItem['type']>('pdf');
+  const [newFileSize, setNewFileSize] = useState<string>('1.4 MB');
+  const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
+  const [isUploadingFile, setIsUploadingFile] = useState<boolean>(false);
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load interacted folder IDs from localStorage on mount
+  // Load real folders and documents from Supabase
   useEffect(() => {
     try {
       const stored = localStorage.getItem(storageKey);
@@ -138,7 +68,33 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
     } catch {
       // Ignore storage errors
     }
-  }, [storageKey]);
+
+    setLoadingDocs(true);
+    getUserDocumentsDataAction(role).then((dbFolders: any) => {
+      let combined: FolderItem[] = [];
+      if (dbFolders && Array.isArray(dbFolders) && dbFolders.length > 0) {
+        combined = dbFolders;
+      }
+
+      // Also merge any instant local custom folders
+      try {
+        const custom = localStorage.getItem('justicia_client_custom_folders');
+        if (custom) {
+          const parsed: FolderItem[] = JSON.parse(custom);
+          if (parsed && Array.isArray(parsed)) {
+            const existingIds = new Set(combined.map((f) => f.id));
+            const extra = parsed.filter((f) => !existingIds.has(f.id));
+            combined = [...extra, ...combined];
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      setFolders(combined);
+      setLoadingDocs(false);
+    });
+  }, [role, storageKey]);
 
   // Handle clicking on a folder:
   // 1. Shows sleek skeleton transition
@@ -179,44 +135,117 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       )
     : [];
 
-  const handleCreateFolder = (e: React.FormEvent) => {
+  const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newFolderName.trim()) return;
-    const newId = newFolderName.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now();
-    const newFolder: FolderItem = {
-      id: newId,
-      name: newFolderName.trim(),
-      isRecentlyCreated: true, // Marked recently created!
-      files: [],
-    };
-    setFolders((prev) => [...prev, newFolder]);
-    setNewFolderName('');
-    setShowNewFolderModal(false);
+    if (!newFolderName.trim() || isCreatingFolder) return;
+    setIsCreatingFolder(true);
+    setFolderError(null);
+
+    try {
+      const res = await createDocumentFolderAction(newFolderName.trim(), role);
+      if (res && 'error' in res && res.error) {
+        setFolderError(res.error);
+        setIsCreatingFolder(false);
+        return;
+      }
+
+      const created: FolderItem = (res && 'folder' in res && res.folder) ? res.folder : {
+        id: `fld-${Date.now()}`,
+        name: newFolderName.trim(),
+        isRecentlyCreated: true,
+        files: [],
+      };
+
+      setFolders((prev) => [created, ...prev]);
+
+      try {
+        const custom = localStorage.getItem('justicia_client_custom_folders');
+        const parsed: FolderItem[] = custom ? JSON.parse(custom) : [];
+        localStorage.setItem('justicia_client_custom_folders', JSON.stringify([created, ...parsed]));
+      } catch {
+        // ignore
+      }
+
+      setNewFolderName('');
+      setShowNewFolderModal(false);
+    } catch (err: any) {
+      setFolderError(err?.message || 'Failed to create folder');
+    } finally {
+      setIsCreatingFolder(false);
+    }
   };
 
-  const handleUploadFile = (e: React.FormEvent) => {
+  const handleLocalFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setNewFileName(file.name);
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    setNewFileSize(file.size > 1024 * 1024 ? `${sizeMb} MB` : `${Math.round(file.size / 1024)} KB`);
+
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext === 'pdf') setNewFileType('pdf');
+    else if (ext === 'doc' || ext === 'docx') setNewFileType('doc');
+    else if (ext === 'xls' || ext === 'xlsx') setNewFileType('excel');
+    else if (ext === 'csv') setNewFileType('csv');
+    else if (ext === 'png') setNewFileType('png');
+    else if (ext === 'jpg' || ext === 'jpeg') setNewFileType('jpg');
+    else if (ext === 'txt') setNewFileType('txt');
+    else if (ext === 'mp4') setNewFileType('mp4');
+  };
+
+  const handleUploadFile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newFileName.trim() || !currentFolderId) return;
+    if (!newFileName.trim() || isUploadingFile) return;
+    setIsUploadingFile(true);
+    setUploadError(null);
+
     const extension = '.' + (newFileType === 'doc' ? 'docx' : newFileType);
     const fullName = newFileName.includes('.') ? newFileName : `${newFileName}${extension}`;
-    const newFile: DocumentItem = {
-      id: `file-${Date.now()}`,
-      name: fullName,
-      size: '1.4 MB',
-      type: newFileType,
-      updatedAt: 'Just now',
-    };
+    const targetFolderId = currentFolderId || (folders[0]?.id || null);
 
-    setFolders((prev) =>
-      prev.map((f) => {
-        if (f.id === currentFolderId) {
-          return { ...f, files: [...f.files, newFile] };
+    try {
+      const res = await uploadDocumentFileAction(targetFolderId, fullName, newFileType, newFileSize);
+      const newFile: DocumentItem = (res && 'file' in res && res.file) ? res.file : {
+        id: `file-${Date.now()}`,
+        name: fullName,
+        size: newFileSize,
+        type: newFileType,
+        updatedAt: 'Just now',
+      };
+
+      setFolders((prev) => {
+        let matched = false;
+        const updated = prev.map((f) => {
+          if (f.id === targetFolderId || (!targetFolderId && f.name.includes('Vault'))) {
+            matched = true;
+            return { ...f, files: [newFile, ...f.files] };
+          }
+          return f;
+        });
+
+        if (!matched) {
+          if (updated.length > 0) {
+            updated[0] = { ...updated[0], files: [newFile, ...updated[0].files] };
+          } else {
+            updated.push({
+              id: 'uploaded-records',
+              name: 'Client Vault & Uploaded Records',
+              isRecentlyCreated: false,
+              files: [newFile],
+            });
+          }
         }
-        return f;
-      })
-    );
-    setNewFileName('');
-    setShowUploadFileModal(false);
+        return updated;
+      });
+
+      setNewFileName('');
+      setShowUploadFileModal(false);
+    } catch (err: any) {
+      setUploadError(err?.message || 'Failed to upload document');
+    } finally {
+      setIsUploadingFile(false);
+    }
   };
 
   const getDocIconPath = (type: DocumentItem['type']) => {
@@ -449,6 +478,16 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                     );
                   })}
 
+                  {filteredFolders.length === 0 && !loadingDocs && (
+                    <div className="col-span-full py-16 text-center space-y-2">
+                      <div className="text-4xl text-[#8C7A6A]">📁</div>
+                      <p className="text-sm font-semibold text-[#34150F]">No case folders in your vault yet</p>
+                      <p className="text-xs text-[#7D6855] max-w-md mx-auto">
+                        Folders and attached files from your booked consultations will automatically appear here. You can also click + to create a custom folder.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Item 10: Circular Neumorphic + Button (Matching Image 2) */}
                   <div className="flex flex-col items-center justify-center p-3 pt-6">
                     <button
@@ -626,6 +665,12 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
               New folders will be marked with a <strong>NEW</strong> tag until you open them.
             </p>
 
+            {folderError && (
+              <div className="p-2.5 rounded-xl bg-red-100 border border-red-300 text-xs text-red-800">
+                {folderError}
+              </div>
+            )}
+
             <div className="space-y-1.5 pt-1">
               <label className="block text-xs font-semibold text-[#5C4535]">Folder Name:</label>
               <input
@@ -652,9 +697,20 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
               </button>
               <button
                 type="submit"
-                className="px-6 py-2.5 rounded-xl bg-[#DFC5A4] hover:bg-[#D4B892] text-xs font-bold text-[#23150F] shadow-md"
+                disabled={isCreatingFolder}
+                className="px-6 py-2.5 rounded-xl bg-[#DFC5A4] hover:bg-[#D4B892] disabled:opacity-60 text-xs font-bold text-[#23150F] shadow-md flex items-center gap-2"
               >
-                Create Folder
+                {isCreatingFolder ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 animate-spin text-[#23150F]" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>Creating...</span>
+                  </>
+                ) : (
+                  <span>Create Folder</span>
+                )}
               </button>
             </div>
           </form>
@@ -682,6 +738,34 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
               >
                 ✕
               </button>
+            </div>
+
+            {uploadError && (
+              <div className="p-2.5 rounded-xl bg-red-100 border border-red-300 text-xs text-red-800">
+                {uploadError}
+              </div>
+            )}
+
+            {/* Native File Selector Area */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="p-5 rounded-2xl border-2 border-dashed border-[#C5B099] bg-[#E8DDD0] hover:bg-[#E3D6C6] transition-colors cursor-pointer text-center space-y-1.5"
+            >
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                onChange={handleLocalFileSelect}
+              />
+              <svg className="w-8 h-8 text-[#7D6855] mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
+              </svg>
+              <div className="text-xs font-bold text-[#23150F]">
+                Click to browse a file from your device
+              </div>
+              <p className="text-[10px] text-[#7D6855]">
+                PDF, Word, Excel, CSV, PNG, JPG, or Text
+              </p>
             </div>
 
             <div className="space-y-1.5 pt-1">
@@ -731,9 +815,20 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
               </button>
               <button
                 type="submit"
-                className="px-6 py-2.5 rounded-xl bg-[#DFC5A4] hover:bg-[#D4B892] text-xs font-bold text-[#23150F] shadow-md"
+                disabled={isUploadingFile}
+                className="px-6 py-2.5 rounded-xl bg-[#DFC5A4] hover:bg-[#D4B892] disabled:opacity-60 text-xs font-bold text-[#23150F] shadow-md flex items-center gap-2"
               >
-                Upload File
+                {isUploadingFile ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 animate-spin text-[#23150F]" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>Uploading...</span>
+                  </>
+                ) : (
+                  <span>Upload File</span>
+                )}
               </button>
             </div>
           </form>
