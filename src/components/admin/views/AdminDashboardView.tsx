@@ -1,402 +1,73 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import {
-  ShieldCheckIcon,
-  ScaleIcon,
-  UserGroupIcon,
-  SparklesIcon,
-  BookOpenIcon,
-} from '@/components/client/ClientIcons';
-import { getAdminDashboardData, type DashboardData } from '@/app/actions/adminData';
+import { ShieldCheckIcon, ScaleIcon, UserGroupIcon, DocumentTextIcon } from '@/components/admin/AdminIcons';
 
-interface PendingLawyerPreview {
-  user_id: string;
-  full_name: string;
-  roll_number: string;
-  ibp_chapter: string | null;
-}
+type PendingLawyer = { user_id: string; full_name: string; roll_number: string; ibp_chapter: string | null };
+type AuditEntry = { id: string; action: string; targetType?: string; timestamp: string };
 
-interface RecentAuditEntry {
-  id: string;
-  action: string;
-  targetType?: string;
-  timestamp: string;
-}
+type Props = {
+  pendingLawyersCount: number;
+  approvedLawyersCount: number;
+  totalUsersCount: number;
+  pendingLawyersPreview: PendingLawyer[];
+  recentAuditEntries: AuditEntry[];
+};
 
-interface AdminDashboardViewProps {
-  onNavigate?: (key: any) => void;
-  // Optional SSR-provided props (used by the standalone page route)
-  pendingLawyersCount?: number;
-  approvedLawyersCount?: number;
-  totalUsersCount?: number;
-  pendingLawyersPreview?: PendingLawyerPreview[];
-  recentAuditEntries?: RecentAuditEntry[];
-}
+const cardClass = 'rounded-3xl border border-[#E8DCCB] bg-[#EFE5D8] shadow-[6px_6px_16px_rgba(0,0,0,0.06),-6px_-6px_16px_rgba(255,255,255,0.85)]';
+const linkClass = 'rounded-lg text-xs font-semibold text-[#946525] hover:text-[#6B4517] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#946525]';
 
-export function AdminDashboardView({
-  onNavigate,
-  pendingLawyersCount: initPending,
-  approvedLawyersCount: initApproved,
-  totalUsersCount: initTotal,
-  pendingLawyersPreview: initPendingList,
-  recentAuditEntries: initAudit,
-}: AdminDashboardViewProps) {
-  const [data, setData] = useState<DashboardData | null>(
-    initPending !== undefined
-      ? {
-          pendingLawyersCount: initPending ?? 0,
-          approvedLawyersCount: initApproved ?? 0,
-          totalUsersCount: initTotal ?? 0,
-          pendingLawyersPreview: initPendingList ?? [],
-          recentAuditEntries: initAudit ?? [],
-        }
-      : null
-  );
+export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, totalUsersCount, pendingLawyersPreview, recentAuditEntries }: Props) {
+  const stats = [
+    { label: 'Awaiting review', value: pendingLawyersCount, note: 'Lawyer applications', href: '/admin/lawyers/verification-queue', icon: ShieldCheckIcon },
+    { label: 'Approved lawyers', value: approvedLawyersCount, note: 'Approved profiles', href: '/admin/lawyers', icon: ScaleIcon },
+    { label: 'Registered users', value: totalUsersCount, note: 'All account roles', href: '/admin/users', icon: UserGroupIcon },
+  ];
 
-  useEffect(() => {
-    // Always fetch fresh data from DB on mount (catches SPA navigation case)
-    getAdminDashboardData().then(setData);
-  }, []);
-
-  const pendingCount = data?.pendingLawyersCount ?? 0;
-  const approvedCount = data?.approvedLawyersCount ?? 0;
-  const totalUsers = data?.totalUsersCount ?? 0;
-  const pendingLawyers = data?.pendingLawyersPreview ?? [];
-  const recentAudit = data?.recentAuditEntries ?? [];
-
-  const handleClick = (e: React.MouseEvent, key: string, href: string) => {
-    if (onNavigate) {
-      e.preventDefault();
-      onNavigate(key);
-    }
-  };
-
-  return (
-    <div className="p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-10">
-      {/* ─── Top Greeting Section ─────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <span className="text-[11px] font-bold tracking-[0.2em] text-[#C58B3C] uppercase">
-            Platform Command Center
-          </span>
-          <h1 className="font-cormorant text-4xl sm:text-5xl font-medium text-[#34150F] tracking-tight leading-[1.1] mt-1">
-            Platform Overview, <span className="text-[#C58B3C] font-semibold">Administrator.</span>
-          </h1>
-          <p className="text-sm text-[#7D6855] mt-1.5">
-            Monitor verified lawyers, credentials verification queue, and platform intelligence.
-          </p>
-        </div>
-
-        <Link
-          href="/admin/lawyers/verification-queue"
-          onClick={(e) => handleClick(e, 'verification-queue', '/admin/lawyers/verification-queue')}
-          className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-[#C58B3C] text-[#23150F] font-semibold text-xs tracking-wide shadow-[4px_4px_10px_rgba(0,0,0,0.1),-3px_-3px_10px_rgba(255,255,255,0.8)] hover:bg-[#B37B2F] transition-all shrink-0 self-start md:self-auto cursor-pointer"
-        >
-          <ShieldCheckIcon className="w-4 h-4" />
-          <span>Verification Queue ({pendingCount})</span>
-        </Link>
+  return <div className="mx-auto max-w-7xl space-y-8 p-6 sm:p-10 lg:p-12">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#946525]">Administration</p>
+        <h1 className="mt-1 font-cormorant text-4xl font-semibold leading-tight text-[#34150F] sm:text-5xl">Platform overview</h1>
+        <p className="mt-2 max-w-2xl text-sm text-[#705C49]">Review lawyer applications, manage accounts, and inspect recent administrative activity.</p>
       </div>
-
-      {/* ─── 4 KPI Stat Tiles (Neumorphic) ─────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Tile 1: Pending Verifications */}
-        <Link
-          href="/admin/lawyers/verification-queue"
-          onClick={(e) => handleClick(e, 'verification-queue', '/admin/lawyers/verification-queue')}
-          className="p-5 rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB]/80 transition-all hover:scale-[1.01] cursor-pointer"
-          style={{ boxShadow: '6px 6px 14px rgba(0,0,0,0.06), -6px -6px 14px rgba(255,255,255,0.9)' }}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#7D6855] uppercase tracking-wider">
-              Pending Queue
-            </span>
-            <div className="w-9 h-9 rounded-2xl bg-[#C58B3C]/15 text-[#C58B3C] flex items-center justify-center">
-              <ShieldCheckIcon className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-cormorant text-3xl font-bold text-[#34150F]">
-              {pendingCount}
-            </span>
-            <span className="text-[11px] font-medium text-[#C58B3C]">
-              {pendingCount > 0 ? 'Requires Review' : 'All clear'}
-            </span>
-          </div>
-          <p className="text-[11px] text-[#A69584] mt-1">Lawyer bar roll credential applications</p>
-        </Link>
-
-        {/* Tile 2: Active Verified Lawyers */}
-        <Link
-          href="/admin/lawyers"
-          onClick={(e) => handleClick(e, 'lawyers', '/admin/lawyers')}
-          className="p-5 rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB]/80 transition-all hover:scale-[1.01] cursor-pointer"
-          style={{ boxShadow: '6px 6px 14px rgba(0,0,0,0.06), -6px -6px 14px rgba(255,255,255,0.9)' }}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#7D6855] uppercase tracking-wider">
-              Active Lawyers
-            </span>
-            <div className="w-9 h-9 rounded-2xl bg-[#23150F]/10 text-[#34150F] flex items-center justify-center">
-              <ScaleIcon className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-cormorant text-3xl font-bold text-[#34150F]">
-              {approvedCount}
-            </span>
-            <span className="text-[11px] font-medium text-emerald-700">Verified &amp; Visible</span>
-          </div>
-          <p className="text-[11px] text-[#A69584] mt-1">Integrated Bar of the Philippines</p>
-        </Link>
-
-        {/* Tile 3: Registered Accounts */}
-        <Link
-          href="/admin/users"
-          onClick={(e) => handleClick(e, 'users', '/admin/users')}
-          className="p-5 rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB]/80 transition-all hover:scale-[1.01] cursor-pointer"
-          style={{ boxShadow: '6px 6px 14px rgba(0,0,0,0.06), -6px -6px 14px rgba(255,255,255,0.9)' }}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#7D6855] uppercase tracking-wider">
-              Platform Users
-            </span>
-            <div className="w-9 h-9 rounded-2xl bg-[#23150F]/10 text-[#34150F] flex items-center justify-center">
-              <UserGroupIcon className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-cormorant text-3xl font-bold text-[#34150F]">
-              {totalUsers}
-            </span>
-            <span className="text-[11px] font-medium text-[#7D6855]">Clients &amp; Lawyers</span>
-          </div>
-          <p className="text-[11px] text-[#A69584] mt-1">Authenticated user profiles</p>
-        </Link>
-
-        {/* Tile 4: Gemini AI Intelligence */}
-        <div
-          className="p-5 rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB]/80 transition-all"
-          style={{ boxShadow: '6px 6px 14px rgba(0,0,0,0.06), -6px -6px 14px rgba(255,255,255,0.9)' }}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#7D6855] uppercase tracking-wider">
-              Justicia AI
-            </span>
-            <div className="w-9 h-9 rounded-2xl bg-emerald-600/15 text-emerald-700 flex items-center justify-center">
-              <SparklesIcon className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-cormorant text-2xl font-bold text-emerald-800">
-              Operational
-            </span>
-            <span className="text-[11px] font-medium text-emerald-700">100%</span>
-          </div>
-          <p className="text-[11px] text-[#A69584] mt-1">Google Gemini 3.8 Flash</p>
-        </div>
-      </div>
-
-      {/* ─── Two-Column Main Content Section ──────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Column (7 cols): Lawyer Verification Queue Preview */}
-        <div className="lg:col-span-7 space-y-6">
-          <div
-            className="p-6 sm:p-7 rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB]/80"
-            style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
-          >
-            <div className="flex items-center justify-between pb-4 border-b border-[#E8DCCB]">
-              <div>
-                <h2 className="font-cormorant text-2xl font-bold text-[#34150F]">
-                  Lawyer Verification Queue
-                </h2>
-                <p className="text-xs text-[#7D6855] mt-0.5">
-                  Recent attorney registration submissions pending bar review
-                </p>
-              </div>
-
-              <Link
-                href="/admin/lawyers/verification-queue"
-                onClick={(e) => handleClick(e, 'verification-queue', '/admin/lawyers/verification-queue')}
-                className="text-xs font-semibold text-[#C58B3C] hover:text-[#9A6A27] transition-colors cursor-pointer"
-              >
-                View All →
-              </Link>
-            </div>
-
-            <div className="pt-4 divide-y divide-[#E8DCCB]/60">
-              {pendingLawyers.length > 0 ? (
-                pendingLawyers.map((lawyer) => (
-                  <div key={lawyer.user_id} className="py-3.5 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-[#D4C1AB] text-[#5C4535] font-bold text-xs flex items-center justify-center shrink-0 border border-[#D9C9B6]">
-                        {lawyer.full_name?.charAt(0) || 'A'}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-[#34150F] truncate">{lawyer.full_name}</p>
-                        <p className="text-[10px] text-[#7D6855] uppercase tracking-wider truncate">
-                          Roll #{lawyer.roll_number} • IBP {lawyer.ibp_chapter || 'Chapter'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <Link
-                      href="/admin/lawyers/verification-queue"
-                      onClick={(e) => handleClick(e, 'verification-queue', '/admin/lawyers/verification-queue')}
-                      className="px-3 py-1.5 rounded-xl text-[11px] font-semibold bg-[#23150F] text-[#ded7cb] hover:bg-[#C58B3C] hover:text-[#23150F] transition-all shrink-0 cursor-pointer"
-                    >
-                      Review
-                    </Link>
-                  </div>
-                ))
-              ) : (
-                <div className="py-10 text-center space-y-2">
-                  <div className="text-3xl">⚖️</div>
-                  <p className="text-xs font-semibold text-[#5C4535]">
-                    {data === null ? 'Loading queue…' : 'Verification Queue is Clear'}
-                  </p>
-                  <p className="text-[11px] text-[#A69584] max-w-sm mx-auto">
-                    {data !== null && 'All submitted lawyer profiles have been processed. New registrations will automatically appear here.'}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Recent Audit Log Preview */}
-          <div
-            className="p-6 rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB]/80"
-            style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-[#E8DCCB]">
-              <h3 className="font-cormorant text-xl font-bold text-[#34150F]">
-                Security &amp; Audit Trail
-              </h3>
-              <Link
-                href="/admin/settings/security-audit-log"
-                onClick={(e) => handleClick(e, 'security-audit-log', '/admin/settings/security-audit-log')}
-                className="text-xs font-semibold text-[#C58B3C] hover:text-[#9A6A27] cursor-pointer"
-              >
-                Full Log →
-              </Link>
-            </div>
-            <div className="pt-3 divide-y divide-[#E8DCCB]/50 text-xs">
-              {recentAudit.length > 0 ? (
-                recentAudit.map((log) => (
-                  <div key={log.id} className="py-2.5 flex items-center justify-between text-[#5C4535]">
-                    <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#C58B3C]" />
-                      <span className="font-semibold text-[#34150F]">{log.action}</span>
-                      <span className="text-[10px] text-[#A69584]">({log.targetType || 'system'})</span>
-                    </div>
-                    <span className="text-[10px] text-[#7D6855]">
-                      {new Date(log.timestamp).toLocaleDateString()}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="py-4 text-center text-xs text-[#7D6855]">
-                  {data === null ? 'Loading audit trail…' : 'Audit log is recording all administrative actions.'}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column (5 cols): Quick Actions & System Health */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* Quick Admin Actions */}
-          <div
-            className="p-6 rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB]/80 space-y-3"
-            style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
-          >
-            <h3 className="font-cormorant text-xl font-bold text-[#34150F]">
-              Quick Management
-            </h3>
-            <div className="space-y-2 pt-1">
-              <Link
-                href="/admin/lawyers/verification-queue"
-                onClick={(e) => handleClick(e, 'verification-queue', '/admin/lawyers/verification-queue')}
-                className="flex items-center justify-between p-3 rounded-2xl bg-[#E8DAC8] text-xs font-semibold text-[#34150F] hover:bg-[#DFCDB9] transition-all shadow-[2px_2px_5px_rgba(0,0,0,0.04)] cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <ShieldCheckIcon className="w-4 h-4 text-[#C58B3C]" />
-                  <span>Review Lawyer Applications</span>
-                </div>
-                <span>→</span>
-              </Link>
-
-              <Link
-                href="/admin/lawyers"
-                onClick={(e) => handleClick(e, 'lawyers', '/admin/lawyers')}
-                className="flex items-center justify-between p-3 rounded-2xl bg-[#E8DAC8] text-xs font-semibold text-[#34150F] hover:bg-[#DFCDB9] transition-all shadow-[2px_2px_5px_rgba(0,0,0,0.04)] cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <ScaleIcon className="w-4 h-4 text-[#C58B3C]" />
-                  <span>Manage Active Lawyers</span>
-                </div>
-                <span>→</span>
-              </Link>
-
-              <Link
-                href="/admin/users"
-                onClick={(e) => handleClick(e, 'users', '/admin/users')}
-                className="flex items-center justify-between p-3 rounded-2xl bg-[#E8DAC8] text-xs font-semibold text-[#34150F] hover:bg-[#DFCDB9] transition-all shadow-[2px_2px_5px_rgba(0,0,0,0.04)] cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <UserGroupIcon className="w-4 h-4 text-[#C58B3C]" />
-                  <span>Manage User Accounts</span>
-                </div>
-                <span>→</span>
-              </Link>
-
-              <Link
-                href="/admin/settings/security-audit-log"
-                onClick={(e) => handleClick(e, 'security-audit-log', '/admin/settings/security-audit-log')}
-                className="flex items-center justify-between p-3 rounded-2xl bg-[#E8DAC8] text-xs font-semibold text-[#34150F] hover:bg-[#DFCDB9] transition-all shadow-[2px_2px_5px_rgba(0,0,0,0.04)] cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <BookOpenIcon className="w-4 h-4 text-[#C58B3C]" />
-                  <span>Security &amp; Audit Log</span>
-                </div>
-                <span>→</span>
-              </Link>
-            </div>
-          </div>
-
-          {/* System Health Card */}
-          <div
-            className="p-6 rounded-3xl bg-[#23150F] text-[#ded7cb] border border-[#352219] space-y-4 shadow-xl"
-          >
-            <div className="flex items-center justify-between border-b border-[#352219] pb-3">
-              <span className="font-cinzel text-xs font-bold tracking-widest text-[#C58B3C] uppercase">
-                Infrastructure Health
-              </span>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-[#A69584]">Supabase PostgreSQL</span>
-                <span className="font-semibold text-emerald-400">Connected</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[#A69584]">Google Gemini API</span>
-                <span className="font-semibold text-emerald-400">gemini-3.8-flash</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[#A69584]">Embedding Vector Dims</span>
-                <span className="font-semibold text-emerald-400">768 (text-embedding)</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[#A69584]">Resend Email Service</span>
-                <span className="font-semibold text-emerald-400">Operational</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Link href="/admin/lawyers/verification-queue" className="inline-flex self-start items-center gap-2 rounded-2xl bg-[#C58B3C] px-5 py-3 text-xs font-semibold text-[#23150F] shadow-[3px_3px_8px_rgba(0,0,0,0.1)] hover:bg-[#B37B2F] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#946525]">
+        <ShieldCheckIcon className="h-4 w-4" /> Review applications
+      </Link>
     </div>
-  );
+
+    <div className="grid gap-5 sm:grid-cols-3">
+      {stats.map(({ label, value, note, href, icon: Icon }) => <Link key={href} href={href} className={`${cardClass} block p-5 transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#946525]`}>
+        <div className="flex items-start justify-between gap-3"><span className="text-xs font-semibold text-[#705C49]">{label}</span><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E5D7C5] text-[#946525]"><Icon className="h-5 w-5" /></span></div>
+        <p className="mt-3 font-cormorant text-4xl font-bold leading-none">{value}</p>
+        <p className="mt-2 text-xs text-[#7D6855]">{note}</p>
+      </Link>)}
+    </div>
+
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <section className={`${cardClass} min-w-0 p-6`} aria-labelledby="pending-lawyers-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#D8CAAD] pb-4">
+          <div><h2 id="pending-lawyers-heading" className="font-cormorant text-2xl font-bold">Applications to review</h2><p className="mt-1 text-xs text-[#7D6855]">Most recent pending submissions</p></div>
+          <Link href="/admin/lawyers/verification-queue" className={linkClass}>View queue →</Link>
+        </div>
+        {pendingLawyersPreview.length ? <ul className="divide-y divide-[#E8DCCB]">
+          {pendingLawyersPreview.map((lawyer) => <li key={lawyer.user_id} className="flex items-center justify-between gap-4 py-4">
+            <div className="min-w-0"><p className="truncate text-sm font-semibold">{lawyer.full_name}</p><p className="mt-1 truncate text-xs text-[#7D6855]">Roll {lawyer.roll_number}{lawyer.ibp_chapter ? ` · ${lawyer.ibp_chapter}` : ''}</p></div>
+            <Link href={`/admin/lawyers/${lawyer.user_id}`} className={linkClass}>Review</Link>
+          </li>)}
+        </ul> : <p className="py-10 text-center text-sm text-[#7D6855]">No applications are waiting for review.</p>}
+      </section>
+
+      <section className={`${cardClass} min-w-0 p-6`} aria-labelledby="activity-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#D8CAAD] pb-4">
+          <div><h2 id="activity-heading" className="font-cormorant text-2xl font-bold">Recent activity</h2><p className="mt-1 text-xs text-[#7D6855]">Latest recorded admin actions</p></div>
+          <Link href="/admin/settings/security-audit-log" className={linkClass}>View audit log →</Link>
+        </div>
+        {recentAuditEntries.length ? <ul className="divide-y divide-[#E8DCCB]">
+          {recentAuditEntries.map((entry) => <li key={entry.id} className="flex items-start gap-3 py-4">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#E5D7C5] text-[#946525]"><DocumentTextIcon className="h-4 w-4" /></span>
+            <div className="min-w-0"><p className="break-words text-sm font-medium">{entry.action.replaceAll('_', ' ').replaceAll('.', ' ')}</p><p className="mt-1 text-xs text-[#7D6855]">{new Date(entry.timestamp).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}</p></div>
+          </li>)}
+        </ul> : <p className="py-10 text-center text-sm text-[#7D6855]">No administrative activity has been recorded yet.</p>}
+      </section>
+    </div>
+  </div>;
 }

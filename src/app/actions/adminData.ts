@@ -1,9 +1,18 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { writeAuditLog } from '@/lib/notifications';
-import type { AdminUserAccount, AdminAuditEntry } from '@/lib/mock/adminMockData';
+import type { AdminUserAccount, AdminAuditEntry } from '@/types/admin';
+
+async function requireAdmin() {
+  const client = await createClient();
+  const { data: { user } } = await client.auth.getUser();
+  if (!user) throw new Error('Administrator sign-in required.');
+  const { data: account } = await client.from('user_accounts').select('role').eq('id', user.id).single();
+  if (account?.role !== 'admin') throw new Error('Administrator access required.');
+  return user;
+}
 
 export interface DashboardData {
   pendingLawyersCount: number;
@@ -66,12 +75,14 @@ export interface LawyerDirectoryRow {
 
 export async function getAdminDashboardData(): Promise<DashboardData> {
   try {
+    await requireAdmin();
     const supabase = await createServiceClient();
 
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profilesError } = await supabase
       .from('lawyer_profiles')
       .select('user_id, full_name, roll_number, ibp_chapter, verification_status')
       .order('submitted_at', { ascending: false });
+    if (profilesError) throw profilesError;
 
     const pendingLawyersCount = profiles?.filter((p) => p.verification_status === 'pending').length ?? 0;
     const approvedLawyersCount = profiles?.filter((p) => p.verification_status === 'approved').length ?? 0;
@@ -87,15 +98,17 @@ export async function getAdminDashboardData(): Promise<DashboardData> {
           ibp_chapter: p.ibp_chapter,
         })) ?? [];
 
-    const { count } = await supabase
+    const { count, error: usersError } = await supabase
       .from('user_accounts')
       .select('id', { count: 'exact', head: true });
+    if (usersError) throw usersError;
 
-    const { data: auditRows } = await supabase
+    const { data: auditRows, error: auditError } = await supabase
       .from('audit_log')
       .select('id, action, target_type, created_at')
       .order('created_at', { ascending: false })
       .limit(4);
+    if (auditError) throw auditError;
 
     const recentAuditEntries =
       auditRows?.map((row) => ({
@@ -114,18 +127,13 @@ export async function getAdminDashboardData(): Promise<DashboardData> {
     };
   } catch (err) {
     console.error('[getAdminDashboardData] error:', err);
-    return {
-      pendingLawyersCount: 0,
-      approvedLawyersCount: 0,
-      totalUsersCount: 0,
-      pendingLawyersPreview: [],
-      recentAuditEntries: [],
-    };
+    throw new Error('Unable to load the admin overview.');
   }
 }
 
 export async function getVerificationQueueData(): Promise<LawyerQueueRow[]> {
   try {
+    await requireAdmin();
     const supabase = await createServiceClient();
 
     const { data: profiles, error } = await supabase
@@ -148,19 +156,24 @@ export async function getVerificationQueueData(): Promise<LawyerQueueRow[]> {
         rejection_reason,
         submitted_at,
         reviewed_at,
-        created_at,
-        user_accounts!lawyer_profiles_user_id_fkey ( email )
+        created_at
       `)
       .order('submitted_at', { ascending: false });
 
     if (error || !profiles) {
       console.error('[getVerificationQueueData] Supabase error:', error);
-      return [];
+      throw new Error('Unable to load lawyer applications.');
     }
 
-    return profiles.map((p: any) => ({
+    const { data: accounts, error: accountsError } = profiles.length
+      ? await supabase.from('user_accounts').select('id, email').in('id', profiles.map((profile) => profile.user_id))
+      : { data: [], error: null };
+    if (accountsError) throw accountsError;
+    const emails = new Map(accounts?.map((account) => [account.id, account.email]) ?? []);
+
+    return profiles.map((p) => ({
       user_id: p.user_id,
-      email: p.user_accounts?.email ?? '',
+      email: emails.get(p.user_id) ?? '',
       full_name: p.full_name,
       roll_number: p.roll_number,
       ibp_chapter: p.ibp_chapter,
@@ -181,12 +194,13 @@ export async function getVerificationQueueData(): Promise<LawyerQueueRow[]> {
     }));
   } catch (err) {
     console.error('[getVerificationQueueData] error:', err);
-    return [];
+    throw new Error('Unable to load lawyer applications.');
   }
 }
 
 export async function getLawyerDirectoryData(): Promise<LawyerDirectoryRow[]> {
   try {
+    await requireAdmin();
     const supabase = await createServiceClient();
 
     const { data: profiles, error } = await supabase
@@ -206,19 +220,24 @@ export async function getLawyerDirectoryData(): Promise<LawyerDirectoryRow[]> {
         is_available,
         submitted_at,
         reviewed_at,
-        created_at,
-        user_accounts!lawyer_profiles_user_id_fkey ( email )
+        created_at
       `)
       .order('created_at', { ascending: false });
 
     if (error || !profiles) {
       console.error('[getLawyerDirectoryData] Supabase error:', error);
-      return [];
+      throw new Error('Unable to load the lawyer directory.');
     }
 
-    return profiles.map((p: any) => ({
+    const { data: accounts, error: accountsError } = profiles.length
+      ? await supabase.from('user_accounts').select('id, email').in('id', profiles.map((profile) => profile.user_id))
+      : { data: [], error: null };
+    if (accountsError) throw accountsError;
+    const emails = new Map(accounts?.map((account) => [account.id, account.email]) ?? []);
+
+    return profiles.map((p) => ({
       user_id: p.user_id,
-      email: p.user_accounts?.email ?? '',
+      email: emails.get(p.user_id) ?? '',
       full_name: p.full_name,
       roll_number: p.roll_number,
       ibp_chapter: p.ibp_chapter,
@@ -236,81 +255,43 @@ export async function getLawyerDirectoryData(): Promise<LawyerDirectoryRow[]> {
     }));
   } catch (err) {
     console.error('[getLawyerDirectoryData] error:', err);
-    return [];
+    throw new Error('Unable to load the lawyer directory.');
   }
 }
 
 export async function getAdminUsersData(): Promise<AdminUserAccount[]> {
   try {
+    await requireAdmin();
     const supabase = await createServiceClient();
 
     const { data: users, error } = await supabase
       .from('user_accounts')
-      .select(`
-        *,
-        lawyer_profiles!lawyer_profiles_user_id_fkey (
-          ibp_chapter,
-          verification_status
-        )
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (error || !users) {
       console.error('[getAdminUsersData] error:', error);
-      return [];
+      throw new Error('Unable to load user accounts.');
     }
 
-    return users.map((u: any) => {
-      const location = u.lawyer_profiles?.ibp_chapter || 'Metro Manila, PH';
-      let status: AdminUserAccount['status'] = 'active';
-
-      if (u.role === 'lawyer') {
-        // For lawyers, standing is determined by lawyer_profiles.verification_status
-        const lpStatus = u.lawyer_profiles?.verification_status as string | undefined;
-        if (lpStatus === 'approved') {
-          status = 'active';
-        } else if (lpStatus === 'rejected') {
-          status = 'suspended';
-        } else {
-          // draft | pending | needs_resubmission | no profile yet
-          status = 'unverified';
-        }
-        // If the account itself was explicitly suspended via user_accounts, honour that
-        if (u.verification_status === 'rejected') {
-          status = 'suspended';
-        }
-      } else {
-        // clients and admins: base on user_accounts.verification_status
-        if (u.verification_status === 'rejected') {
-          status = 'suspended';
-        } else {
-          status = 'active';
-        }
-      }
-
+    return users.map((u) => {
       return {
         id: u.id,
         fullName: u.full_name || u.email?.split('@')[0] || 'User Account',
         email: u.email,
-        phone: u.phone || '',
-        role: (u.role as 'client' | 'lawyer' | 'admin') || 'client',
-        status,
-        mfaEnabled: !!u.mfa_enabled,
-        location,
-        casesCount: 0,
-        consultationsCount: 0,
+        role: u.role,
         createdAt: u.created_at,
-        lastActiveAt: u.created_at,
       };
     });
   } catch (err) {
     console.error('[getAdminUsersData] error:', err);
-    return [];
+    throw new Error('Unable to load user accounts.');
   }
 }
 
 export async function updateUserRoleAction(userId: string, newRole: 'client' | 'lawyer' | 'admin') {
   try {
+    const adminUser = await requireAdmin();
     const supabase = await createServiceClient();
     const { error: accErr } = await supabase
       .from('user_accounts')
@@ -334,7 +315,7 @@ export async function updateUserRoleAction(userId: string, newRole: 'client' | '
     }
 
     await writeAuditLog({
-      actorId: 'admin-action',
+      actorId: adminUser.id,
       action: 'user.role_change',
       targetType: 'user_account',
       targetId: userId,
@@ -352,6 +333,7 @@ export async function updateUserRoleAction(userId: string, newRole: 'client' | '
 
 export async function toggleUserStatusAction(userId: string, newStatus: 'active' | 'suspended') {
   try {
+    const adminUser = await requireAdmin();
     const supabase = await createServiceClient();
     const verificationStatus = newStatus === 'suspended' ? 'rejected' : 'verified';
     const { error } = await supabase
@@ -362,7 +344,7 @@ export async function toggleUserStatusAction(userId: string, newStatus: 'active'
     if (error) return { error: error.message };
 
     await writeAuditLog({
-      actorId: 'admin-action',
+      actorId: adminUser.id,
       action: newStatus === 'suspended' ? 'user.suspended' : 'user.reinstated',
       targetType: 'user_account',
       targetId: userId,
@@ -380,6 +362,7 @@ export async function toggleUserStatusAction(userId: string, newStatus: 'active'
 
 export async function sendUserPasswordResetAction(email: string) {
   try {
+    await requireAdmin();
     const supabase = await createServiceClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/reset-password`,
@@ -394,43 +377,33 @@ export async function sendUserPasswordResetAction(email: string) {
 
 export async function getAdminAuditLogsData(): Promise<AdminAuditEntry[]> {
   try {
+    await requireAdmin();
     const supabase = await createServiceClient();
 
     const { data: logs, error } = await supabase
       .from('audit_log')
-      .select(`
-        *,
-        user_accounts (
-          email,
-          full_name,
-          role
-        )
-      `)
+      .select('*')
       .order('created_at', { ascending: false })
       .limit(100);
 
     if (error || !logs) {
       console.error('[getAdminAuditLogsData] error:', error);
-      return [];
+      throw new Error('Unable to load the audit log.');
     }
 
-    return logs.map((log: any) => {
-      const action = String(log.action || '');
-      let category: AdminAuditEntry['category'] = 'auth';
-      if (action.includes('lawyer')) category = 'lawyer_verification';
-      else if (action.includes('user')) category = 'user_management';
-      else if (action.includes('ai')) category = 'ai_config';
-      else if (action.includes('financial') || action.includes('payment')) category = 'financial';
+    const actorIds = logs.map((log) => log.actor_id).filter((id): id is string => Boolean(id));
+    const { data: accounts, error: accountsError } = actorIds.length
+      ? await supabase.from('user_accounts').select('id, email, full_name, role').in('id', actorIds)
+      : { data: [], error: null };
+    if (accountsError) throw accountsError;
+    const actors = new Map(accounts?.map((account) => [account.id, account]) ?? []);
 
-      let severity: AdminAuditEntry['severity'] = 'low';
-      if (action.includes('rejected') || action.includes('suspended')) severity = 'high';
-      else if (action.includes('approved') || action.includes('role')) severity = 'medium';
-
+    return logs.map((log) => {
+      const actor = log.actor_id ? actors.get(log.actor_id) : undefined;
       const actorName =
-        log.user_accounts?.full_name ||
-        (log.user_accounts?.email ? log.user_accounts.email.split('@')[0] : 'System Administrator');
-      const actorRole = (log.user_accounts?.role as AdminAuditEntry['actor']['role']) || 'admin';
-      const actorEmail = log.user_accounts?.email || 'admin@justicia.ph';
+        actor?.full_name ||
+        (actor?.email ? actor.email.split('@')[0] : 'Unknown actor');
+      const actorEmail = actor?.email || '';
 
       return {
         id: log.id,
@@ -438,20 +411,16 @@ export async function getAdminAuditLogsData(): Promise<AdminAuditEntry[]> {
         actor: {
           id: log.actor_id ?? 'system',
           name: actorName,
-          role: actorRole,
           email: actorEmail,
         },
         action: log.action,
-        category,
-        severity,
         targetType: log.target_type ?? 'system',
         targetId: log.target_id ?? '',
-        ipAddress: 'Direct System Session',
         details: (log.details as Record<string, unknown>) ?? {},
       };
     });
   } catch (err) {
     console.error('[getAdminAuditLogsData] error:', err);
-    return [];
+    throw new Error('Unable to load the audit log.');
   }
 }

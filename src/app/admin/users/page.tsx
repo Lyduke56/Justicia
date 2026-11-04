@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { connection } from 'next/server';
 import { getAdminUsersData } from '@/app/actions/adminData';
 import { AdminUsersView } from '@/components/admin/views/AdminUsersView';
 
@@ -8,6 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminUsersPage() {
+  await connection();
   const users = await getAdminUsersData();
   return <AdminUsersView initialUsers={users} />;
 }
