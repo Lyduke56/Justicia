@@ -1,6 +1,11 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  getLawyerConsultationsAction,
+  respondToConsultationAction,
+} from '@/app/actions/consultationActions';
 
 /* ─── Types ────────────────────────────────────────────────────────────────── */
 
@@ -31,6 +36,17 @@ interface DetailedConsultation {
   subjectCategory: string;
   subjectTitle: string;
   caseDescription: string;
+  fee?: number;
+  payment?: {
+    method?: string;
+    referenceNumber?: string;
+    payerName?: string;
+    amount?: number;
+    receiptFileName?: string;
+    receiptBase64?: string;
+  } | null;
+  attachedFiles?: Array<{ name: string }>;
+  meetingLink?: string;
 }
 
 /* ─── Mock Data (Matching Figma Mockup) ──────────────────────────────────── */
@@ -149,13 +165,90 @@ function AvatarSilhouetteIcon({ className = 'w-18 h-18 sm:w-20 sm:h-20' }: { cla
 
 /* ─── Main Component ──────────────────────────────────────────────────────── */
 
-export function LawyerConsultationsView() {
+export function LawyerConsultationsView({
+  lawyerUserId,
+  lawyerName,
+}: {
+  lawyerUserId?: string;
+  lawyerName?: string;
+} = {}) {
+  const router = useRouter();
+  const [dbConsultations, setDbConsultations] = useState<DetailedConsultation[]>([]);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ConsultationTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAppointmentId, setSelectedAppointmentId] = useState('a1');
   const [carouselIndex, setCarouselIndex] = useState(0);
 
-  const selectedConsultation = CONSULTATION_DETAILS[selectedAppointmentId] || CONSULTATION_DETAILS.a1;
+
+  // Fetch real consultations from database
+  useEffect(() => {
+    getLawyerConsultationsAction(lawyerUserId).then((data: any) => {
+      if (data && data.length > 0) {
+        setDbConsultations(data);
+        if (data[0]?.id) setSelectedAppointmentId(data[0].id);
+      }
+    });
+  }, [lawyerUserId]);
+
+  // Combine database consultations (first priority) with mock consultations
+  const combinedConsultationsList = useMemo(() => {
+    if (dbConsultations.length > 0) {
+      return dbConsultations;
+    }
+    return Object.values(CONSULTATION_DETAILS);
+  }, [dbConsultations]);
+
+  // Filter consultations by status tab
+  const appointmentsToDisplay = useMemo(() => {
+    return combinedConsultationsList.filter((c) => {
+      if (activeTab === 'pending') return c.status === 'pending';
+      if (activeTab === 'upcoming') return c.status === 'confirmed';
+      if (activeTab === 'completed') return c.status === 'completed';
+      if (activeTab === 'cancelled') return c.status === 'cancelled';
+      return true; // 'all'
+    });
+  }, [combinedConsultationsList, activeTab]);
+
+  const selectedConsultation = useMemo(() => {
+    return (
+      combinedConsultationsList.find((c) => c.id === selectedAppointmentId) ||
+      appointmentsToDisplay[0] ||
+      combinedConsultationsList[0] ||
+      null
+    );
+  }, [combinedConsultationsList, selectedAppointmentId, appointmentsToDisplay]);
+
+
+
+  const handleApprove = async (id: string) => {
+    setUpdatingId(id);
+    const res = await respondToConsultationAction(id, 'approved');
+    if (res?.error) {
+      alert(res.error);
+    } else {
+      setDbConsultations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, status: 'confirmed' } : c))
+      );
+    }
+    setUpdatingId(null);
+  };
+
+  const handleDecline = async (id: string) => {
+    const reason = prompt('Please enter reason for declining (e.g. Schedule conflict):');
+    if (!reason) return;
+    setUpdatingId(id);
+    const res = await respondToConsultationAction(id, 'rejected', reason);
+    if (res?.error) {
+      alert(res.error);
+    } else {
+      setDbConsultations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, status: 'cancelled' } : c))
+      );
+    }
+    setUpdatingId(null);
+  };
 
   const tabs: { key: ConsultationTab; label: string; count: number }[] = [
     { key: 'all',       label: 'All Inquires',       count: 50 },
@@ -306,29 +399,50 @@ export function LawyerConsultationsView() {
               List of Appointments
             </h4>
 
-            <div className="space-y-2.5">
-              {APPOINTMENTS_LIST.map((apt) => {
-                const isSelected = selectedAppointmentId === apt.id;
-                return (
-                  <button
-                    key={apt.id}
-                    type="button"
-                    onClick={() => setSelectedAppointmentId(apt.id)}
-                    className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-left transition-all cursor-pointer ${
-                      isSelected
-                        ? 'neu-inset text-[#381F17] font-semibold'
-                        : 'bg-[#DFC5A4]/40 hover:bg-[#DFC5A4]/80 text-[#381F17]'
-                    }`}
-                  >
-                    <span className="text-xs font-semibold text-[#381F17] truncate">
-                      {apt.name}
-                    </span>
-                    <span className="text-[11px] text-[#685042] shrink-0 font-medium ml-2">
-                      {apt.timeSlot}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+              {appointmentsToDisplay.length === 0 ? (
+                <div className="p-4 text-center text-xs text-[#7D6855]">
+                  No consultations in this category.
+                </div>
+              ) : (
+                appointmentsToDisplay.map((apt) => {
+                  const isSelected = selectedAppointmentId === apt.id;
+                  const isPending = apt.status === 'pending';
+                  const isConfirmed = apt.status === 'confirmed';
+                  return (
+                    <button
+                      key={apt.id}
+                      type="button"
+                      onClick={() => setSelectedAppointmentId(apt.id)}
+                      className={`w-full rounded-2xl px-4 py-3 flex flex-col gap-1 text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'neu-inset text-[#381F17] font-semibold ring-2 ring-[#C58B3C]/50'
+                          : 'bg-[#DFC5A4]/40 hover:bg-[#DFC5A4]/80 text-[#381F17]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-xs font-semibold text-[#381F17] truncate">
+                          {apt.client.name}
+                        </span>
+                        <span
+                          className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
+                            isPending
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : isConfirmed
+                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                              : 'bg-stone-200 text-stone-700'
+                          }`}
+                        >
+                          {isPending ? 'Pending' : isConfirmed ? 'Confirmed' : apt.status}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-[#685042] font-medium truncate">
+                        {apt.timeTag}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -353,9 +467,19 @@ export function LawyerConsultationsView() {
                 </div>
               </div>
 
-              <div className="neu-badge-green rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider text-white shrink-0 self-start sm:self-auto">
-                CONFIRMED APPOINTMENT
-              </div>
+              {selectedConsultation.status === 'pending' ? (
+                <div className="rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider bg-amber-400 text-[#23150F] shadow-sm shrink-0 self-start sm:self-auto border border-amber-500">
+                  PENDING YOUR APPROVAL
+                </div>
+              ) : selectedConsultation.status === 'confirmed' ? (
+                <div className="neu-badge-green rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider text-white shrink-0 self-start sm:self-auto">
+                  CONFIRMED APPOINTMENT
+                </div>
+              ) : (
+                <div className="rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider bg-stone-300 text-stone-800 shrink-0 self-start sm:self-auto">
+                  {selectedConsultation.status.toUpperCase()}
+                </div>
+              )}
             </div>
 
             {/* Client Profile Sub-Card (Extruded Warm Peach Plate) */}
@@ -385,11 +509,67 @@ export function LawyerConsultationsView() {
               {/* Monolithic Extruded Message Button on Peach Plate */}
               <button
                 type="button"
-                className="neu-btn-peach rounded-full px-8 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-[#4E3227] tracking-wide shrink-0 self-start md:self-center cursor-pointer"
+                onClick={() => router.push('/lawyer/messages')}
+                className="neu-btn-peach rounded-full px-8 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-[#4E3227] tracking-wide shrink-0 self-start md:self-center cursor-pointer hover:brightness-105 transition-all"
               >
-                Message
+                Message Client
               </button>
             </div>
+
+
+            {/* Proof of Payment Verification Plate (when present) */}
+            {selectedConsultation.payment && (
+              <div className="neu-plate rounded-[24px] p-5 sm:p-6 space-y-3 bg-[#DFC5A4]/30 border border-[#D5C2AB]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">💳</span>
+                    <h4 className="font-sans text-xs sm:text-sm font-bold text-[#381F17] uppercase tracking-wider">
+                      Client Proof of Payment & Transaction Record
+                    </h4>
+                  </div>
+                  <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300 self-start sm:self-auto">
+                    Amount: ₱{(selectedConsultation.payment.amount ?? 1500).toLocaleString()}.00
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-[#5C4535]">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[#8C7A6B] block">Method</span>
+                    <span className="font-semibold text-[#23150F] uppercase">
+                      {selectedConsultation.payment.method || 'GCash'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[#8C7A6B] block">Ref Number</span>
+                    <span className="font-mono font-bold text-[#23150F]">
+                      {selectedConsultation.payment.referenceNumber || 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[#8C7A6B] block">Sender Name</span>
+                    <span className="font-semibold text-[#23150F]">
+                      {selectedConsultation.payment.payerName || selectedConsultation.client.name}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[#8C7A6B] block">Receipt</span>
+                    {selectedConsultation.payment.receiptBase64 ? (
+                      <button
+                        type="button"
+                        onClick={() => setViewingReceipt(selectedConsultation.payment?.receiptBase64 || null)}
+                        className="text-xs font-bold text-[#C58B3C] underline hover:text-[#23150F]"
+                      >
+                        Inspect Receipt 🔍
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-emerald-700 font-semibold">
+                        {selectedConsultation.payment.receiptFileName || 'Receipt Attached'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Subject Matter & Description */}
             <div className="space-y-1.5 pt-1">
@@ -413,33 +593,66 @@ export function LawyerConsultationsView() {
             <div className="pt-2 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <p className="text-[11px] font-bold uppercase tracking-wider text-[#C58B3C]">
                 THIS CLIENT HAS SHARED THEIR DOCUMENTS WITH YOU.{' '}
-                <span className="underline cursor-pointer hover:text-[#99431E] transition-colors">
-                  View Documents
+                <span
+                  onClick={() => router.push('/lawyer/documents')}
+                  className="underline cursor-pointer hover:text-[#99431E] transition-colors font-bold"
+                >
+                  View Client Documents Vault
                 </span>
               </p>
 
               <div className="flex items-center gap-3 shrink-0">
-                <button
-                  type="button"
-                  className="neu-btn rounded-2xl border-[1.5px] border-[#55382D] bg-[#ECE1D2] px-7 py-2.5 text-xs sm:text-sm font-semibold text-[#381F17] shadow-[2px_2px_6px_rgba(180,155,130,0.25)] hover:bg-[#E4D7C5] transition-all cursor-pointer"
-                >
-                  Cancel
-                </button>
+                {selectedConsultation.status === 'pending' ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={updatingId === selectedConsultation.id}
+                      onClick={() => handleDecline(selectedConsultation.id)}
+                      className="neu-btn rounded-2xl border-[1.5px] border-[#55382D] bg-[#ECE1D2] px-6 py-2.5 text-xs sm:text-sm font-semibold text-[#381F17] shadow-[2px_2px_6px_rgba(180,155,130,0.25)] hover:bg-red-50 hover:text-red-700 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      Decline
+                    </button>
 
-                <button
-                  type="button"
-                  className="neu-btn-espresso rounded-2xl px-7 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all cursor-pointer"
-                >
-                  View Details
-                </button>
+                    <button
+                      type="button"
+                      disabled={updatingId === selectedConsultation.id}
+                      onClick={() => handleApprove(selectedConsultation.id)}
+                      className="px-7 py-2.5 rounded-2xl bg-[#23150F] hover:bg-[#381F17] text-[#ded7cb] text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                    >
+                      {updatingId === selectedConsultation.id ? (
+                        <>
+                          <svg className="w-3.5 h-3.5 animate-spin text-[#ded7cb]" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                          </svg>
+                          <span>Approving...</span>
+                        </>
+                      ) : (
+                        <span>Approve Consultation</span>
+                      )}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => router.push('/lawyer/messages')}
+                      className="neu-btn-espresso rounded-2xl px-6 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all cursor-pointer hover:brightness-110 flex items-center gap-2"
+                    >
+                      <span>💬</span>
+                      <span>Message Channel</span>
+                    </button>
 
-                <button
-                  type="button"
-                  className="neu-btn-caramel rounded-2xl px-7 py-2.5 text-xs sm:text-sm font-bold text-[#381F17] flex items-center gap-2.5 transition-all cursor-pointer"
-                >
-                  <VideoCamIcon className="w-4 h-4 text-[#381F17]" />
-                  <span>Join Meet</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => window.open(selectedConsultation.meetingLink || 'https://meet.justicia.ph', '_blank')}
+                      className="neu-btn-caramel rounded-2xl px-7 py-2.5 text-xs sm:text-sm font-bold text-[#381F17] flex items-center gap-2.5 transition-all cursor-pointer hover:brightness-105"
+                    >
+                      <VideoCamIcon className="w-4 h-4 text-[#381F17]" />
+                      <span>Join Meet</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -479,6 +692,37 @@ export function LawyerConsultationsView() {
           </div>
         </div>
       </div>
+
+      {/* Receipt Preview Modal */}
+      {viewingReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative max-w-lg w-full bg-[#EFE5D8] rounded-3xl p-6 shadow-2xl border border-[#D5C2AB] space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#D5C2AB]">
+              <h3 className="font-cormorant text-xl font-bold text-[#34150F]">Proof of Payment Receipt</h3>
+              <button
+                type="button"
+                onClick={() => setViewingReceipt(null)}
+                className="w-8 h-8 rounded-full bg-[#E5D5C1] flex items-center justify-center font-bold text-[#5C4535]"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="rounded-2xl overflow-hidden bg-black/5 p-2 flex items-center justify-center max-h-[70vh]">
+              <img src={viewingReceipt} alt="Payment Receipt" className="max-h-[60vh] object-contain rounded-xl" />
+            </div>
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => setViewingReceipt(null)}
+                className="px-5 py-2 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

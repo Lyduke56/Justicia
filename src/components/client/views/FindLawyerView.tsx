@@ -28,7 +28,7 @@ const DEFAULT_SPECIALIZATIONS = [
 
 const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
   {
-    userId: 'lw-001',
+    userId: '22222222-2222-4222-8222-000000000001',
     fullName: 'Atty. Maria Clara Santos',
     rollNumber: '54821',
     ibpChapter: 'Pasig-San Juan-Mandaluyong',
@@ -47,7 +47,7 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     reviewCount: 68,
   },
   {
-    userId: 'lw-002',
+    userId: '22222222-2222-4222-8222-000000000002',
     fullName: 'Atty. Juan Carlos Dela Cruz',
     rollNumber: '59144',
     ibpChapter: 'NCR — Quezon City',
@@ -66,7 +66,7 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     reviewCount: 54,
   },
   {
-    userId: 'lw-003',
+    userId: '22222222-2222-4222-8222-000000000003',
     fullName: 'Atty. Jose Maria De Leon',
     rollNumber: '61209',
     ibpChapter: 'Cebu City Chapter',
@@ -85,7 +85,7 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     reviewCount: 42,
   },
   {
-    userId: 'lw-004',
+    userId: '22222222-2222-4222-8222-000000000004',
     fullName: 'Atty. Clara Isabella Reyes',
     rollNumber: '52188',
     ibpChapter: 'Cebu',
@@ -104,7 +104,7 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     reviewCount: 61,
   },
   {
-    userId: 'lw-005',
+    userId: '22222222-2222-4222-8222-000000000005',
     fullName: 'Atty. Roberto Emilio Tan',
     rollNumber: '63412',
     ibpChapter: 'NCR — Manila',
@@ -123,7 +123,7 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     reviewCount: 37,
   },
   {
-    userId: 'lw-006',
+    userId: '22222222-2222-4222-8222-000000000006',
     fullName: 'Atty. Ramon Manuel Bautista',
     rollNumber: '65890',
     ibpChapter: 'Quezon City Chapter',
@@ -142,7 +142,7 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     reviewCount: 29,
   },
   {
-    userId: 'lw-007',
+    userId: '22222222-2222-4222-8222-000000000007',
     fullName: 'Atty. Katrina Isabel Valdez',
     rollNumber: '68923',
     ibpChapter: 'Makati City Chapter',
@@ -161,7 +161,7 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     reviewCount: 38,
   },
   {
-    userId: 'lw-008',
+    userId: '22222222-2222-4222-8222-000000000008',
     fullName: 'Atty. Gerardo Patrick Lim',
     rollNumber: '51092',
     ibpChapter: 'Davao City Chapter',

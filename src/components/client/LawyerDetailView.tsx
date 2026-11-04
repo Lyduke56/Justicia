@@ -4,6 +4,14 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import type { PublicLawyerProfile } from './LawyerGrid';
+import {
+  bookConsultationAction,
+  getBookedSlotsForLawyer,
+  getUserDocumentsDataAction,
+  createDocumentFolderAction,
+  uploadDocumentFileAction,
+} from '@/app/actions/consultationActions';
+import { useRef } from 'react';
 
 export interface ReviewItem {
   id: number | string;
@@ -21,6 +29,17 @@ interface LawyerDetailViewProps {
 }
 
 type TabType = 'about' | 'reviews' | 'booking' | 'cases';
+// Always resolves "today" in Philippine time (GMT+8), regardless of device/server timezone
+const getTodayPH = () => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(new Date());
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  return { year: get('year'), month: get('month') - 1, day: get('day') };
+};
 
 export function LawyerDetailView({
   lawyer,
@@ -29,17 +48,195 @@ export function LawyerDetailView({
 }: LawyerDetailViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
 
-  // ─── Booking Form State ───────────────────────────────────────────────────────
-  const [selectedDay, setSelectedDay] = useState<number>(23);
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('2:00 PM - 4:00 PM • PST, GMT+8');
+  const [currentYear, setCurrentYear] = useState<number>(() => getTodayPH().year);
+  const [currentMonth, setCurrentMonth] = useState<number>(() => getTodayPH().month);
+  const [selectedDay, setSelectedDay] = useState<number>(() => getTodayPH().day);
+
+  useEffect(() => {
+    const t = getTodayPH();
+    setCurrentYear(t.year);
+    setCurrentMonth(t.month);
+    setSelectedDay(t.day);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'booking') {
+      const t = getTodayPH();
+      setCurrentYear(t.year);
+      setCurrentMonth(t.month);
+      setSelectedDay(t.day);
+    }
+  }, [activeTab]);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('2:00 PM - 3:00 PM • PST, GMT+8');
   const [communicationMode, setCommunicationMode] = useState<'video' | 'audio'>('video');
-  const [subject, setSubject] = useState<string>('Makati Residential Lease: Deposit Dispute & Formal Notice to Vacate');
-  const [description, setDescription] = useState<string>(
-    'Client has an ongoing residential lease dispute in Legaspi Village, Makati City. Landlord refused to refund 2-month security deposit amounting to ₱110,000 despite clearance inspections. Requesting formal review of lease contract clause 14 and issuance of demand letter.'
-  );
-  const [agreedToTerms, setAgreedToTerms] = useState<boolean>(true);
-  const [attachedFiles, setAttachedFiles] = useState<string[]>(['Residential_Lease_Agreement_Makati.pdf']);
+  const [subject, setSubject] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
+  const [agreedToTerms, setAgreedToTerms] = useState<boolean>(false);
+
+  // ─── Documents Vault Picker Modal State ───
+  const [showDocPickerModal, setShowDocPickerModal] = useState<boolean>(false);
+  const [docPickerFolders, setDocPickerFolders] = useState<any[]>([]);
+  const [loadingDocPicker, setLoadingDocPicker] = useState<boolean>(false);
+  const [selectedDocPickerFiles, setSelectedDocPickerFiles] = useState<string[]>([]);
+  const [activePickerFolderId, setActivePickerFolderId] = useState<string | null>(null);
+  const [pickerNewFolderName, setPickerNewFolderName] = useState<string>('');
+  const [isCreatingPickerFolder, setIsCreatingPickerFolder] = useState<boolean>(false);
+  const [isUploadingPickerFile, setIsUploadingPickerFile] = useState<boolean>(false);
+  const [pickerNotice, setPickerNotice] = useState<string | null>(null);
+  const pickerFileInputRef = useRef<HTMLInputElement>(null);
+  const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
   const [bookingStatus, setBookingStatus] = useState<'idle' | 'saved' | 'submitted'>('idle');
+  const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const [paymentMethod, setPaymentMethod] = useState<'gcash' | 'maya' | 'bank_transfer'>('gcash');
+  const [paymentReference, setPaymentReference] = useState<string>('');
+  const [payerName, setPayerName] = useState<string>('');
+  const [paymentReceiptName, setPaymentReceiptName] = useState<string>('');
+  const [paymentReceiptBase64, setPaymentReceiptBase64] = useState<string>('');
+  const [submittingBooking, setSubmittingBooking] = useState<boolean>(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+
+  // ─── Document Vault Picker Handlers ──────────────────────────────────────────
+  const handleOpenDocPicker = async () => {
+    setShowDocPickerModal(true);
+    setLoadingDocPicker(true);
+    setPickerNotice(null);
+    try {
+      const data = await getUserDocumentsDataAction('client');
+      let combined = Array.isArray(data) ? [...data] : [];
+
+      try {
+        const custom = localStorage.getItem('justicia_client_custom_folders');
+        if (custom) {
+          const parsed = JSON.parse(custom);
+          if (Array.isArray(parsed)) {
+            const existingIds = new Set(combined.map((f: any) => f.id));
+            const extra = parsed.filter((f: any) => !existingIds.has(f.id));
+            combined = [...extra, ...combined];
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      setDocPickerFolders(combined);
+      if (combined.length > 0) {
+        setActivePickerFolderId(combined[0].id);
+      }
+    } catch (err) {
+      console.error('Error fetching documents for picker:', err);
+    } finally {
+      setLoadingDocPicker(false);
+    }
+  };
+
+  const handleToggleSelectDoc = (fileName: string) => {
+    setSelectedDocPickerFiles((prev) =>
+      prev.includes(fileName) ? prev.filter((n) => n !== fileName) : [...prev, fileName]
+    );
+  };
+
+  const handleCreatePickerFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pickerNewFolderName.trim() || isCreatingPickerFolder) return;
+    setIsCreatingPickerFolder(true);
+    setPickerNotice(null);
+    try {
+      const res = await createDocumentFolderAction(pickerNewFolderName.trim(), 'client');
+      const newFolder = (res && 'folder' in res && res.folder) ? res.folder : {
+        id: `fld-${Date.now()}`,
+        name: pickerNewFolderName.trim(),
+        isRecentlyCreated: true,
+        files: [],
+      };
+      setDocPickerFolders((prev) => [newFolder, ...prev]);
+      setActivePickerFolderId(newFolder.id);
+
+      try {
+        const custom = localStorage.getItem('justicia_client_custom_folders');
+        const parsed = custom ? JSON.parse(custom) : [];
+        localStorage.setItem('justicia_client_custom_folders', JSON.stringify([newFolder, ...parsed]));
+      } catch {
+        // ignore
+      }
+
+      setPickerNewFolderName('');
+      setPickerNotice(`Created folder "${newFolder.name}" successfully.`);
+    } catch (err: any) {
+      setPickerNotice(err?.message || 'Failed to create folder');
+    } finally {
+      setIsCreatingPickerFolder(false);
+    }
+  };
+
+  const handlePickerFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || isUploadingPickerFile) return;
+
+    setIsUploadingPickerFile(true);
+    setPickerNotice(null);
+
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    let fType = 'pdf';
+    if (ext === 'doc' || ext === 'docx') fType = 'doc';
+    else if (ext === 'xls' || ext === 'xlsx') fType = 'excel';
+    else if (ext === 'csv') fType = 'csv';
+    else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') fType = 'png';
+
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    const sizeStr = file.size > 1024 * 1024 ? `${sizeMb} MB` : `${Math.round(file.size / 1024)} KB`;
+
+    const targetFolderId = activePickerFolderId || (docPickerFolders[0]?.id || null);
+
+    try {
+      const res = await uploadDocumentFileAction(targetFolderId, file.name, fType, sizeStr);
+      const newFileItem = (res && 'file' in res && res.file) ? res.file : {
+        id: `file-${Date.now()}`,
+        name: file.name,
+        size: sizeStr,
+        type: fType,
+        updatedAt: 'Just now',
+      };
+
+      setDocPickerFolders((prev) => {
+        let matched = false;
+        const updated = prev.map((f) => {
+          if (f.id === targetFolderId || (!targetFolderId && f.name.includes('Vault'))) {
+            matched = true;
+            return { ...f, files: [newFileItem, ...f.files] };
+          }
+          return f;
+        });
+        if (!matched) {
+          if (updated.length > 0) {
+            updated[0] = { ...updated[0], files: [newFileItem, ...updated[0].files] };
+          } else {
+            updated.push({
+              id: 'uploaded-records',
+              name: 'Client Vault & Uploaded Records',
+              isRecentlyCreated: false,
+              files: [newFileItem],
+            });
+          }
+        }
+        return updated;
+      });
+
+      // Auto-select the newly uploaded file
+      setSelectedDocPickerFiles((prev) => Array.from(new Set([...prev, file.name])));
+      setPickerNotice(`Uploaded "${file.name}" and added to selection.`);
+    } catch (err: any) {
+      setPickerNotice(err?.message || 'Failed to upload document');
+    } finally {
+      setIsUploadingPickerFile(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleConfirmDocPicker = () => {
+    setAttachedFiles((prev) => Array.from(new Set([...prev, ...selectedDocPickerFiles])));
+    setSelectedDocPickerFiles([]);
+    setShowDocPickerModal(false);
+  };
 
   // ─── Reviews State ────────────────────────────────────────────────────────────
   const initialReviews: ReviewItem[] = [
@@ -119,6 +316,20 @@ export function LawyerDetailView({
   const [replyingToId, setReplyingToId] = useState<string | number | null>(null);
   const [replyText, setReplyText] = useState<string>('');
 
+
+  // Fetch booked slots for the selected day to prevent duplicate appointments
+  useEffect(() => {
+    if (!lawyer.userId) return;
+    const dateStr = `${monthNames[currentMonth]} ${selectedDay}, ${currentYear}`;
+    getBookedSlotsForLawyer(lawyer.userId, dateStr).then((slots) => {
+      setBookedSlots(slots || []);
+      if (slots && slots.includes(selectedTimeSlot)) {
+        const available = timeSlots.find((s) => !slots.includes(s));
+        if (available) setSelectedTimeSlot(available);
+      }
+    });
+  }, [lawyer.userId, selectedDay, currentMonth, currentYear]);
+
   // Fetch live reviews from database if available
   useEffect(() => {
     async function fetchReviews() {
@@ -151,20 +362,73 @@ export function LawyerDetailView({
   // ─── Cases State ──────────────────────────────────────────────────────────────
   const [casePage, setCasePage] = useState<number>(1);
 
-  // Calendar dates layout: September 2026 starts on Tuesday (2 empty slots for Sunday, Monday)
-  const daysInMonth = [
-    { day: null }, { day: null }, { day: 1 }, { day: 2 }, { day: 3 }, { day: 4 }, { day: 5 },
-    { day: 6 }, { day: 7 }, { day: 8 }, { day: 9 }, { day: 10 }, { day: 11 }, { day: 12 },
-    { day: 13 }, { day: 14 }, { day: 15 }, { day: 16 }, { day: 17 }, { day: 18 }, { day: 19 },
-    { day: 20 }, { day: 21 }, { day: 22 }, { day: 23 }, { day: 24 }, { day: 25 }, { day: 26 },
-    { day: 27 }, { day: 28 }, { day: 29 }, { day: 30 }
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const monthShortNames = [
+    'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+    'JUL', 'AUG', 'SEPT', 'OCT', 'NOV', 'DEC'
   ];
 
+  const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay(); // 0 = Sun
+
+  const daysInMonth = React.useMemo(() => {
+    const slots: Array<{ day: number | null }> = [];
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      slots.push({ day: null });
+    }
+    for (let d = 1; d <= totalDaysInMonth; d++) {
+      slots.push({ day: d });
+    }
+    return slots;
+  }, [firstDayOfWeek, totalDaysInMonth]);
+
+  const selectedDateObj = React.useMemo(() => {
+    const validDay = Math.min(selectedDay, totalDaysInMonth);
+    return new Date(currentYear, currentMonth, validDay);
+  }, [currentYear, currentMonth, selectedDay, totalDaysInMonth]);
+
+  const selectedDayOfWeek = React.useMemo(() => {
+    return selectedDateObj.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+  }, [selectedDateObj]);
+
+  const selectedMonthName = monthNames[currentMonth];
+  const selectedMonthShort = monthShortNames[currentMonth];
+  const formattedDateStr = `${selectedMonthName} ${selectedDay}, ${currentYear}`;
+  const clampDay = (year: number, month: number) =>
+    setSelectedDay((d) => Math.min(d, new Date(year, month + 1, 0).getDate()));
+
+  const handlePrevMonth = () => {
+    const y = currentMonth === 0 ? currentYear - 1 : currentYear;
+    const m = currentMonth === 0 ? 11 : currentMonth - 1;
+    setCurrentYear(y);
+    setCurrentMonth(m);
+    clampDay(y, m);
+  };
+
+  const handleNextMonth = () => {
+    const y = currentMonth === 11 ? currentYear + 1 : currentYear;
+    const m = currentMonth === 11 ? 0 : currentMonth + 1;
+    setCurrentYear(y);
+    setCurrentMonth(m);
+    clampDay(y, m);
+  };
+
+  const handleGoToToday = () => {
+    const t = getTodayPH();
+    setCurrentYear(t.year);
+    setCurrentMonth(t.month);
+    setSelectedDay(t.day);
+  };
+
   const timeSlots = [
-    '2:00 PM - 4:00 PM • PST, GMT+8',
-    '2:30 PM - 4:30 PM • PST, GMT+8',
+    '9:00 AM - 10:00 AM • PST, GMT+8',
+    '10:00 AM - 11:00 AM • PST, GMT+8',
+    '1:00 PM - 2:00 PM • PST, GMT+8',
+    '2:00 PM - 3:00 PM • PST, GMT+8',
     '3:00 PM - 4:00 PM • PST, GMT+8',
-    '3:30 PM - 4:30 PM • PST, GMT+8',
     '4:00 PM - 5:00 PM • PST, GMT+8',
   ];
 
@@ -181,17 +445,140 @@ export function LawyerDetailView({
     setTimeout(() => setBookingStatus('idle'), 4000);
   };
 
-  const handleSubmitBooking = (e: React.FormEvent) => {
+  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPaymentReceiptName(file.name);
+
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 800;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.7);
+            setPaymentReceiptBase64(compressed);
+          } else {
+            setPaymentReceiptBase64(event.target?.result as string);
+          }
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setPaymentReceiptBase64('');
+    }
+  };
+
+  const handleSubmitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
+    setBookingError(null);
+
     if (!subject.trim()) {
-      alert('Please enter a consultation subject.');
+      setBookingError('Please enter a consultation subject.');
+      return;
+    }
+    if (!paymentReference.trim()) {
+      setBookingError('Please enter your payment reference number / transaction hash.');
       return;
     }
     if (!agreedToTerms) {
-      alert('Please agree to the attorney-client privilege review terms.');
+      setBookingError('Please agree to the attorney-client privilege review terms.');
       return;
     }
-    setBookingStatus('submitted');
+
+    setSubmittingBooking(true);
+    const dateStr = `${selectedMonthName} ${selectedDay}, ${currentYear}`;
+
+    try {
+      const res = await bookConsultationAction({
+        lawyerId: lawyer.userId,
+        lawyerName: lawyer.fullName,
+        day: selectedDay,
+        month: selectedMonthName,
+        year: currentYear,
+        dateStr,
+        timeSlot: selectedTimeSlot,
+        communicationMode,
+        subject,
+        description,
+        attachedFiles: attachedFiles.map((name) => ({ name })),
+        payment: {
+          method: paymentMethod,
+          referenceNumber: paymentReference,
+          payerName: payerName || 'Verified Client',
+          amount: lawyer.feeStandard60min ?? 1500,
+          receiptFileName: paymentReceiptName,
+          receiptBase64: paymentReceiptBase64,
+        },
+      });
+
+      if (res?.error) {
+        setBookingError(res.error);
+        setSubmittingBooking(false);
+        return;
+      }
+
+      // Automatically create a folder in client's MyDocuments
+      const folderId = `consultation-${Date.now()}`;
+      const newFolder = {
+        id: folderId,
+        name: subject || 'Consultation Intake Documents',
+        isRecentlyCreated: true,
+        files: [
+          ...attachedFiles.map((f, i) => ({
+            id: `f-${Date.now()}-${i}`,
+            name: f,
+            size: '1.8 MB',
+            type: 'pdf' as const,
+            updatedAt: 'Today',
+          })),
+          ...(paymentReceiptName
+            ? [
+              {
+                id: `f-receipt-${Date.now()}`,
+                name: paymentReceiptName || `Payment_Receipt_${paymentReference}.png`,
+                size: '520 KB',
+                type: 'png' as const,
+                updatedAt: 'Today',
+              },
+            ]
+            : []),
+        ],
+      };
+
+      try {
+        const existing = JSON.parse(localStorage.getItem('justicia_client_custom_folders') || '[]');
+        localStorage.setItem('justicia_client_custom_folders', JSON.stringify([newFolder, ...existing]));
+      } catch {
+        // ignore
+      }
+
+      setBookingStatus('submitted');
+      setBookedSlots((prev) => Array.from(new Set([...prev, selectedTimeSlot])));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error submitting booking';
+      setBookingError(msg);
+    } finally {
+      setSubmittingBooking(false);
+    }
   };
 
   const toggleHelpful = (idx: string | number) => {
@@ -393,11 +780,10 @@ export function LawyerDetailView({
         <button
           type="button"
           onClick={() => setActiveTab('about')}
-          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${
-            activeTab === 'about'
-              ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
-              : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
-          }`}
+          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${activeTab === 'about'
+            ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
+            : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
+            }`}
         >
           About
         </button>
@@ -405,11 +791,10 @@ export function LawyerDetailView({
         <button
           type="button"
           onClick={() => setActiveTab('reviews')}
-          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${
-            activeTab === 'reviews'
-              ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
-              : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
-          }`}
+          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${activeTab === 'reviews'
+            ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
+            : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
+            }`}
         >
           Reviews
         </button>
@@ -417,11 +802,10 @@ export function LawyerDetailView({
         <button
           type="button"
           onClick={() => setActiveTab('booking')}
-          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${
-            activeTab === 'booking'
-              ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
-              : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
-          }`}
+          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${activeTab === 'booking'
+            ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
+            : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
+            }`}
         >
           Consultation Booking
         </button>
@@ -429,11 +813,10 @@ export function LawyerDetailView({
         <button
           type="button"
           onClick={() => setActiveTab('cases')}
-          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${
-            activeTab === 'cases'
-              ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
-              : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
-          }`}
+          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${activeTab === 'cases'
+            ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
+            : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
+            }`}
         >
           Cases Handled
         </button>
@@ -841,11 +1224,10 @@ export function LawyerDetailView({
                   setSelectedReviewStar('all');
                   setReviewPage(1);
                 }}
-                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
-                  selectedReviewStar === 'all'
-                    ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
-                    : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
-                }`}
+                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${selectedReviewStar === 'all'
+                  ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
+                  : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
+                  }`}
               >
                 All ({reviewsList.length})
               </button>
@@ -860,11 +1242,10 @@ export function LawyerDetailView({
                       setSelectedReviewStar(s);
                       setReviewPage(1);
                     }}
-                    className={`px-4 sm:px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
-                      selectedReviewStar === s
-                        ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
-                        : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
-                    }`}
+                    className={`px-4 sm:px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${selectedReviewStar === s
+                      ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
+                      : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
+                      }`}
                   >
                     ★{s} ({countForStar})
                   </button>
@@ -1040,9 +1421,8 @@ export function LawyerDetailView({
                       key={p}
                       type="button"
                       onClick={() => setReviewPage(p)}
-                      className={`w-2.5 h-2.5 rounded-full transition-all ${
-                        isActive ? 'bg-[#362519] scale-125' : 'bg-[#C58B3C]/80 hover:bg-[#362519]'
-                      }`}
+                      className={`w-2.5 h-2.5 rounded-full transition-all ${isActive ? 'bg-[#362519] scale-125' : 'bg-[#C58B3C]/80 hover:bg-[#362519]'
+                        }`}
                       aria-label={`Go to review page ${p}`}
                     />
                   );
@@ -1087,7 +1467,7 @@ export function LawyerDetailView({
                 <h3 className="font-cormorant font-bold text-lg">Consultation Request Confirmed</h3>
               </div>
               <p className="text-xs sm:text-sm">
-                Your booking request for <strong>{lawyer.fullName}</strong> on <strong>September {selectedDay}, 2026 ({selectedTimeSlot})</strong> has been received under confidential attorney-client privilege.
+                Your booking request for <strong>{lawyer.fullName}</strong> on <strong>{formattedDateStr} ({selectedTimeSlot})</strong> has been received under confidential attorney-client privilege.
               </p>
               <div className="flex items-center gap-4 pt-2">
                 <Link
@@ -1098,8 +1478,21 @@ export function LawyerDetailView({
                 </Link>
                 <button
                   type="button"
-                  onClick={() => setBookingStatus('idle')}
-                  className="text-xs text-[#5C4535] underline"
+                  onClick={() => {
+                    setBookingStatus('idle');
+                    setBookingError(null);
+                    setPaymentReference('');
+                    setPaymentReceiptName('');
+                    setPaymentReceiptBase64('');
+                    const dateStr = `${selectedMonthName} ${selectedDay}, ${currentYear}`;
+                    getBookedSlotsForLawyer(lawyer.userId, dateStr).then((slots) => {
+                      const allSlots = Array.from(new Set([...(slots || []), selectedTimeSlot]));
+                      setBookedSlots(allSlots);
+                      const nextSlot = timeSlots.find((s) => !allSlots.includes(s));
+                      if (nextSlot) setSelectedTimeSlot(nextSlot);
+                    });
+                  }}
+                  className="text-xs text-[#5C4535] underline font-semibold hover:text-[#23150F] cursor-pointer"
                 >
                   Book Another Session
                 </button>
@@ -1119,20 +1512,58 @@ export function LawyerDetailView({
             >
               <div className="flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-10">
                 {/* Big Date Highlight */}
-                <div className="text-center sm:text-left sm:pr-8 sm:border-r border-[#D1BEA8]/80 shrink-0">
+                <div className="text-center sm:text-left sm:pr-8 sm:border-r border-[#D1BEA8]/80 shrink-0 min-w-[120px]">
                   <div className="font-cormorant text-base font-bold uppercase tracking-widest text-[#4A3525]">
-                    SEPT
+                    {selectedMonthShort}
                   </div>
                   <div className="font-cormorant text-6xl sm:text-7xl font-bold text-[#C58B3C] leading-none my-1">
                     {selectedDay}
                   </div>
                   <div className="font-cormorant text-xs sm:text-sm font-bold tracking-widest uppercase text-[#4A3525]">
-                    WEDNESDAY
+                    {selectedDayOfWeek}
                   </div>
                 </div>
 
-                {/* Mini Calendar Grid */}
+                {/* Mini Calendar Grid with Month Switcher Controls */}
                 <div className="flex-1 w-full max-w-sm sm:max-w-none">
+                  {/* Month Navigation Bar */}
+                  <div className="flex items-center justify-between pb-3 px-1">
+                    <span className="font-cormorant text-base sm:text-lg font-bold text-[#4A3525] tracking-wide">
+                      {selectedMonthName} {currentYear}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleGoToToday}
+                        className="px-2.5 py-0.5 rounded-full bg-[#E5D5C1] hover:bg-[#D5C2AB] text-[#34150F] text-[10px] font-bold uppercase tracking-wider transition-colors shadow-xs"
+                        title="Snap to Today"
+                      >
+                        Today
+                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={handlePrevMonth}
+                          className="w-7 h-7 rounded-full bg-[#E5D5C1] hover:bg-[#D5C2AB] text-[#34150F] flex items-center justify-center font-bold text-sm transition-colors shadow-xs active:scale-95"
+                          title="Previous Month"
+                          aria-label="Previous Month"
+                        >
+                          ‹
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleNextMonth}
+                          className="w-7 h-7 rounded-full bg-[#E5D5C1] hover:bg-[#D5C2AB] text-[#34150F] flex items-center justify-center font-bold text-sm transition-colors shadow-xs active:scale-95"
+                          title="Next Month"
+                          aria-label="Next Month"
+                        >
+                          ›
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Day of Week Headers */}
                   <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center pb-3 text-[11px] sm:text-xs font-bold text-[#4A3525] uppercase tracking-wider">
                     <span>SUN</span>
                     <span>MON</span>
@@ -1143,24 +1574,35 @@ export function LawyerDetailView({
                     <span>SAT</span>
                   </div>
 
+                  {/* Dynamic Days in Month Grid */}
                   <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-xs">
                     {daysInMonth.map((item, idx) => {
                       if (!item.day) {
                         return <div key={`empty-${idx}`} className="h-8 w-8" />;
                       }
                       const isSelected = item.day === selectedDay;
+                      const today = getTodayPH();
+                      const isToday =
+                        item.day === today.day &&
+                        currentMonth === today.month &&
+                        currentYear === today.year;
+
                       return (
                         <button
                           key={`day-${item.day}`}
                           type="button"
                           onClick={() => setSelectedDay(item.day!)}
-                          className={`h-8 w-8 mx-auto rounded-full flex items-center justify-center font-medium text-xs transition-all ${
-                            isSelected
-                              ? 'bg-[#DFC5A4] text-[#C58B3C] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.18)] scale-105'
+                          className={`h-8 w-8 mx-auto rounded-full flex flex-col items-center justify-center font-medium text-xs transition-all cursor-pointer relative ${isSelected
+                            ? 'bg-[#DFC5A4] text-[#C58B3C] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.18)] scale-105'
+                            : isToday
+                              ? 'text-[#23150F] font-bold border border-[#C58B3C]/60 bg-[#E8DDD0]'
                               : 'text-[#3E2A1E] hover:bg-[#DECEB8] hover:text-[#23150F]'
-                          }`}
+                            }`}
                         >
-                          {String(item.day).padStart(2, '0')}
+                          <span>{String(item.day).padStart(2, '0')}</span>
+                          {isToday && !isSelected && (
+                            <span className="w-1 h-1 rounded-full bg-[#C58B3C] -mt-0.5" />
+                          )}
                         </button>
                       );
                     })}
@@ -1179,18 +1621,26 @@ export function LawyerDetailView({
             >
               {timeSlots.map((slot) => {
                 const isSelected = selectedTimeSlot === slot;
+                const isBooked = bookedSlots.includes(slot);
                 return (
                   <button
                     key={slot}
                     type="button"
-                    onClick={() => setSelectedTimeSlot(slot)}
-                    className={`w-full py-2.5 px-3 rounded-full text-xs font-medium transition-all text-center ${
-                      isSelected
+                    disabled={isBooked}
+                    onClick={() => !isBooked && setSelectedTimeSlot(slot)}
+                    className={`w-full py-2.5 px-3 rounded-full text-xs font-medium transition-all text-center relative ${isBooked
+                      ? 'opacity-40 cursor-not-allowed bg-stone-300 text-stone-500 line-through'
+                      : isSelected
                         ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                         : 'bg-[#E6D7C3] hover:bg-[#DFC5A4]/60 text-[#5C4535] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
-                    }`}
+                      }`}
                   >
-                    {slot}
+                    <span>{slot}</span>
+                    {isBooked && (
+                      <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-rose-700 not-italic no-underline">
+                        (Booked)
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -1210,17 +1660,15 @@ export function LawyerDetailView({
               {/* Option 1: Video Consultation */}
               <div
                 onClick={() => setCommunicationMode('video')}
-                className={`flex items-start gap-3.5 p-4 rounded-[20px] cursor-pointer transition-all ${
-                  communicationMode === 'video'
-                    ? 'bg-[#DFC5A4] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
-                    : 'bg-transparent hover:bg-[#E5D5C1]/50'
-                }`}
+                className={`flex items-start gap-3.5 p-4 rounded-[20px] cursor-pointer transition-all ${communicationMode === 'video'
+                  ? 'bg-[#DFC5A4] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
+                  : 'bg-transparent hover:bg-[#E5D5C1]/50'
+                  }`}
               >
                 <div className="mt-0.5">
                   <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      communicationMode === 'video' ? 'border-[#23150F]' : 'border-[#7D6855]'
-                    }`}
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${communicationMode === 'video' ? 'border-[#23150F]' : 'border-[#7D6855]'
+                      }`}
                   >
                     {communicationMode === 'video' && <div className="w-2 h-2 rounded-full bg-[#23150F]" />}
                   </div>
@@ -1245,17 +1693,15 @@ export function LawyerDetailView({
               {/* Option 2: Audio Call */}
               <div
                 onClick={() => setCommunicationMode('audio')}
-                className={`flex items-start gap-3.5 p-4 rounded-[20px] cursor-pointer transition-all ${
-                  communicationMode === 'audio'
-                    ? 'bg-[#DFC5A4] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
-                    : 'bg-transparent hover:bg-[#E5D5C1]/50'
-                }`}
+                className={`flex items-start gap-3.5 p-4 rounded-[20px] cursor-pointer transition-all ${communicationMode === 'audio'
+                  ? 'bg-[#DFC5A4] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
+                  : 'bg-transparent hover:bg-[#E5D5C1]/50'
+                  }`}
               >
                 <div className="mt-0.5">
                   <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      communicationMode === 'audio' ? 'border-[#23150F]' : 'border-[#7D6855]'
-                    }`}
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${communicationMode === 'audio' ? 'border-[#23150F]' : 'border-[#7D6855]'
+                      }`}
                   >
                     {communicationMode === 'audio' && <div className="w-2 h-2 rounded-full bg-[#23150F]" />}
                   </div>
@@ -1321,24 +1767,34 @@ export function LawyerDetailView({
               {/* File Attachments Dropzone */}
               <div className="space-y-2">
                 <label className="block text-xs font-semibold text-[#5C4535]">File Attachments</label>
-                <div
-                  className="w-full py-10 px-6 rounded-2xl bg-[#E4D5C2] flex flex-col items-center justify-center text-center cursor-pointer hover:bg-[#DECDBA] transition-all"
+                <label
+                  className="w-full py-9 px-6 rounded-2xl bg-[#E4D5C2] flex flex-col items-center justify-center text-center cursor-pointer hover:bg-[#DECDBA] transition-all block relative"
                   style={{
                     boxShadow:
                       'inset 3px 3px 6px rgba(165, 140, 115, 0.45), inset -3px -3px 6px rgba(255, 255, 255, 0.85)',
                   }}
-                  onClick={() => {
-                    const fileName = prompt('Enter document name to attach (e.g., Contract_Addendum.pdf):');
-                    if (fileName) setAttachedFiles([...attachedFiles, fileName]);
-                  }}
                 >
-                  <svg className="w-10 h-10 text-[#7D6855]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = e.target.files;
+                      if (!files || files.length === 0) return;
+                      const fileNames = Array.from(files).map((f) => f.name);
+                      setAttachedFiles((prev) => Array.from(new Set([...prev, ...fileNames])));
+                    }}
+                  />
+                  <svg className="w-9 h-9 text-[#7D6855] mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
-                  <span className="text-xs text-[#7D6855] font-medium mt-3">
-                    Drag and Drop, or Attach Relevant Files
+                  <span className="text-xs text-[#5C4535] font-semibold mt-2.5 block">
+                    Click to browse files or Drag & Drop case documents
                   </span>
-                </div>
+                  <span className="text-[10px] text-[#8C7A6B] mt-0.5 block">
+                    Attach contracts, demand letters, or evidence (PDF, DOCX, XLSX, Images)
+                  </span>
+                </label>
 
                 {/* Attached Files List */}
                 {attachedFiles.length > 0 && (
@@ -1364,9 +1820,7 @@ export function LawyerDetailView({
 
                 <button
                   type="button"
-                  onClick={() => {
-                    alert('Documents from your client vault can be linked here.');
-                  }}
+                  onClick={handleOpenDocPicker}
                   className="px-8 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-[#23150F] hover:bg-[#D4B892] transition-all mx-auto block"
                   style={{
                     backgroundColor: '#DFC5A4',
@@ -1377,6 +1831,133 @@ export function LawyerDetailView({
                   Share Uploaded Files from your Documents
                 </button>
               </div>
+
+              {/* Payment & Proof of Payment Section */}
+              <div className="space-y-4 pt-3 border-t border-[#D1BEA8]/60">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-cormorant text-xl font-bold text-[#23150F]">
+                      Consultation Retainer & Proof of Payment
+                    </h3>
+                    <p className="text-[11px] text-[#5C4535]">
+                      Upload your payment confirmation so counsel can verify and accept your appointment.
+                    </p>
+                  </div>
+                  <div className="px-3.5 py-1.5 rounded-full bg-[#DFC5A4] text-xs font-bold text-[#23150F] self-start sm:self-auto shadow-xs">
+                    ₱{(lawyer.feeStandard60min ?? 1500).toLocaleString()}.00 (60-Min Session)
+                  </div>
+                </div>
+
+                {/* Channel Selector */}
+                <div className="grid grid-cols-3 gap-2">
+                  {(['gcash', 'maya', 'bank_transfer'] as const).map((method) => {
+                    const label = method === 'gcash' ? 'GCash' : method === 'maya' ? 'Maya' : 'Bank Transfer';
+                    const isSelected = paymentMethod === method;
+                    return (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => setPaymentMethod(method)}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all ${isSelected
+                          ? 'bg-[#23150F] text-[#ded7cb] shadow-sm'
+                          : 'bg-[#E5D5C1] text-[#5C4535] hover:bg-[#DECDBA]'
+                          }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Account Details Box */}
+                <div className="p-3.5 rounded-2xl bg-[#E4D5C2]/80 border border-[#D5C2AB] text-xs text-[#3E2A1E] space-y-1">
+                  <div className="font-bold text-[#23150F] flex items-center justify-between">
+                    <span>
+                      {paymentMethod === 'gcash' && 'GCash Account:'}
+                      {paymentMethod === 'maya' && 'Maya Account:'}
+                      {paymentMethod === 'bank_transfer' && 'Bank Transmittal (BDO / BPI):'}
+                    </span>
+                    <span className="font-mono text-[#C58B3C]">
+                      {paymentMethod === 'gcash' && '0917-889-1234'}
+                      {paymentMethod === 'maya' && '0918-992-5678'}
+                      {paymentMethod === 'bank_transfer' && 'Acct: 0049-2819-3829'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#5C4535]">
+                    Account Name: <strong>{lawyer.fullName}</strong> • Reference format: <code>JUSTICIA-{selectedDay}</code>
+                  </p>
+                </div>
+
+                {/* Payment Form Fields Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-semibold text-[#5C4535]">
+                      Reference / Transaction Number: <span className="text-red-700">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={paymentReference}
+                      onChange={(e) => setPaymentReference(e.target.value)}
+                      placeholder="e.g. 10023491823"
+                      className="w-full rounded-xl py-2 px-3 bg-[#E4D5C2] text-xs text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-semibold text-[#5C4535]">
+                      Sender / Payer Full Name:
+                    </label>
+                    <input
+                      type="text"
+                      value={payerName}
+                      onChange={(e) => setPayerName(e.target.value)}
+                      placeholder="e.g. Clyde Justine Rosal"
+                      className="w-full rounded-xl py-2 px-3 bg-[#E4D5C2] text-xs text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Upload Receipt File Input */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-semibold text-[#5C4535]">
+                    Proof of Payment (Screenshot Receipt / Deposit Slip):
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="cursor-pointer px-4 py-2 rounded-xl bg-[#DFC5A4] hover:bg-[#D4B892] text-xs font-semibold text-[#23150F] transition shadow-xs">
+                      <span>Upload Receipt (PNG, JPG, PDF)</span>
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        className="hidden"
+                        onChange={handleReceiptUpload}
+                      />
+                    </label>
+                    {paymentReceiptName ? (
+                      <span className="text-xs text-emerald-800 font-semibold truncate flex items-center gap-1">
+                        ✓ {paymentReceiptName}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentReceiptName('');
+                            setPaymentReceiptBase64('');
+                          }}
+                          className="text-red-700 hover:text-red-900 ml-1 font-bold"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-[#7D6855]">No file chosen yet</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {bookingError && (
+                <div className="p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 text-xs font-semibold">
+                  ⚠ {bookingError}
+                </div>
+              )}
 
               {/* Privilege Agreement Checkbox */}
               <label className="flex items-start gap-3 cursor-pointer pt-3">
@@ -1430,7 +2011,7 @@ export function LawyerDetailView({
                   '6px 8px 18px rgba(165, 135, 105, 0.45), -4px -4px 12px rgba(255, 255, 255, 0.85)',
               }}
             >
-              Submit Booking
+              {submittingBooking ? 'Submitting Request...' : 'Submit Booking'}
             </button>
           </div>
         </form>
@@ -1487,9 +2068,8 @@ export function LawyerDetailView({
                     key={p}
                     type="button"
                     onClick={() => setCasePage(p)}
-                    className={`w-2.5 h-2.5 rounded-full transition-all ${
-                      isActive ? 'bg-[#362519] scale-125' : 'bg-[#C58B3C]/80 hover:bg-[#362519]'
-                    }`}
+                    className={`w-2.5 h-2.5 rounded-full transition-all ${isActive ? 'bg-[#362519] scale-125' : 'bg-[#C58B3C]/80 hover:bg-[#362519]'
+                      }`}
                     aria-label={`Go to case page ${p}`}
                   />
                 );
@@ -1511,6 +2091,244 @@ export function LawyerDetailView({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Share From My Documents Vault Modal ─────────────────────────────── */}
+      {showDocPickerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div
+            className="w-full max-w-3xl rounded-[32px] p-6 sm:p-8 bg-[#ECE1D2] space-y-5 max-h-[90vh] flex flex-col"
+            style={{
+              boxShadow: '16px 16px 40px rgba(0,0,0,0.35), -8px -8px 24px #FFFFFF',
+            }}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-[#D1BEA8]/80">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#DFC5A4] flex items-center justify-center text-xl shadow-xs">
+                  📁
+                </div>
+                <div>
+                  <h3 className="font-cormorant text-2xl font-bold text-[#23150F] leading-tight">
+                    My Documents Vault
+                  </h3>
+                  <p className="text-xs text-[#5C4535]">
+                    Select records or upload documents from your vault to attach to this consultation.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDocPickerModal(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#23150F] hover:bg-[#DFC5A4]/40 font-bold transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Notification Notice */}
+            {pickerNotice && (
+              <div className="p-3 rounded-2xl bg-[#E2D4C1] border border-[#C5B099] text-xs font-medium text-[#23150F] flex items-center justify-between">
+                <span>{pickerNotice}</span>
+                <button
+                  type="button"
+                  onClick={() => setPickerNotice(null)}
+                  className="text-[#7D6855] hover:text-[#23150F] font-bold ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Quick Upload & Create Folder Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#E4D5C2]/80 border border-[#D5C2AB]">
+              {/* Left: Quick Upload File */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  ref={pickerFileInputRef}
+                  className="hidden"
+                  onChange={handlePickerFileUpload}
+                />
+                <button
+                  type="button"
+                  disabled={isUploadingPickerFile}
+                  onClick={() => pickerFileInputRef.current?.click()}
+                  className="px-4 py-2 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-bold hover:bg-[#34150F] transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-60"
+                >
+                  {isUploadingPickerFile ? (
+                    <>
+                      <svg className="w-3.5 h-3.5 animate-spin text-[#ded7cb]" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>+</span>
+                      <span>Upload to Vault</span>
+                    </>
+                  )}
+                </button>
+                <span className="text-[11px] text-[#7D6855] hidden sm:inline">
+                  (PDF, Word, Images, Evidence)
+                </span>
+              </div>
+
+              {/* Right: Quick Create Folder */}
+              <form onSubmit={handleCreatePickerFolder} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={pickerNewFolderName}
+                  onChange={(e) => setPickerNewFolderName(e.target.value)}
+                  placeholder="New folder name..."
+                  className="py-1.5 px-3 rounded-xl bg-[#EBE0D2] text-xs text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none w-40 sm:w-48 shadow-inner"
+                />
+                <button
+                  type="submit"
+                  disabled={isCreatingPickerFolder || !pickerNewFolderName.trim()}
+                  className="px-3 py-1.5 rounded-xl bg-[#DFC5A4] text-xs font-bold text-[#23150F] hover:bg-[#D4B892] disabled:opacity-50 transition-all shadow-xs"
+                >
+                  {isCreatingPickerFolder ? 'Creating...' : '+ Folder'}
+                </button>
+              </form>
+            </div>
+
+            {/* Folder & Files Browser Layout */}
+            <div className="flex-1 min-h-[260px] overflow-hidden flex flex-col sm:flex-row gap-4 border border-[#D1BEA8]/80 rounded-2xl p-3 bg-[#EAE0D2]/50">
+              {/* Folders List (Left Sidebar) */}
+              <div className="w-full sm:w-56 shrink-0 space-y-1.5 overflow-y-auto max-h-[280px] sm:max-h-full pr-1">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-[#7D6855] px-2 py-1">
+                  Folders ({docPickerFolders.length})
+                </div>
+
+                {loadingDocPicker ? (
+                  <div className="p-4 text-center text-xs text-[#7D6855]">Loading vault...</div>
+                ) : docPickerFolders.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-[#7D6855]">No folders yet.</div>
+                ) : (
+                  docPickerFolders.map((folder) => {
+                    const isActive = activePickerFolderId === folder.id;
+                    return (
+                      <button
+                        key={folder.id}
+                        type="button"
+                        onClick={() => setActivePickerFolderId(folder.id)}
+                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-all flex items-center justify-between ${isActive
+                          ? 'bg-[#23150F] text-[#ded7cb] shadow-sm font-bold'
+                          : 'bg-[#E5D5C1] text-[#23150F] hover:bg-[#DFC5A4]'
+                          }`}
+                      >
+                        <span className="truncate">📁 {folder.name}</span>
+                        <span className="text-[10px] opacity-75 shrink-0 ml-1">
+                          {folder.files?.length || 0}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Files Grid / List (Right Content) */}
+              <div className="flex-1 overflow-y-auto max-h-[300px] sm:max-h-full pl-1">
+                {(() => {
+                  const currentFolder = docPickerFolders.find((f) => f.id === activePickerFolderId) || docPickerFolders[0];
+                  const files = currentFolder?.files || [];
+
+                  if (!currentFolder) {
+                    return (
+                      <div className="h-full flex flex-col items-center justify-center p-8 text-center text-xs text-[#7D6855]">
+                        <p>No folder selected. Use the buttons above to create a folder or upload a file.</p>
+                      </div>
+                    );
+                  }
+
+                  if (files.length === 0) {
+                    return (
+                      <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-2">
+                        <div className="text-3xl">📄</div>
+                        <p className="text-xs font-semibold text-[#23150F]">No files in this folder</p>
+                        <p className="text-[11px] text-[#7D6855]">
+                          Use "Upload to Vault" above to add documents to this folder.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between pb-1 text-[11px] font-bold text-[#7D6855]">
+                        <span>FILES IN {currentFolder.name.toUpperCase()}</span>
+                        <span>{files.length} available</span>
+                      </div>
+
+                      {files.map((file: any) => {
+                        const isSelected = selectedDocPickerFiles.includes(file.name);
+                        return (
+                          <div
+                            key={file.id || file.name}
+                            onClick={() => handleToggleSelectDoc(file.name)}
+                            className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${isSelected
+                              ? 'bg-[#DFC5A4] border-[#C58B3C] shadow-sm text-[#23150F]'
+                              : 'bg-[#E8DDD0] border-[#D8C7B5] hover:bg-[#E2D4C3] text-[#34150F]'
+                              }`}
+                          >
+                            <div className="flex items-center gap-2.5 truncate">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => { }} // handled by parent onClick
+                                className="w-4 h-4 rounded text-[#C58B3C] accent-[#C58B3C]"
+                              />
+                              <span className="text-sm">📄</span>
+                              <div className="truncate">
+                                <div className="text-xs font-semibold truncate">{file.name}</div>
+                                <div className="text-[10px] text-[#7D6855]">
+                                  {file.size} • {file.updatedAt || 'Recent'}
+                                </div>
+                              </div>
+                            </div>
+                            <span
+                              className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${isSelected ? 'bg-[#23150F] text-[#ded7cb]' : 'bg-[#D5C2AB] text-[#5C4535]'
+                                }`}
+                            >
+                              {isSelected ? 'Selected' : 'Select'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between pt-2 border-t border-[#D1BEA8]/80">
+              <span className="text-xs font-medium text-[#5C4535]">
+                {selectedDocPickerFiles.length} file{selectedDocPickerFiles.length === 1 ? '' : 's'} selected
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowDocPickerModal(false)}
+                  className="px-5 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-semibold text-[#5C4535] hover:bg-[#E5D5C1]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDocPicker}
+                  disabled={selectedDocPickerFiles.length === 0}
+                  className="px-6 py-2.5 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-bold hover:bg-[#34150F] transition-all shadow-md disabled:opacity-40"
+                >
+                  Attach Selected ({selectedDocPickerFiles.length})
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
