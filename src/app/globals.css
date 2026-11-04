@@ -77,7 +77,7 @@ body {
 @keyframes clientViewEnter {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(14px);
   }
 
   to {
@@ -87,7 +87,8 @@ body {
 }
 
 .client-view-enter {
-  animation: clientViewEnter 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: clientViewEnter 420ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
 }
 
 /* ─── Premium Neumorphic Skeleton Shimmer (Zero-CLS, Warm Parchment) ──── */
@@ -147,7 +148,7 @@ body {
 
 #client-main-content::-webkit-scrollbar-track,
 #lawyer-main-content::-webkit-scrollbar-track {
-  background: #EFE5D8;
+  background: #E5D8CB;
 }
 
 #client-main-content::-webkit-scrollbar-thumb,
@@ -318,7 +319,25 @@ body {
   border: none;
 }
 
-/* Raised role buttons (Figma spec, same recipe as .neu-raised) */
+/* Raised containers / cards (Figma spec: large raised surface #E5D8CB) */
+.neu-raised {
+  background-color: #E5D8CB;
+  border: none;
+  box-shadow:
+    8px 8px 20px 0 rgba(206, 194, 183, 0.90),
+    -8px -8px 16px 0 rgba(252, 238, 223, 0.90),
+    8px -8px 16px 0 rgba(206, 194, 183, 0.20),
+    -8px 8px 16px 0 rgba(206, 194, 183, 0.20),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
+  transition: box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.neu-raised:hover {
+  filter: brightness(1.01);
+}
+
+/* Raised role buttons, cards, pills (Figma spec, small/medium raised) */
 .neu-raised-sm {
   background-color: #E5D8CB;
   border: none;
@@ -336,7 +355,8 @@ body {
   filter: brightness(1.02);
 }
 
-/* Pressed-in version (selected role), same recipe as .neu-input */
+/* Recessed / Pressed-in surface (matches #E5D8CB surface) */
+.neu-recessed,
 .neu-pressed {
   background-color: #E5D8CB;
   border: none;
@@ -347,6 +367,48 @@ body {
     inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
     inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
     inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20);
+}
+
+/* Interactive Lawyer Card: Recessed at rest, smoothly rises into raised look on hover, tactile press on click */
+.neu-card-interactive {
+  background-color: #E5D8CB;
+  border: none;
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20);
+  transform: translateY(0) scale(1);
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+              box-shadow 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+              filter 0.2s ease;
+  will-change: transform, box-shadow;
+}
+
+.neu-card-interactive:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    8px 10px 22px 0 rgba(206, 194, 183, 0.90),
+    -8px -8px 16px 0 rgba(252, 238, 223, 0.90),
+    8px -8px 16px 0 rgba(206, 194, 183, 0.20),
+    -8px 8px 16px 0 rgba(206, 194, 183, 0.20),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
+  filter: brightness(1.015);
+}
+
+.neu-card-interactive:active {
+  transform: translateY(1px) scale(0.985);
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
+    inset 6px 6px 14px 0 rgba(190, 178, 167, 0.95),
+    inset -6px -6px 12px 0 rgba(252, 238, 223, 0.95),
+    inset 6px -6px 12px 0 rgba(190, 178, 167, 0.25),
+    inset -6px 6px 12px 0 rgba(190, 178, 167, 0.25);
+  transition-duration: 0.08s;
 }
 
 /* CREATE ACCOUNT button (Figma spec: orange-950 + raised shadows) */

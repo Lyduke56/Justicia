@@ -2,13 +2,15 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { motion, useReducedMotion, type Variants } from 'motion/react';
 import {
   SendPaperPlaneIcon,
-  PlusCircleIcon,
+  PlusIcon,
   AIAssistantIcon,
   UserCircleIcon,
   FindLawyerIcon,
+  ScaleIcon,
+  DocumentTextIcon,
 } from './ClientIcons';
 
 interface Citation {
@@ -41,9 +43,47 @@ interface AIAssistantChatProps {
   userFirstName: string;
 }
 
+const POPULAR_KEYWORDS = [
+  'Labor Code Illegal Dismissal',
+  'Small Claims MTC Procedure',
+  'Estate Settlement Without a Will',
+  'Cyber Libel Requirements',
+  'Tenancy & Eviction Rules',
+  'BP 22 Bouncing Checks',
+];
+
+// ─── Motion Orchestration ────────────────────────────────────────────────────
+const EASE = [0.16, 1, 0.3, 1] as const;
+const HEADLINE_WORDS = ["Let's", 'make', 'it', 'make', 'sense,'];
+
+const pageVariants: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.12, delayChildren: 0.05 } },
+};
+
+const headlineVariants: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08 } },
+};
+
+const wordVariants: Variants = {
+  hidden: { y: '105%', opacity: 0, filter: 'blur(10px)' },
+  show: {
+    y: '0%',
+    opacity: 1,
+    filter: 'blur(0px)',
+    transition: { duration: 0.8, ease: EASE },
+  },
+};
+
+const fadeVariants: Variants = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE } },
+};
+
 function buildFindLawyerUrl(filters: SuggestedFilters): string {
   const params = new URLSearchParams();
-  params.set('from', 'ai'); // signals AI redirect for banner
+  params.set('from', 'ai');
   if (filters.specialization) params.set('specialization', filters.specialization);
   if (filters.chapter) params.set('chapter', filters.chapter);
   if (filters.lang) params.append('lang', filters.lang);
@@ -56,12 +96,15 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialQuery = searchParams.get('q') || '';
+  const reduceMotion = useReducedMotion();
 
   const [inputQuery, setInputQuery] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [attachedText, setAttachedText] = useState<string>('');
+  const [isSubmitHovered, setIsSubmitHovered] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -79,7 +122,6 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
       const reader = new FileReader();
       reader.onload = (e) => resolve((e.target?.result as string) || '');
       reader.onerror = () => resolve('');
-      // For PDFs we can only get raw text — Gemini will handle it
       reader.readAsText(file);
     });
   };
@@ -95,7 +137,6 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
     }
 
     setAttachedFile(file);
-    // Read text content so we can pass it as context
     const text = await readFileAsText(file);
     setAttachedText(text);
   };
@@ -193,7 +234,7 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
     [isLoading, messages, attachedFile, attachedText]
   );
 
-  // If query param is present on mount, automatically send it
+  // If query param is present on mount, automatically trigger submission
   useEffect(() => {
     if (initialQuery && messages.length === 0) {
       const timer = setTimeout(() => {
@@ -221,257 +262,356 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
     router.push(url);
   };
 
+  const hasPrompt = inputQuery.trim().length > 0 || !!attachedFile;
+
   // ─── Pristine / Empty State ──────────────────────────────────────────────────
   if (messages.length === 0) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] flex flex-col justify-between p-6 sm:p-10 max-w-4xl mx-auto">
-        {/* Top spacer */}
-        <div className="pt-8 sm:pt-16" />
+      <motion.div
+        variants={pageVariants}
+        initial={reduceMotion ? false : 'hidden'}
+        animate="show"
+        className="min-h-[calc(100vh-4rem)] flex flex-col justify-between px-6 sm:px-10 lg:px-16 py-8 sm:py-12 max-w-[1240px] mx-auto bg-[#E5D8CB]"
+      >
+        {/* Top Spacer */}
+        <div className="pt-2 sm:pt-6" />
 
-        {/* Center: Greeting & Search Bar */}
-        <div className="text-center space-y-8 my-auto">
-          <h1 className="font-cormorant text-4xl sm:text-5xl lg:text-6xl font-medium text-[#34150F] tracking-tight leading-tight select-none">
-            Let&apos;s make it make sense,{' '}
-            <span className="text-[#C58B3C] font-semibold">{userFirstName}.</span>
-          </h1>
+        {/* Center: Greeting & Prominent Long Recessed Search Field */}
+        <div className="space-y-8 my-auto w-full">
+          {/* Header Title with Word Masking */}
+          <div className="text-center space-y-3">
+            <motion.div variants={fadeVariants}>
+              <span
+                className="inline-block px-4.5 py-1.5 rounded-full neu-raised-sm bg-[#D39758]/30 text-[#34150F] font-lora text-xs sm:text-[13px] font-semibold select-none mb-1"
+                style={{ backgroundColor: 'rgba(211, 151, 88, 0.30)' }}
+              >
+                Philippine Legal Intelligence
+              </span>
+            </motion.div>
 
-          {/* Input Bar */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend(inputQuery);
-            }}
-            className="w-full max-w-2xl mx-auto"
-          >
-            <div className="relative flex flex-col gap-2 w-full rounded-2xl bg-[#E4D7C5] shadow-[inset_2px_2px_5px_rgba(0,0,0,0.12),inset_-2px_-2px_5px_rgba(255,255,255,0.7)] p-3 transition-all focus-within:ring-2 focus-within:ring-[#C58B3C]/50">
-              {/* Attachment preview */}
-              {attachedFile && (
-                <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[#EFE5D8] border border-[#D8CAAD]/70 text-xs text-[#34150F]">
-                  <svg className="w-4 h-4 text-[#C58B3C] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                  </svg>
-                  <span className="truncate flex-1">{attachedFile.name}</span>
-                  <button type="button" onClick={removeAttachment} className="text-[#7D6855] hover:text-red-600 transition-colors ml-auto">
-                    ✕
+            <motion.h1
+              variants={headlineVariants}
+              className="font-lora text-3xl sm:text-4xl lg:text-[46px] font-medium text-[#34150F] tracking-tight leading-[1.2] select-none"
+            >
+              {HEADLINE_WORDS.map((w, i) => (
+                <span
+                  key={`${w}-${i}`}
+                  className="inline-block overflow-hidden align-bottom pb-[0.12em] -mb-[0.12em] mr-[0.25em]"
+                >
+                  <motion.span variants={wordVariants} className="inline-block will-change-transform">
+                    {w}
+                  </motion.span>
+                </span>
+              ))}
+              <span className="inline-block overflow-hidden align-bottom pb-[0.12em] -mb-[0.12em]">
+                <motion.span
+                  variants={wordVariants}
+                  className="inline-block text-[#C58B3C] font-semibold will-change-transform"
+                >
+                  {userFirstName}.
+                </motion.span>
+              </span>
+            </motion.h1>
+          </div>
+
+          {/* Primary Extended-Width Recessed Search & Attachment Input */}
+          <motion.div variants={fadeVariants} className="w-full max-w-4xl lg:max-w-5xl mx-auto">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend(inputQuery);
+              }}
+              className="w-full"
+            >
+              <div className="neu-recessed bg-[#E5D8CB] relative flex flex-col gap-2.5 w-full rounded-[22px] py-3.5 pr-7 pl-6 transition-all focus-within:ring-2 focus-within:ring-[#B9833C]/40">
+                {/* File Attachment Preview Strip */}
+                {attachedFile && (
+                  <div className="neu-raised-sm bg-[#E5D8CB] flex items-center gap-2.5 px-3.5 py-1.5 rounded-[12px] text-xs font-inter text-[#34150F]">
+                    <DocumentTextIcon className="w-4 h-4 text-[#C58B3C] shrink-0" />
+                    <span className="truncate flex-1 font-medium">{attachedFile.name}</span>
+                    <span className="text-[#7A6756] text-[11px]">
+                      ({(attachedFile.size / 1024).toFixed(0)} KB)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={removeAttachment}
+                      className="text-[#7A6756] hover:text-red-700 transition-colors ml-1 p-0.5 cursor-pointer"
+                      title="Remove attachment"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
+                {/* Input Controls Row */}
+                <div className="flex items-center gap-2">
+                  {/* File Attachment Plus Button — Raised Extruded Circle with Tactile Animation */}
+                  <motion.button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                    className="neu-raised-sm size-11 sm:size-9 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] cursor-pointer shrink-0 focus:outline-none transition-colors"
+                    title="Attach case brief or PDF (Max 10MB)"
+                    aria-label="Attach file"
+                  >
+                    <PlusIcon className="w-5.5 h-5.5 sm:w-6 sm:h-6" />
+                  </motion.button>
+
+                  {/* Hidden Native File Input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+
+                  {/* Long Text Input */}
+                  <input
+                    type="text"
+                    value={inputQuery}
+                    onChange={(e) => setInputQuery(e.target.value)}
+                    placeholder="Ask a Philippine legal question or describe your case…"
+                    className="w-full bg-transparent text-[#34150F] placeholder-[#9A8270]/70 font-lora text-base sm:text-lg focus:outline-none px-2 font-normal"
+                    autoFocus
+                  />
+
+                  {/* Submit Button with Animated Tilt */}
+                  <button
+                    type="submit"
+                    disabled={!hasPrompt}
+                    onMouseEnter={() => setIsSubmitHovered(true)}
+                    onMouseLeave={() => setIsSubmitHovered(false)}
+                    className="p-1.5 flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] disabled:opacity-35 transition-colors focus:outline-none cursor-pointer disabled:cursor-not-allowed shrink-0"
+                    aria-label="Send legal question"
+                  >
+                    <motion.div
+                      animate={
+                        hasPrompt && isSubmitHovered
+                          ? { rotate: -30, y: -2, x: 2 }
+                          : { rotate: 0, y: 0, x: 0 }
+                      }
+                      transition={{
+                        type: 'spring',
+                        stiffness: 380,
+                        damping: 22,
+                      }}
+                      whileTap={hasPrompt ? { scale: 0.9 } : undefined}
+                      className="flex items-center justify-center origin-center"
+                    >
+                      <SendPaperPlaneIcon className="w-5.5 h-5.5" />
+                    </motion.div>
                   </button>
                 </div>
-              )}
-
-              <div className="flex items-center gap-2">
-                {/* Attachment button */}
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-9 h-9 rounded-full bg-[#EFE5D8] flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] shadow-[1px_1px_3px_rgba(0,0,0,0.1)] transition-colors focus:outline-none shrink-0"
-                  title="Attach case file or document"
-                >
-                  <PlusCircleIcon className="w-5 h-5" />
-                </button>
-
-                {/* Hidden file input */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-
-                {/* Text input */}
-                <input
-                  type="text"
-                  value={inputQuery}
-                  onChange={(e) => setInputQuery(e.target.value)}
-                  placeholder="Ask a legal question or attach a document"
-                  className="w-full bg-transparent text-[#34150F] placeholder-[#8C7A6B] text-sm sm:text-base focus:outline-none px-2 font-normal"
-                  autoFocus
-                />
-
-                {/* Send button */}
-                <button
-                  type="submit"
-                  disabled={!inputQuery.trim() && !attachedFile}
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] disabled:opacity-30 transition-colors focus:outline-none shrink-0"
-                  aria-label="Send legal question"
-                >
-                  <SendPaperPlaneIcon className="w-5 h-5" />
-                </button>
               </div>
-            </div>
-          </form>
+            </form>
 
-          {/* Quick topic starters */}
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-2 text-xs text-[#7A6756]">
-            <span className="opacity-70">Popular:</span>
-            {[
-              'Labor Code illegal dismissal rules',
-              'Small claims procedure in MTC',
-              'Estate settlement without a will',
-              'Cybercrime libel requirements',
-            ].map((topic) => (
-              <button
-                key={topic}
-                type="button"
-                onClick={() => handleSend(topic)}
-                className="px-3 py-1 rounded-full bg-[#E8D9C7] hover:bg-[#DFCDB9] text-[#4A3728] transition-colors"
-              >
-                {topic}
-              </button>
-            ))}
-          </div>
+            {/* Quick Popular Topics Row */}
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 pt-7 sm:pt-10">
+              <span className="text-xs sm:text-[13px] font-inter text-[#7A6756] font-medium mr-1.5 select-none">
+                Popular topics:
+              </span>
+              {POPULAR_KEYWORDS.map((kw) => (
+                <motion.button
+                  key={kw}
+                  type="button"
+                  onClick={() => handleSend(kw)}
+                  whileHover={{ scale: 1.04, y: -1 }}
+                  whileTap={{ scale: 0.92, y: 1 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                  className="neu-raised-sm px-4 py-2 rounded-full bg-[#E5D8CB] text-[#5C4535] hover:text-[#C58B3C] text-xs sm:text-[12.5px] font-inter transition-colors cursor-pointer select-none"
+                >
+                  {kw}
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
         </div>
 
         {/* Bottom Disclaimer */}
-        <div className="text-center pb-4 pt-12">
-          <p className="text-[11px] sm:text-xs text-[#8E7E70] leading-relaxed max-w-xl mx-auto font-light">
+        <div className="text-center pt-8 pb-2">
+          <p className="font-inter text-[11px] sm:text-xs text-[#8E7E70] leading-relaxed max-w-xl mx-auto font-light">
             Disclaimer: Justicia AI provides general legal information based on Philippine Statutes and
-            SC Jurisprudence, not formal Attorney-Client advice
+            SC Jurisprudence, not formal Attorney-Client advice.
           </p>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   // ─── Active Conversation View ────────────────────────────────────────────────
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col justify-between max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-[#D8C6B0]">
+    <div className="h-[calc(100vh-4rem)] flex flex-col justify-between max-w-[1240px] mx-auto p-4 sm:p-6 lg:p-8 bg-[#E5D8CB]">
+      {/* Conversation Header Bar */}
+      <div className="flex items-center justify-between pb-3.5 border-b border-[#D8C6B0]/60 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-[#D4C1AB] flex items-center justify-center text-[#C58B3C] shadow-sm">
-            <AIAssistantIcon className="w-5 h-5" />
+          <div className="neu-raised-sm size-11 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#C58B3C] shrink-0">
+            <AIAssistantIcon className="w-5 h-5 text-[#C58B3C]" />
           </div>
           <div>
-            <h2 className="font-cormorant font-bold text-lg text-[#34150F]">Justicia Legal Assistant</h2>
-            <p className="text-[10px] text-[#7A6756]">Powered by Philippine Jurisprudence &amp; Statutes</p>
+            <h2 className="font-lora font-bold text-lg sm:text-xl text-[#34150F] leading-tight">
+              Justicia Legal Assistant
+            </h2>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="font-inter text-xs text-[#5C4535]">
+                Philippine Jurisprudence &amp; Statutory AI
+              </span>
+              <span className="text-[#A89685] select-none text-xs">•</span>
+              <span className="neu-raised-sm bg-[#E5D8CB] px-2 py-0.5 rounded-full font-lora text-[9.5px] font-semibold text-[#D39758] tracking-wide select-none">
+                IBP Grounded
+              </span>
+            </div>
           </div>
         </div>
 
         <button
           type="button"
           onClick={handleResetChat}
-          className="text-xs font-semibold px-3.5 py-1.5 rounded-full bg-[#E5D7C5] hover:bg-[#DBCABA] text-[#34150F] shadow-[2px_2px_5px_rgba(0,0,0,0.06),-2px_-2px_5px_rgba(255,255,255,0.7)] transition-colors"
+          className="neu-raised-sm rounded-full px-4 py-2 bg-[#E5D8CB] text-xs font-inter font-semibold text-[#34150F] hover:text-[#C58B3C] active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer focus:outline-none"
         >
-          + New Question
+          <span className="text-[#C58B3C] font-bold text-sm">+</span>
+          <span>New Question</span>
         </button>
       </div>
 
       {/* Messages Stream */}
-      <div className="flex-1 overflow-y-auto py-6 space-y-6">
+      <div className="flex-1 min-h-0 overflow-y-auto py-5 space-y-6 pr-1">
         {messages.map((msg) => (
           <div
             key={msg.id}
             className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
+            {/* Assistant Avatar */}
             {msg.role === 'assistant' && (
-              <div className="w-8 h-8 rounded-full bg-[#D4C1AB] flex items-center justify-center text-[#C58B3C] shrink-0 mt-1 shadow-sm">
-                <AIAssistantIcon className="w-4 h-4" />
+              <div className="neu-raised-sm size-9 rounded-full bg-[#E5D8CB] text-[#C58B3C] flex items-center justify-center shrink-0 mt-1 shadow-sm">
+                <AIAssistantIcon className="w-4.5 h-4.5" />
               </div>
             )}
 
+            {/* Bubble Container */}
             <div
-              className={`max-w-[85%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed ${
-                msg.role === 'user'
-                  ? 'bg-[#34150F] text-[#FAF6F0] rounded-tr-none shadow-md'
-                  : msg.offTopic
-                  ? 'bg-[#FFF8F4] text-[#34150F] rounded-tl-none shadow-[4px_4px_12px_rgba(0,0,0,0.05),-4px_-4px_12px_rgba(255,255,255,0.8)] border border-orange-200/60'
-                  : 'bg-[#EFE5D8] text-[#34150F] rounded-tl-none shadow-[4px_4px_12px_rgba(0,0,0,0.05),-4px_-4px_12px_rgba(255,255,255,0.8)] border border-[#E8DCCB]/60'
-              }`}
+              className={`max-w-[88%] sm:max-w-[80%] rounded-[24px] ${msg.role === 'user'
+                ? 'bg-[#34150F] text-[#FAF6F0] rounded-tr-sm p-4 sm:p-5 shadow-md'
+                : 'neu-raised bg-[#E5D8CB] text-[#34150F] rounded-tl-sm p-5 sm:p-6 leading-relaxed'
+                }`}
             >
               {/* Attached file badge (user message) */}
               {msg.attachedFileName && (
-                <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded bg-white/10 text-[10px] opacity-80">
-                  <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                  </svg>
+                <div className="flex items-center gap-2 mb-2.5 px-2.5 py-1.5 rounded-lg bg-white/10 text-xs text-[#FAF6F0]/90 font-inter">
+                  <DocumentTextIcon className="w-4 h-4 text-[#D39758] shrink-0" />
                   <span className="truncate">{msg.attachedFileName}</span>
                 </div>
               )}
 
-              {/* Off-topic indicator */}
+              {/* Off-topic notice banner */}
               {msg.offTopic && (
-                <div className="flex items-center gap-1.5 mb-2 text-orange-700">
-                  <span className="text-base">⚖️</span>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider">Law-related questions only</span>
+                <div className="neu-recessed bg-[#E5D8CB] rounded-[14px] p-3 sm:p-3.5 mb-3.5 border border-[#C58B3C]/40 flex items-center gap-2 text-xs text-[#5C4535]">
+                  <ScaleIcon className="w-4 h-4 text-[#C58B3C] shrink-0" />
+                  <span className="font-lora font-semibold uppercase tracking-wider text-[#34150F]">
+                    Philippine Legal Questions Only
+                  </span>
                 </div>
               )}
 
-              <div className="whitespace-pre-wrap">{msg.content}</div>
+              {/* Message Content */}
+              <div
+                className={`whitespace-pre-wrap leading-relaxed ${msg.role === 'user'
+                  ? 'font-inter text-sm sm:text-[14.5px]'
+                  : 'font-lora text-sm sm:text-[15px] text-[#34150F] font-normal'
+                  }`}
+              >
+                {msg.content}
+              </div>
 
-              {/* Legal Citations Chips */}
+              {/* Legal Citations & Authorities Chips */}
               {msg.citations && msg.citations.length > 0 && (
-                <div className="mt-4 pt-3 border-t border-[#D9C7B2]/70 space-y-1.5">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-[#C58B3C]">
-                    Legal Citations &amp; Authorities:
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
+                <div className="mt-5 pt-4 border-t border-[#A89685]/30 space-y-2">
+                  <div className="flex items-center gap-1.5 text-[10.5px] font-lora font-bold text-[#C58B3C] tracking-wide uppercase">
+                    <span>🏛️</span>
+                    <span>Philippine Legal Authorities Cited</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
                     {msg.citations.map((c, i) => (
-                      <span
+                      <div
                         key={i}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#E4D7C5] text-[#3E2A1E] text-[10px] font-medium border border-[#D5C2AB]"
+                        className="neu-raised-sm bg-[#E5D8CB] px-3 py-1.5 rounded-[10px] text-[11px] font-inter text-[#34150F] inline-flex items-center gap-2 select-none"
                       >
-                        🏛️ {c.citation}: {c.title}
-                      </span>
+                        <span className="font-semibold text-[#34150F]">{c.citation}</span>
+                        <span className="text-[#A89685] select-none">|</span>
+                        <span className="text-[#5C4535]">{c.title}</span>
+                      </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Find a Lawyer Banner (Escalation / Post-Prompt Action) — with smart field filter & descending sort */}
+              {/* Escalation / Post-Prompt Action Card */}
               {msg.role === 'assistant' && !msg.offTopic && (
-                <div className="mt-4 p-3.5 rounded-xl bg-[#E8DAC9] border border-[#C58B3C]/40 flex items-start sm:items-center justify-between gap-3 flex-col sm:flex-row shadow-[inset_1px_1px_3px_rgba(255,255,255,0.7),2px_2px_6px_rgba(0,0,0,0.05)]">
-                  <div className="flex items-start gap-2.5 text-xs text-[#34150F]">
-                    <div className="p-1.5 rounded-lg bg-[#DFC5A4] text-[#34150F] shrink-0 mt-0.5 shadow-sm">
-                      <FindLawyerIcon className="w-4 h-4 text-[#C58B3C]" />
+                <div className="mt-5 p-4 sm:p-4.5 rounded-[18px] neu-recessed bg-[#E5D8CB] border border-[#C58B3C]/35 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3 text-xs text-[#34150F]">
+                    <div className="neu-raised-sm size-10 rounded-full bg-[#E5D8CB] text-[#C58B3C] flex items-center justify-center shrink-0 mt-0.5">
+                      <FindLawyerIcon className="w-5 h-5 text-[#C58B3C]" />
                     </div>
                     <div>
-                      <span className="font-medium">
+                      <p className="font-lora font-bold text-sm text-[#34150F]">
                         {msg.escalate
-                          ? 'This matter involves nuanced legal implications. Would you like to consult a licensed attorney?'
-                          : 'Need formal legal counsel for this matter? Connect with a verified attorney.'}
-                      </span>
+                          ? 'Consult an IBP-Accredited Attorney'
+                          : 'Connect with a Verified Attorney'}
+                      </p>
+                      <p className="font-inter text-xs text-[#5C4535] mt-0.5 leading-relaxed">
+                        {msg.escalate
+                          ? 'This matter involves nuanced legal implications under Philippine jurisprudence. Formal legal representation is advised.'
+                          : 'Need formal legal counsel or representation for this case? Connect with a verified attorney.'}
+                      </p>
                       {msg.suggestedFilters?.specialization && (
-                        <p className="text-[11px] text-[#7D6855] mt-0.5">
-                          Filtered for <strong>{msg.suggestedFilters.specialization}</strong> lawyers (sorted in descending order).
-                        </p>
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <span className="font-inter text-[11px] text-[#7A6756]">Suggested specialty:</span>
+                          <span className="neu-raised-sm bg-[#E5D8CB] px-2.5 py-0.5 rounded-full font-lora text-[10px] font-semibold text-[#D39758]">
+                            {msg.suggestedFilters.specialization}
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleFindLawyer(msg.suggestedFilters)}
-                    className="shrink-0 px-4 py-2 rounded-lg bg-[#C58B3C] hover:bg-[#B3792E] active:scale-95 text-white text-xs font-semibold transition-all flex items-center gap-1.5 shadow-md"
+                    className="neu-btn-caramel shrink-0 px-4.5 py-2.5 rounded-[12px] text-white text-xs font-inter font-semibold transition-all flex items-center gap-2 shadow-md cursor-pointer active:scale-95"
                   >
-                    <FindLawyerIcon className="w-3.5 h-3.5" />
-                    Find a Lawyer
+                    <FindLawyerIcon className="w-4 h-4" />
+                    <span>Find a Lawyer</span>
                   </button>
                 </div>
               )}
 
+              {/* Timestamp */}
               <div
-                className={`text-[9px] mt-2 text-right ${
-                  msg.role === 'user' ? 'text-[#FAF6F0]/60' : 'text-[#8E7E70]'
-                }`}
+                className={`text-[10px] mt-2.5 text-right font-inter ${msg.role === 'user' ? 'text-[#FAF6F0]/60' : 'text-[#8E7E70]'
+                  }`}
               >
                 {msg.timestamp}
               </div>
             </div>
 
+            {/* User Avatar */}
             {msg.role === 'user' && (
-              <div className="w-8 h-8 rounded-full bg-[#34150F] flex items-center justify-center text-[#ded7cb] shrink-0 mt-1">
+              <div className="size-9 rounded-full bg-[#34150F] text-[#ded7cb] flex items-center justify-center shrink-0 mt-1 shadow-sm">
                 <UserCircleIcon className="w-5 h-5" />
               </div>
             )}
           </div>
         ))}
 
+        {/* Loading / Analyzing Indicator */}
         {isLoading && (
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-[#D4C1AB] flex items-center justify-center text-[#C58B3C] shrink-0 mt-1">
+          <div className="flex items-start gap-3 justify-start">
+            <div className="neu-raised-sm size-9 rounded-full bg-[#E5D8CB] text-[#C58B3C] flex items-center justify-center shrink-0 mt-1 shadow-sm">
               <AIAssistantIcon className="w-4 h-4" />
             </div>
-            <div className="bg-[#EFE5D8] rounded-2xl rounded-tl-none p-4 text-xs text-[#7A6756] shadow-[4px_4px_12px_rgba(0,0,0,0.05),-4px_-4px_12px_rgba(255,255,255,0.8)] border border-[#E8DCCB]/60 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#C58B3C] animate-ping" />
+            <div className="neu-raised bg-[#E5D8CB] rounded-[22px] rounded-tl-sm px-5 py-4 text-xs sm:text-sm text-[#5C4535] flex items-center gap-3 font-lora italic">
+              <span className="size-2 rounded-full bg-[#C58B3C] animate-ping" />
               <span>Analyzing Philippine statutes &amp; Supreme Court jurisprudence…</span>
             </div>
           </div>
@@ -479,17 +619,19 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Bottom Sticky Input Bar */}
-      <div className="pt-3 border-t border-[#D8C6B0] space-y-2">
+      {/* Bottom Sticky Input Bar — Extended Width */}
+      <div className="shrink-0 pt-3 border-t border-[#D8C6B0]/60 space-y-2">
         {/* Attachment preview strip */}
         {attachedFile && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#EFE5D8] border border-[#D8CAAD]/70 text-xs text-[#34150F]">
-            <svg className="w-4 h-4 text-[#C58B3C] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-            </svg>
-            <span className="truncate flex-1">{attachedFile.name}</span>
-            <span className="text-[#7D6855]">({(attachedFile.size / 1024).toFixed(0)} KB)</span>
-            <button type="button" onClick={removeAttachment} className="text-[#7D6855] hover:text-red-600 transition-colors ml-2">
+          <div className="neu-raised-sm bg-[#E5D8CB] flex items-center gap-2.5 px-3.5 py-2 rounded-[12px] text-xs font-inter text-[#34150F]">
+            <DocumentTextIcon className="w-4 h-4 text-[#C58B3C] shrink-0" />
+            <span className="truncate flex-1 font-medium">{attachedFile.name}</span>
+            <span className="text-[#7A6756]">({(attachedFile.size / 1024).toFixed(0)} KB)</span>
+            <button
+              type="button"
+              onClick={removeAttachment}
+              className="text-[#7A6756] hover:text-red-700 transition-colors ml-2 p-0.5 cursor-pointer"
+            >
               ✕
             </button>
           </div>
@@ -502,17 +644,22 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
           }}
           className="w-full"
         >
-          <div className="relative flex items-center w-full rounded-full bg-[#E4D7C5] shadow-[inset_2px_2px_5px_rgba(0,0,0,0.12),inset_-2px_-2px_5px_rgba(255,255,255,0.7)] px-3 py-2.5 transition-all focus-within:ring-2 focus-within:ring-[#C58B3C]/50">
-            <button
+          <div className="neu-recessed bg-[#E5D8CB] relative flex items-center w-full h-13 sm:h-15 rounded-[16px] px-3.5 sm:px-4.5 transition-all focus-within:ring-2 focus-within:ring-[#B9833C]/40">
+            {/* Attachment Plus Button — Raised Extruded Circle with Tactile Animation */}
+            <motion.button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="w-8 h-8 rounded-full bg-[#EFE5D8] flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] shadow-sm transition-colors shrink-0"
-              title="Attach document"
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+              className="neu-raised-sm size-9 sm:size-10 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] cursor-pointer shrink-0 focus:outline-none transition-colors"
+              title="Attach document (Max 10MB)"
+              aria-label="Attach document"
             >
-              <PlusCircleIcon className="w-4 h-4" />
-            </button>
+              <PlusIcon className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+            </motion.button>
 
-            {/* Hidden file input */}
+            {/* Hidden native input */}
             <input
               ref={fileInputRef}
               type="file"
@@ -521,29 +668,48 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
               onChange={handleFileChange}
             />
 
+            {/* Extended Text Input */}
             <input
               type="text"
               value={inputQuery}
               onChange={(e) => setInputQuery(e.target.value)}
               placeholder="Ask a follow-up legal question…"
-              className="w-full bg-transparent text-[#34150F] placeholder-[#8C7A6B] text-xs sm:text-sm focus:outline-none px-4"
+              className="w-full bg-transparent text-[#34150F] placeholder-[#9A8270]/70 font-lora text-sm sm:text-base focus:outline-none px-3 font-normal"
               disabled={isLoading}
             />
 
+            {/* Submit Button with Animated Tilt */}
             <button
               type="submit"
-              disabled={(!inputQuery.trim() && !attachedFile) || isLoading}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] disabled:opacity-30 transition-colors shrink-0"
+              disabled={!hasPrompt || isLoading}
+              onMouseEnter={() => setIsSubmitHovered(true)}
+              onMouseLeave={() => setIsSubmitHovered(false)}
+              className="p-1.5 flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] disabled:opacity-35 transition-colors focus:outline-none cursor-pointer disabled:cursor-not-allowed shrink-0"
               aria-label="Send follow-up"
             >
-              <SendPaperPlaneIcon className="w-4 h-4" />
+              <motion.div
+                animate={
+                  hasPrompt && isSubmitHovered
+                    ? { rotate: -30, y: -2, x: 2 }
+                    : { rotate: 0, y: 0, x: 0 }
+                }
+                transition={{
+                  type: 'spring',
+                  stiffness: 380,
+                  damping: 22,
+                }}
+                whileTap={hasPrompt ? { scale: 0.9 } : undefined}
+                className="flex items-center justify-center origin-center"
+              >
+                <SendPaperPlaneIcon className="w-5 h-5" />
+              </motion.div>
             </button>
           </div>
         </form>
 
-        <p className="text-[10px] sm:text-[11px] text-[#8E7E70] text-center">
+        <p className="font-inter text-[10.5px] sm:text-[11px] text-[#8E7E70] text-center font-light leading-relaxed">
           Disclaimer: Justicia AI provides general legal information based on Philippine Statutes and
-          SC Jurisprudence, not formal Attorney-Client advice
+          SC Jurisprudence, not formal Attorney-Client advice.
         </p>
       </div>
     </div>
