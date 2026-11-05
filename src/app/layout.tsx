@@ -23,13 +23,11 @@ const geistMono = Geist_Mono({
 const cinzel = Cinzel({
   variable: '--font-cinzel',
   subsets: ['latin'],
-  weight: ['400', '600', '700', '800', '900'],
 });
 
 const cormorant = Cormorant_Garamond({
   variable: '--font-cormorant',
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
 });
 
 const cormorantUnicase = Cormorant_Unicase({
@@ -42,14 +40,12 @@ const cormorantUnicase = Cormorant_Unicase({
 const lora = Lora({
   variable: '--font-lora',
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
   display: 'swap',
 });
 
 const inter = Inter({
   variable: '--font-inter',
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
   display: 'swap',
 });
 

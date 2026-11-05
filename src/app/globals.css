@@ -113,6 +113,33 @@ body {
   background: #c59341;
 }
 
+.neu-scrollbar-discrete::-webkit-scrollbar {
+  width: 4px;
+}
+
+.neu-scrollbar-discrete::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 18px 0;
+  /* keeps the thumb away from the rounded corners */
+}
+
+.neu-scrollbar-discrete::-webkit-scrollbar-thumb {
+  background: rgba(52, 21, 18, 0.18);
+  border-radius: 9999px;
+}
+
+.neu-scrollbar-discrete:hover::-webkit-scrollbar-thumb {
+  background: rgba(52, 21, 18, 0.35);
+}
+
+/* Firefox fallback */
+@supports not selector(::-webkit-scrollbar) {
+  .neu-scrollbar-discrete {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(52, 21, 18, 0.25) transparent;
+  }
+}
+
 /* ─── Authentic Neumorphic Design Tokens (Figma Spec) ────────────────────────── */
 
 /* Extruded large main cards (Consultation card, major containers) */
@@ -157,6 +184,17 @@ body {
     -5px -5px 12px rgba(255, 255, 255, 0.9),
     -2px -2px 4px #FFFFFF;
   border: none;
+}
+
+/* Warm peach recessed / inset inner plates (Metrics box in Lawyer Card) */
+.neu-plate-inset {
+  background-color: #DFC5A4;
+  border: none;
+  box-shadow:
+    inset 3px 3px 6px rgba(145, 115, 88, 0.45),
+    inset 1.5px 1.5px 3px rgba(145, 115, 88, 0.25),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.85),
+    inset -1.5px -1.5px 3px rgba(255, 255, 255, 0.95);
 }
 
 /* Monolithic extruded button on peach plate (e.g. Message button) */
@@ -243,6 +281,43 @@ body {
   box-shadow: inset 2px 2px 6px rgba(140, 96, 32, 0.6);
 }
 
+/* Tactile Capsule Button with real physical plunge & inset shadow */
+.neu-btn-tactile {
+  background-color: rgba(211, 151, 88, 0.30);
+  border: none;
+  box-shadow:
+    5px 5px 13px 0 rgba(206, 194, 183, 0.90),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.20),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
+  transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 0.15s ease;
+  will-change: transform, box-shadow;
+}
+
+.neu-btn-tactile:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    7px 8px 16px 0 rgba(206, 194, 183, 0.95),
+    -6px -6px 12px 0 rgba(252, 238, 223, 0.95),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.40),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.40);
+  filter: brightness(1.02);
+}
+
+.neu-btn-tactile:active {
+  transform: translateY(2px) scale(0.97);
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
+    inset 4px 4px 9px 0 rgba(180, 140, 100, 0.70),
+    inset -4px -4px 8px 0 rgba(255, 255, 255, 0.85);
+  transition-duration: 0.06s;
+}
+
 /* Dark espresso action button (View Details) */
 .neu-btn-espresso {
   background-color: #4A2E25;
@@ -288,6 +363,24 @@ body {
   filter: brightness(1.01);
 }
 
+/* Raised containers with highlight tint (#D39758 at 30% opacity) */
+.neu-raised-highlight {
+  background-color: rgba(211, 151, 88, 0.30);
+  border: none;
+  box-shadow:
+    8px 8px 20px 0 rgba(206, 194, 183, 0.90),
+    -8px -8px 16px 0 rgba(252, 238, 223, 0.90),
+    8px -8px 16px 0 rgba(206, 194, 183, 0.20),
+    -8px 8px 16px 0 rgba(206, 194, 183, 0.20),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
+  transition: box-shadow 0.2s ease, filter 0.2s ease, background-color 0.2s ease;
+}
+
+.neu-raised-highlight:hover {
+  filter: brightness(1.01);
+}
+
 /* Raised role buttons, cards, pills (Figma spec, small/medium raised) */
 .neu-raised-sm {
   background-color: #E5D8CB;
@@ -306,6 +399,24 @@ body {
   filter: brightness(1.02);
 }
 
+/* Small raised containers/pills with highlight tint (#D39758 at 30% opacity) */
+.neu-raised-highlight-sm {
+  background-color: rgba(211, 151, 88, 0.30);
+  border: none;
+  box-shadow:
+    5px 5px 13px 0 rgba(206, 194, 183, 0.90),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.20),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
+  transition: box-shadow 0.2s ease, filter 0.2s ease, background-color 0.2s ease;
+}
+
+.neu-raised-highlight-sm:hover {
+  filter: brightness(1.02);
+}
+
 /* Recessed / Pressed-in surface (matches #E5D8CB surface) */
 .neu-recessed,
 .neu-pressed {
@@ -318,6 +429,35 @@ body {
     inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
     inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
     inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20);
+}
+
+/* Default recessed card on #E5D8CB, smoothly transforms to raised with highlight on hover */
+.neu-card-recessed-to-rise {
+  background-color: #E5D8CB;
+  border: none;
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20);
+  transition: background-color 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 0.2s ease;
+  will-change: background-color, box-shadow;
+}
+
+.neu-card-recessed-to-rise:hover {
+  background-color: rgba(211, 151, 88, 0.30);
+  box-shadow:
+    8px 8px 20px 0 rgba(206, 194, 183, 0.90),
+    -8px -8px 16px 0 rgba(252, 238, 223, 0.90),
+    8px -8px 16px 0 rgba(206, 194, 183, 0.20),
+    -8px 8px 16px 0 rgba(206, 194, 183, 0.20),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
+  filter: brightness(1.015);
 }
 
 /* Interactive Lawyer Card: Recessed at rest, smoothly rises into raised look on hover, tactile press on click */
@@ -333,8 +473,8 @@ body {
     inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20);
   transform: translateY(0) scale(1);
   transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
-              box-shadow 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
-              filter 0.2s ease;
+    box-shadow 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 0.2s ease;
   will-change: transform, box-shadow;
 }
 

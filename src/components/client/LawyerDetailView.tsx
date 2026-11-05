@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'motion/react';
 import { createClient } from '@/lib/supabase/client';
 import type { PublicLawyerProfile } from './LawyerGrid';
 import {
@@ -11,7 +12,6 @@ import {
   createDocumentFolderAction,
   uploadDocumentFileAction,
 } from '@/app/actions/consultationActions';
-import { useRef } from 'react';
 
 export interface ReviewItem {
   id: number | string;
@@ -26,6 +26,7 @@ interface LawyerDetailViewProps {
   lawyer: PublicLawyerProfile;
   onBack?: () => void;
   defaultTab?: 'about' | 'reviews' | 'booking' | 'cases';
+  onEdit?: () => void;
 }
 
 type TabType = 'about' | 'reviews' | 'booking' | 'cases';
@@ -41,10 +42,64 @@ const getTodayPH = () => {
   return { year: get('year'), month: get('month') - 1, day: get('day') };
 };
 
+
+// ─── Neumorphic SVG Icon Helpers (Zero AI Emojis) ───────────────────────────
+
+function StarIcon({ filled = false, className = "w-4 h-4" }: { filled?: boolean; className?: string }) {
+  return (
+    <svg className={`${className} ${filled ? 'text-[#C58B3C] fill-[#C58B3C]' : 'text-[#CBB8A4] fill-transparent stroke-current'}`} viewBox="0 0 20 20" strokeWidth="1.2">
+      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+    </svg>
+  );
+}
+
+function ScalesIcon({ className = "w-3.5 h-3.5 text-[#C58B3C] shrink-0" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3v18M7 21h10M3 7h18" />
+      <path d="M6 7l-3 7c0 1.5 1.5 2.5 3 2.5s3-1 3-2.5L6 7z" />
+      <path d="M18 7l-3 7c0 1.5 1.5 2.5 3 2.5s3-1 3-2.5L18 7z" />
+    </svg>
+  );
+}
+
+function CheckCircleIcon({ className = "w-5 h-5 text-emerald-700 shrink-0" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+function PaperclipIcon({ className = "w-3.5 h-3.5 text-[#C58B3C] shrink-0" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.373L8.558 18.315a1.5 1.5 0 0 1-2.121-2.121l7.693-7.693" />
+    </svg>
+  );
+}
+
+function FolderIcon({ className = "w-4 h-4 text-[#C58B3C] shrink-0" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+    </svg>
+  );
+}
+
+function FileDocIcon({ className = "w-4 h-4 text-[#7A6756] shrink-0" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+    </svg>
+  );
+}
+
 export function LawyerDetailView({
   lawyer,
   onBack,
   defaultTab = 'about',
+  onEdit,
 }: LawyerDetailViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
 
@@ -95,6 +150,24 @@ export function LawyerDetailView({
   const [submittingBooking, setSubmittingBooking] = useState<boolean>(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
+  const bioRef = useRef<HTMLDivElement>(null);
+  const [showBioFade, setShowBioFade] = useState(false);
+
+  const updateBioFade = useCallback(() => {
+    const el = bioRef.current;
+    if (!el) return;
+    // true only if there's more content below the visible area
+    setShowBioFade(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+  }, []);
+
+  useEffect(() => {
+    const el = bioRef.current;
+    if (!el) return;
+    updateBioFade();
+    const ro = new ResizeObserver(updateBioFade);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [updateBioFade, lawyer.about]);
   // ─── Document Vault Picker Handlers ──────────────────────────────────────────
   const handleOpenDocPicker = async () => {
     setShowDocPickerModal(true);
@@ -239,61 +312,126 @@ export function LawyerDetailView({
   };
 
   // ─── Reviews State ────────────────────────────────────────────────────────────
+  const LOREM_REVIEW_BODY =
+    'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
+
   const initialReviews: ReviewItem[] = [
     {
       id: 0,
       name: 'Clyde Justine Rosal',
       stars: 5,
       date: '10/17/2026',
-      content:
-        'Atty. provided crystal clear guidance on our Makati lease deposit recovery. We drafted a formal demand letter that settled the matter amicably within 10 days. Very professional, responsive, and thorough in explaining our legal rights under the Civil Code.',
-      reply: 'Thank you Clyde! Glad we were able to resolve your lease refund promptly without the expense of prolonged court litigation.',
+      content: LOREM_REVIEW_BODY,
     },
     {
       id: 1,
       name: 'Benideck Longakit',
       stars: 5,
-      date: '10/15/2026',
-      content:
-        'Exceptional knowledge of DOLE and NLRC labor standards. Guided our team through the mandatory conciliation process smoothly and protected our position on separation pay.',
+      date: '10/17/2026',
+      content: LOREM_REVIEW_BODY,
     },
     {
       id: 2,
       name: 'Christopher John Rubio',
-      stars: 4,
-      date: '10/12/2026',
-      content:
-        'Prompt and insightful consultation regarding property boundary questions. Delivered actionable advice and clear statutory citations for Land Registration Act compliance.',
-      reply: 'Much appreciated Christopher. Ensuring Torrens title clean chain of custody is always the safest course.',
+      stars: 5,
+      date: '10/17/2026',
+      content: LOREM_REVIEW_BODY,
     },
     {
       id: 3,
       name: 'Axziel Jay A. Bartolabac',
       stars: 5,
-      date: '10/08/2026',
-      content:
-        'Very reassuring and articulate counsel. Handled our family estate settlement inquiry with utmost competence and sensitivity. Highly recommended attorney.',
+      date: '10/17/2026',
+      content: LOREM_REVIEW_BODY,
     },
     {
       id: 4,
       name: 'Patricia Mae Santos',
-      stars: 4,
-      date: '09/28/2026',
-      content:
-        'Detailed contract review for our business partnership. Caught two potential ambiguous liability clauses before we signed. Worth every peso.',
+      stars: 5,
+      date: '10/14/2026',
+      content: LOREM_REVIEW_BODY,
     },
     {
       id: 5,
       name: 'Rafael D. Mercado',
       stars: 5,
-      date: '09/19/2026',
-      content:
-        'Superb attorney. Extremely fast response time and explained Philippine jurisprudence in a way that is easy to understand for non-lawyers.',
+      date: '10/12/2026',
+      content: LOREM_REVIEW_BODY,
+    },
+    {
+      id: 6,
+      name: 'Maria Cristina Veloso',
+      stars: 5,
+      date: '10/08/2026',
+      content: LOREM_REVIEW_BODY,
+    },
+    {
+      id: 7,
+      name: 'Eduardo M. Tan',
+      stars: 5,
+      date: '10/03/2026',
+      content: LOREM_REVIEW_BODY,
+    },
+    {
+      id: 8,
+      name: 'Danilo S. Fernandez',
+      stars: 5,
+      date: '09/27/2026',
+      content: LOREM_REVIEW_BODY,
+    },
+    {
+      id: 9,
+      name: 'Giselle Gomez-Lim',
+      stars: 5,
+      date: '09/20/2026',
+      content: LOREM_REVIEW_BODY,
+    },
+    {
+      id: 10,
+      name: 'Jerome Paulino',
+      stars: 5,
+      date: '09/15/2026',
+      content: LOREM_REVIEW_BODY,
+    },
+    {
+      id: 11,
+      name: 'Rowena Castillo',
+      stars: 5,
+      date: '09/10/2026',
+      content: LOREM_REVIEW_BODY,
+    },
+    {
+      id: 12,
+      name: 'Vicente Morales',
+      stars: 5,
+      date: '08/28/2026',
+      content: LOREM_REVIEW_BODY,
+    },
+    {
+      id: 13,
+      name: 'Lourdes B. Reyes',
+      stars: 5,
+      date: '08/20/2026',
+      content: LOREM_REVIEW_BODY,
+    },
+    {
+      id: 14,
+      name: 'Francis Alcantara',
+      stars: 4,
+      date: '08/14/2026',
+      content: LOREM_REVIEW_BODY,
+    },
+    {
+      id: 15,
+      name: 'Katrina Mae Dizon',
+      stars: 5,
+      date: '08/02/2026',
+      content: LOREM_REVIEW_BODY,
     },
   ];
 
   const [reviewsList, setReviewsList] = useState<ReviewItem[]>(initialReviews);
-  const [selectedReviewStar, setSelectedReviewStar] = useState<number | 'all'>('all');
+  const [selectedReviewStar, setSelectedReviewStar] = useState<number | 'all'>(5);
   const [reviewPage, setReviewPage] = useState<number>(1);
   const [helpfulCounts, setHelpfulCounts] = useState<{ [id: string | number]: number }>({
     0: 12,
@@ -653,8 +791,9 @@ export function LawyerDetailView({
       ? reviewsList.reduce((acc, r) => acc + r.stars, 0) / reviewsList.length
       : 4.9;
 
-  const REVIEWS_PER_PAGE = 3;
-  const totalReviewPages = Math.ceil(filteredReviews.length / REVIEWS_PER_PAGE) || 1;
+  const REVIEWS_PER_PAGE = 4;
+  const totalReviewsCount = 53 + (reviewsList.length - initialReviews.length);
+  const totalReviewPages = Math.max(1, Math.ceil(filteredReviews.length / REVIEWS_PER_PAGE));
   const pagedReviews = filteredReviews.slice(
     (reviewPage - 1) * REVIEWS_PER_PAGE,
     reviewPage * REVIEWS_PER_PAGE
@@ -693,16 +832,16 @@ export function LawyerDetailView({
   ];
 
   return (
-    <div className="max-w-[1180px] mx-auto px-2 sm:px-6 py-4 space-y-6">
-      {/* ─── Back Navigation Link ────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between pb-1">
+    <div className="space-y-6 sm:space-y-7 select-none animate-in fade-in duration-200">
+      {/* ─── Back Navigation Link (Encapsulated with Rise Look) ────────────────── */}
+      <div className="flex items-center justify-start pb-1">
         {onBack ? (
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#5C4535] hover:text-[#23150F] transition-colors"
+            className="neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 rounded-[12px] px-4 py-2 inline-flex items-center gap-2.5 font-lora text-xs sm:text-[13px] font-semibold text-[#341512]/80 hover:text-[#341512] transition-all hover:brightness-102 active:scale-97 cursor-pointer select-none"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+            <svg className="w-4 h-4 text-[#341512]/80 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
             <span>Back to Lawyers Directory</span>
@@ -710,9 +849,9 @@ export function LawyerDetailView({
         ) : (
           <Link
             href="/client/lawyers"
-            className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#5C4535] hover:text-[#23150F] transition-colors"
+            className="neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 rounded-[12px] px-4 py-2 inline-flex items-center gap-2.5 font-lora text-xs sm:text-[13px] font-semibold text-[#341512]/80 hover:text-[#341512] transition-all hover:brightness-102 active:scale-97 cursor-pointer select-none"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+            <svg className="w-4 h-4 text-[#341512]/80 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
             <span>Back to Lawyers Directory</span>
@@ -720,43 +859,43 @@ export function LawyerDetailView({
         )}
       </div>
 
-      {/* ─── Lawyer Banner Header Card (Matches Figma Plate Exactly) ───────── */}
-      <div
-        className="w-full rounded-[26px] p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 transition-all"
-        style={{
-          backgroundColor: '#DFC5A4',
-          boxShadow: '10px 12px 28px rgba(165, 135, 105, 0.45), 3px 4px 8px rgba(165, 135, 105, 0.25), -10px -10px 24px rgba(255, 255, 255, 0.95), -3px -3px 6px #FFFFFF',
-        }}
-      >
-        <div className="flex items-center gap-5 sm:gap-6">
-          {/* Avatar circle with dark brown border */}
-          <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full border-[2.75px] border-[#362519] flex items-center justify-center shrink-0">
-            <svg
-              className="w-12 h-12 sm:w-14 sm:h-14 text-[#362519]"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="8" r="4" />
-              <path d="M5.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6" />
-            </svg>
-          </div>
+      {/* ─── Lawyer Banner Header Card ───────── */}
+      <div className="neu-raised-highlight w-full rounded-[20px] sm:rounded-[22px] px-6 py-5 sm:px-8 sm:py-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 transition-all select-none">
+        <div className="flex items-center gap-4 sm:gap-6">
+          {/* Avatar */}
+          {lawyer.photoUrl ? (
+            <img
+              src={lawyer.photoUrl}
+              alt={lawyer.fullName}
+              className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-full shrink-0"
+            />
+          ) : (
+            <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center text-[#341512]/80">
+              <svg className="w-full h-full" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="4.2">
+                <circle cx="32" cy="32" r="28" />
+                <circle cx="32" cy="24" r="8" />
+                <path d="M16 48c0-8.837 7.163-14 16-14s16 5.163 16 14" strokeLinecap="round" />
+              </svg>
+            </div>
+          )}
 
           {/* Lawyer Info */}
-          <div className="space-y-0.5">
-            <h1 className="font-cormorant text-2xl sm:text-3xl font-bold text-[#23150F] leading-tight">
-              {lawyer.fullName}, Ll.B.
+          <div className="space-y-1">
+            <h1 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80 leading-snug">
+              {lawyer.fullName}{lawyer.fullName.includes(',') ? '' : ', Ll.B.'}
             </h1>
-            <p className="text-xs sm:text-[13px] text-[#5C4535] font-medium leading-tight">
-              Roll No. {lawyer.rollNumber || '58942'} | IBP {lawyer.ibpChapter?.toUpperCase() || 'MAKATI'}
+            <p className="text-xs sm:text-[13px] text-[#341512]/80 font-inter font-normal leading-tight">
+              Roll No. {lawyer.rollNumber || '58942'} <span className="mx-2 text-[#341512]/80">|</span> IBP {lawyer.ibpChapter?.toUpperCase() || 'MAKATI'}
             </p>
-            <p className="text-xs text-[#5C4535] font-medium">
-              ★ {averageRating.toFixed(1)} ({reviewsList.length} Reviews) • {lawyer.experienceYears ?? 9} years of practice
-            </p>
-            <p className="text-xs text-[#5C4535] font-medium">
+            <div className="flex items-center gap-1.5 text-xs sm:text-[13px] text-[#341512]/80 font-inter">
+              <svg className="w-3.5 h-3.5 fill-transparent stroke-current text-[#341512]/80" viewBox="0 0 20 20" strokeWidth="1.6">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+              </svg>
+              <span>{averageRating.toFixed(1)} ({totalReviewsCount} Reviews)</span>
+              <span className="mx-1">•</span>
+              <span>{lawyer.experienceYears ?? 9} years of practice</span>
+            </div>
+            <p className="text-xs sm:text-[13px] text-[#341512]/80 font-inter">
               {lawyer.practiceAreas && lawyer.practiceAreas.length > 0
                 ? lawyer.practiceAreas.join(' • ')
                 : 'Labor & Employment • Corporate • Civil Law'}
@@ -765,116 +904,87 @@ export function LawyerDetailView({
         </div>
 
         {/* Rate on right side */}
-        <div className="md:text-right shrink-0">
-          <div className="flex items-baseline md:justify-end">
-            <span className="font-cormorant text-3xl sm:text-4xl font-bold text-[#23150F]">
-              ₱{standardFee.toLocaleString()}
-            </span>
-            <span className="text-sm sm:text-base text-[#23150F] font-normal ml-1">/per hour</span>
-          </div>
+        <div className="flex items-baseline md:justify-end gap-1 shrink-0 self-start md:self-center">
+          <span className="font-lora text-2xl sm:text-3xl font-bold text-[#341512]/80">
+            ₱{standardFee.toLocaleString()}
+          </span>
+          <span className="text-xs sm:text-sm font-inter text-[#341512]/80 font-normal">
+            /per hour
+          </span>
         </div>
       </div>
 
-      {/* ─── Navigation Tabs (Exact Figma Layout & Soft Drop Shadow Pill) ───── */}
-      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-6 pt-2 pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab('about')}
-          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${activeTab === 'about'
-            ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
-            : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
-            }`}
-        >
-          About
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('reviews')}
-          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${activeTab === 'reviews'
-            ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
-            : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
-            }`}
-        >
-          Reviews
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('booking')}
-          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${activeTab === 'booking'
-            ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
-            : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
-            }`}
-        >
-          Consultation Booking
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('cases')}
-          className={`font-cormorant text-base sm:text-lg font-semibold transition-all ${activeTab === 'cases'
-            ? 'bg-[#DFC5A4] text-[#23150F] font-bold px-7 sm:px-8 py-2 rounded-full shadow-[3px_4px_10px_rgba(165,135,105,0.4),-2px_-2px_6px_rgba(255,255,255,0.85)]'
-            : 'text-[#4A3525] hover:text-[#23150F] px-5 py-2'
-            }`}
-        >
-          Cases Handled
-        </button>
+      {/* ─── Navigation Tabs ───── */}
+      <div className="flex flex-wrap items-center gap-6 sm:gap-10 pt-1 pb-1 select-none">
+        {[
+          { key: 'about', label: 'About' },
+          { key: 'reviews', label: 'Reviews' },
+          { key: 'booking', label: 'Consultation Booking' },
+          { key: 'cases', label: 'Cases Handled' },
+        ].map((tab) => {
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key as TabType)}
+              className={`font-lora text-sm sm:text-base font-semibold transition-all cursor-pointer select-none ${isActive
+                ? 'neu-raised-highlight-sm rounded-[12px] px-6 py-2 text-[#341512]/80'
+                : 'px-2 py-1 text-[#341512]/80 hover:text-[#341512]'
+                }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* ─── TAB 1: ABOUT (Matches Image 4) ─────────────────────────────────── */}
+      {/* ─── TAB 1: ABOUT (Matches Figma Specs) ─────────────────────────────────── */}
       {activeTab === 'about' && (
         <div className="space-y-8 animate-in fade-in duration-150">
-          {/* Top Row: Bio (Left) & Consultation Rates (Right) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-            {/* Bio Card (8 cols) */}
-            <div
-              className="lg:col-span-8 rounded-[28px] p-7 sm:p-8 bg-[#ECE1D2] flex flex-col justify-center"
-              style={{
-                boxShadow:
-                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
-              }}
-            >
-              <p className="text-xs sm:text-[13px] text-[#3E2A1E] leading-relaxed text-justify">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-              </p>
+          {/* Top Row: Bio (flexible) & Consultation Rates (fixed width — edit the px value) */}
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_415px] gap-6 items-stretch">
+            {/* Bio Card */}
+            <div className="relative rounded-[20px] sm:rounded-[24px] neu-recessed bg-[#E5D8CB] flex flex-col max-h-[220px] sm:max-h-[235px] overflow-hidden">
+              <div
+                ref={bioRef}
+                onScroll={updateBioFade}
+                className="flex-1 min-h-0 overflow-y-auto neu-scrollbar-discrete space-y-3 py-6 sm:py-7 pl-6 sm:pl-7 pr-3 sm:pr-4 mr-1.5"
+              >
+                <p className="text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify font-inter">
+                  Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+                </p>
+              </div>
             </div>
 
-            {/* Consultation Rates Card (4 cols) */}
-            <div
-              className="lg:col-span-4 rounded-[28px] p-6 sm:p-7 flex flex-col justify-center space-y-4"
-              style={{
-                backgroundColor: '#DFC5A4',
-                boxShadow:
-                  '10px 12px 28px rgba(165, 135, 105, 0.45), 3px 4px 8px rgba(165, 135, 105, 0.25), -10px -10px 24px rgba(255, 255, 255, 0.95), -3px -3px 6px #FFFFFF',
-              }}
-            >
-              <h3 className="font-cormorant text-xl sm:text-2xl font-bold text-[#23150F] text-center">
+            {/* Consultation Rates Card */}
+            <div className="rounded-[20px] sm:rounded-[24px] px-6 py-6 sm:px-7 sm:py-7 neu-raised-highlight flex flex-col justify-center space-y-4 sm:space-y-5">
+              <h3 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80 text-center">
                 Consultation Rates:
               </h3>
 
-              <div className="space-y-3 pt-1">
-                <div className="flex justify-between items-baseline gap-2">
-                  <span className="text-xs sm:text-[13px] text-[#4A3525] font-medium">Initial Consultation (30 mins)</span>
-                  <div className="text-right shrink-0">
-                    <span className="font-bold text-xs sm:text-sm text-[#23150F]">₱{initialFee.toLocaleString()}</span>
-                    <span className="text-[11px] text-[#5C4535] ml-1">/per hour</span>
+              <div className="space-y-3.5 sm:space-y-4 font-inter text-[#341512]/80">
+                <div className="flex justify-between items-baseline gap-4">
+                  <span className="text-xs sm:text-[15px] font-lora font-medium text-[#341512]/80">Initial Consultation (30 mins)</span>
+                  <div className="text-right shrink-0 whitespace-nowrap">
+                    <span className="font-lora font-bold text-sm sm:text-base text-[#341512]/80">₱{initialFee.toLocaleString()}</span>
+                    <span className="text-xs sm:text-[13px] text-[#341512]/80 ml-0.5">/per hour</span>
                   </div>
                 </div>
 
-                <div className="flex justify-between items-baseline gap-2">
-                  <span className="text-xs sm:text-[13px] text-[#4A3525] font-medium">Standard Consultation (1 hr)</span>
-                  <div className="text-right shrink-0">
-                    <span className="font-bold text-xs sm:text-sm text-[#23150F]">₱{standardFee.toLocaleString()}</span>
-                    <span className="text-[11px] text-[#5C4535] ml-1">/per hour</span>
+                <div className="flex justify-between items-baseline gap-4">
+                  <span className="text-xs sm:text-[15px] font-lora font-medium text-[#341512]/80">Standard Consultation (1 hr)</span>
+                  <div className="text-right shrink-0 whitespace-nowrap">
+                    <span className="font-lora font-bold text-sm sm:text-base text-[#341512]/80">₱{standardFee.toLocaleString()}</span>
+                    <span className="text-xs sm:text-[13px] text-[#341512]/80 ml-0.5">/per hour</span>
                   </div>
                 </div>
 
-                <div className="flex justify-between items-baseline gap-2">
-                  <span className="text-xs sm:text-[13px] text-[#4A3525] font-medium">Extended Consultation (2 hrs)</span>
-                  <div className="text-right shrink-0">
-                    <span className="font-bold text-xs sm:text-sm text-[#23150F]">₱{extendedFee.toLocaleString()}</span>
-                    <span className="text-[11px] text-[#5C4535] ml-1">/per hour</span>
+                <div className="flex justify-between items-baseline gap-4">
+                  <span className="text-xs sm:text-[15px] font-lora font-medium text-[#341512]/80">Extended Consultation (2 hrs)</span>
+                  <div className="text-right shrink-0 whitespace-nowrap">
+                    <span className="font-lora font-bold text-sm sm:text-base text-[#341512]/80">₱{extendedFee.toLocaleString()}</span>
+                    <span className="text-xs sm:text-[13px] text-[#341512]/80 ml-0.5">/per hour</span>
                   </div>
                 </div>
               </div>
@@ -883,105 +993,108 @@ export function LawyerDetailView({
 
           {/* Professional Background Section */}
           <div className="space-y-4">
-            <h2 className="font-cormorant text-2xl font-bold text-[#23150F]">Professional Background</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80">Professional Background</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
               {/* Areas of Practice */}
-              <div
-                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-2.5"
-                style={{
-                  boxShadow:
-                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
-                }}
-              >
-                <h4 className="font-cormorant font-bold text-base text-[#23150F]">Areas of Practice</h4>
-                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed">
+              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
+                <div className="flex items-center gap-3.5">
+                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                  </svg>
+                  <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80">Areas of Practice</h4>
+                </div>
+                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed font-inter">
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
                   </li>
                 </ul>
               </div>
 
               {/* Legal Experience */}
-              <div
-                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-2.5"
-                style={{
-                  boxShadow:
-                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
-                }}
-              >
-                <h4 className="font-cormorant font-bold text-base text-[#23150F]">Legal Experience</h4>
-                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed">
+              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
+                <div className="flex items-center gap-3.5">
+                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m14 13-7.5 7.5a2.12 2.12 0 1 1-3-3L11 10" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m16 16 6-6" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m8 8 6-6" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m9 7 8 8" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m21 11-8-8" />
+                  </svg>
+                  <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80">Legal Experience</h4>
+                </div>
+                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed font-inter">
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
                   </li>
                 </ul>
               </div>
 
               {/* Consultation Services */}
-              <div
-                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-2.5"
-                style={{
-                  boxShadow:
-                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
-                }}
-              >
-                <h4 className="font-cormorant font-bold text-base text-[#23150F]">Consultation Services</h4>
-                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed">
+              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
+                <div className="flex items-center gap-3.5">
+                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 6.75 3.19-1.595A3 3 0 0 1 7.234 16H18a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v12.75Z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 16v2.25a2.25 2.25 0 0 1-2.25 2.25H9.75l-2.25 1.125" />
+                  </svg>
+                  <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80">Consultation Services</h4>
+                </div>
+                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed font-inter">
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
                   </li>
                 </ul>
               </div>
 
               {/* Philippine Bar Examination Passer */}
-              <div
-                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-2.5"
-                style={{
-                  boxShadow:
-                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
-                }}
-              >
-                <h4 className="font-cormorant font-bold text-base text-[#23150F]">
-                  Philippine Bar Examination Passer ({lawyer.barPasserYear ?? 2022})
-                </h4>
-                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed">
+              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
+                <div className="flex items-center gap-3.5">
+                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <circle cx="12" cy="8" r="5.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.5 13.5 17.5 21l-5.5-2.75L6.5 21l2-7.5" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 8 1.5 1.5 3-3" />
+                  </svg>
+                  <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80">
+                    Philippine Bar Examination Passer ({lawyer.barPasserYear ?? 2022})
+                  </h4>
+                </div>
+                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed font-inter">
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
                   </li>
                 </ul>
@@ -991,80 +1104,68 @@ export function LawyerDetailView({
 
           {/* Educational Background Section */}
           <div className="space-y-4">
-            <h2 className="font-cormorant text-2xl font-bold text-[#23150F]">Educational Background</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80">Educational Background</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
               {/* Card 1: Juris Doctor */}
-              <div
-                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-3"
-                style={{
-                  boxShadow:
-                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
-                }}
-              >
+              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
                 <div className="flex items-center gap-3.5">
                   {/* Scales of Justice Icon */}
-                  <svg className="w-8 h-8 text-[#23150F] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                     <path d="M12 3v18M7 21h10M3 7h18" />
                     <path d="M6 7l-3 7c0 1.5 1.5 2.5 3 2.5s3-1 3-2.5L6 7z" />
                     <path d="M18 7l-3 7c0 1.5 1.5 2.5 3 2.5s3-1 3-2.5L18 7z" />
                   </svg>
                   <div>
-                    <h4 className="font-cormorant font-bold text-base sm:text-lg text-[#23150F] leading-tight">
+                    <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80 leading-tight">
                       Juris Doctor (2017 - 2021)
                     </h4>
-                    <p className="text-xs text-[#7D6855]">University of the Philippines - Cebu</p>
+                    <p className="text-xs text-[#341512]/80 font-inter">University of the Philippines - Cebu</p>
                   </div>
                 </div>
 
-                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed pt-1">
+                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed pt-1 font-inter">
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
                   </li>
                 </ul>
               </div>
 
               {/* Card 2: Bachelor of Arts in Political Science */}
-              <div
-                className="rounded-[24px] p-6 bg-[#ECE1D2] space-y-3"
-                style={{
-                  boxShadow:
-                    '8px 8px 20px rgba(182, 155, 130, 0.35), -8px -8px 20px #FFFFFF, 2px 2px 6px rgba(182, 155, 130, 0.15)',
-                }}
-              >
+              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
                 <div className="flex items-center gap-3.5">
                   {/* Graduation Cap / Diploma Icon */}
-                  <svg className="w-8 h-8 text-[#23150F] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                     <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
                     <path d="M6 12v5c3 3 9 3 12 0v-5" />
                   </svg>
                   <div>
-                    <h4 className="font-cormorant font-bold text-base sm:text-lg text-[#23150F] leading-tight">
+                    <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80 leading-tight">
                       Bachelor of Arts in Political Science (2013 - 2017)
                     </h4>
-                    <p className="text-xs text-[#7D6855]">University of San Carlos - Main Campus</p>
+                    <p className="text-xs text-[#341512]/80 font-inter">University of San Carlos - Main Campus</p>
                   </div>
                 </div>
 
-                <ul className="space-y-1.5 text-xs text-[#3E2A1E] leading-relaxed pt-1">
+                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed pt-1 font-inter">
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
                     <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
                   </li>
                 </ul>
@@ -1074,180 +1175,52 @@ export function LawyerDetailView({
         </div>
       )}
 
-      {/* ─── TAB 2: REVIEWS (Matches Image 1) ───────────────────────────────── */}
+      {/* ─── TAB 2: REVIEWS (Matches Figma Specs) ───────────────────────────────── */}
       {activeTab === 'reviews' && (
         <div className="space-y-6 animate-in fade-in duration-150">
-          {/* Main Large Reviews Outer Container */}
-          <div
-            className="rounded-[28px] p-6 sm:p-9 bg-[#ECE1D2] space-y-6"
-            style={{
-              boxShadow:
-                '14px 14px 32px rgba(182, 155, 130, 0.4), -14px -14px 32px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
-            }}
-          >
-            {/* Score header */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex flex-wrap items-baseline gap-2">
-                <span className="font-cormorant text-5xl sm:text-6xl font-bold text-[#23150F] leading-none">
-                  {averageRating.toFixed(1)}
-                </span>
-                <span className="font-cormorant text-2xl sm:text-3xl font-semibold text-[#23150F]">
-                  /5
-                </span>
+          {/* Main Large Reviews Outer Container (Recessed Look) */}
+          <div className="rounded-[28px] sm:rounded-[32px] p-6 sm:p-9 neu-recessed bg-[#E5D8CB] space-y-6 select-none">
+            {/* Score header: 4.9/5 ★★★★★ (53 Reviews) */}
+            <div className="flex flex-wrap items-baseline gap-2 sm:gap-3">
+              <span className="font-lora text-4xl sm:text-5xl font-bold text-[#341512]/80 leading-none">
+                {averageRating.toFixed(1)}
+              </span>
+              <span className="font-lora text-2xl sm:text-3xl font-bold text-[#341512]/80">
+                /5
+              </span>
 
-                {/* Stars */}
-                <div className="flex items-center gap-1.5 text-[#C58B3C] text-2xl sm:text-3xl ml-3 sm:ml-5">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <span key={s}>{s <= Math.round(averageRating) ? '★' : '☆'}</span>
-                  ))}
-                </div>
-
-                <span className="font-sans text-xs sm:text-sm font-medium text-[#4A3525] ml-2">
-                  ({reviewsList.length} Reviews)
-                </span>
+              {/* Stars */}
+              <div className="flex items-center gap-1 text-[#C58B3C] text-xl sm:text-2xl ml-2 sm:ml-4">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <StarIcon key={s} filled={s <= Math.round(averageRating)} className="w-5 h-5 sm:w-6 sm:h-6" />
+                ))}
               </div>
 
-              {/* Write a Review Button */}
-              <button
-                type="button"
-                onClick={() => setShowWriteReview((prev) => !prev)}
-                className="px-5 py-2.5 rounded-xl bg-[#C58B3C] hover:bg-[#B3792E] active:scale-95 text-white text-xs font-semibold shadow-md transition-all flex items-center gap-2"
-              >
-                <span>★</span> {showWriteReview ? 'Close Form' : 'Write a Review'}
-              </button>
+              <span className="font-lora text-sm sm:text-base font-normal text-[#341512]/80 ml-2">
+                ({totalReviewsCount} Reviews)
+              </span>
             </div>
 
-            {/* Write a Review Form Card */}
-            {showWriteReview && (
-              <form
-                onSubmit={handleAddReview}
-                className="rounded-[22px] p-5 sm:p-6 bg-[#E5D5C1] border border-[#C58B3C]/40 space-y-4 shadow-[inset_1px_1px_4px_rgba(0,0,0,0.06),2px_2px_8px_rgba(255,255,255,0.8)]"
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="font-cormorant font-bold text-lg text-[#23150F]">
-                    Write a Review for {lawyer.fullName}
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowWriteReview(false)}
-                    className="text-[#5C4535] hover:text-[#23150F] text-sm"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Rating Stars Picker */}
-                <div>
-                  <label className="text-xs font-medium text-[#4A3525] block mb-1">
-                    Your Rating:
-                  </label>
-                  <div className="flex items-center gap-1.5 text-2xl text-[#C58B3C]">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onMouseEnter={() => setNewReviewHoverStars(star)}
-                        onMouseLeave={() => setNewReviewHoverStars(null)}
-                        onClick={() => setNewReviewStars(star)}
-                        className="transition-transform hover:scale-110 focus:outline-none"
-                      >
-                        {star <= (newReviewHoverStars ?? newReviewStars) ? '★' : '☆'}
-                      </button>
-                    ))}
-                    <span className="text-xs font-medium text-[#5C4535] ml-2">
-                      ({newReviewHoverStars ?? newReviewStars} out of 5 stars)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Reviewer Name */}
-                <div>
-                  <label className="text-xs font-medium text-[#4A3525] block mb-1">
-                    Your Name:
-                  </label>
-                  <input
-                    type="text"
-                    value={newReviewName}
-                    onChange={(e) => setNewReviewName(e.target.value)}
-                    placeholder="e.g. Juan dela Cruz (Leave blank for 'Verified Client')"
-                    className="w-full px-3.5 py-2 rounded-xl text-xs bg-[#ECE1D2] border border-[#D5C2AB] text-[#23150F] placeholder-[#8E7E70] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
-                  />
-                </div>
-
-                {/* Review Feedback */}
-                <div>
-                  <label className="text-xs font-medium text-[#4A3525] block mb-1">
-                    Feedback &amp; Experience:
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={newReviewContent}
-                    onChange={(e) => setNewReviewContent(e.target.value)}
-                    placeholder="Describe your consultation experience, professionalism, and advice received..."
-                    required
-                    className="w-full px-3.5 py-2 rounded-xl text-xs bg-[#ECE1D2] border border-[#D5C2AB] text-[#23150F] placeholder-[#8E7E70] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowWriteReview(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-medium text-[#5C4535] hover:text-[#23150F]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submittingReview}
-                    className="px-5 py-2 rounded-xl bg-[#C58B3C] hover:bg-[#B3792E] text-white text-xs font-semibold shadow-md disabled:opacity-50"
-                  >
-                    {submittingReview ? 'Submitting…' : 'Publish Review'}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Review Success Confirmation Toast */}
-            {reviewSuccessNotice && (
-              <div className="p-3.5 rounded-xl bg-[#DFC5A4] border border-[#C58B3C]/60 text-xs text-[#23150F] flex items-center gap-2">
-                <span>✓</span>
-                <span className="font-semibold">Thank you! Your rating &amp; review has been recorded.</span>
-              </div>
-            )}
-
-            {/* Filter pills */}
-            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedReviewStar('all');
-                  setReviewPage(1);
-                }}
-                className={`px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${selectedReviewStar === 'all'
-                  ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
-                  : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
-                  }`}
-              >
-                All ({reviewsList.length})
-              </button>
-
+            {/* Filter pills: ★ 5, ★ 4, ★ 3, ★ 2, ★ 1 */}
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-1">
               {[5, 4, 3, 2, 1].map((s) => {
-                const countForStar = reviewsList.filter((r) => r.stars === s).length;
+                const isActive = selectedReviewStar === s;
                 return (
                   <button
                     key={s}
                     type="button"
                     onClick={() => {
-                      setSelectedReviewStar(s);
+                      setSelectedReviewStar((prev) => (prev === s ? 'all' : s));
                       setReviewPage(1);
                     }}
-                    className={`px-4 sm:px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${selectedReviewStar === s
-                      ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.15)]'
-                      : 'bg-[#E5D5C1] hover:bg-[#DFC5A4] text-[#4A3525] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
-                      }`}
+                    className={`rounded-[12px] px-5 py-1.5 sm:px-6 sm:py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer select-none inline-flex items-center gap-1.5 ${
+                      isActive
+                        ? 'neu-raised-highlight-sm text-[#341512]/80'
+                        : 'neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 text-[#341512]/80'
+                    }`}
                   >
-                    ★{s} ({countForStar})
+                    <StarIcon filled className="w-3.5 h-3.5 text-[#C58B3C]" />
+                    <span className="font-lora font-bold text-[#341512]/80">{s}</span>
                   </button>
                 );
               })}
@@ -1258,39 +1231,29 @@ export function LawyerDetailView({
               {pagedReviews.map((rev) => (
                 <div
                   key={rev.id}
-                  className="rounded-[22px] p-5 sm:p-6 space-y-3"
-                  style={{
-                    backgroundColor: '#DFC5A4',
-                    boxShadow:
-                      '6px 8px 18px rgba(165, 135, 105, 0.4), 2px 2px 5px rgba(165, 135, 105, 0.2), -6px -6px 16px rgba(255, 255, 255, 0.9), -2px -2px 4px #FFFFFF',
-                  }}
+                  className="neu-raised-highlight rounded-[18px] sm:rounded-[20px] p-5 sm:p-6 space-y-2.5 transition-all select-none"
                 >
                   {/* Header: Avatar, Name, Stars, Date */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full border-2 border-[#362519] flex items-center justify-center shrink-0">
-                      <svg
-                        className="w-5 h-5 text-[#362519]"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <circle cx="12" cy="8" r="4" />
-                        <path d="M5.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6" />
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 flex items-center justify-center text-[#341512]/80">
+                      <svg className="w-full h-full" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="4.2">
+                        <circle cx="32" cy="32" r="28" />
+                        <circle cx="32" cy="24" r="8" />
+                        <path d="M16 48c0-8.837 7.163-14 16-14s16 5.163 16 14" strokeLinecap="round" />
                       </svg>
                     </div>
 
                     <div>
-                      <h4 className="font-sans font-bold text-xs sm:text-sm text-[#23150F] leading-tight">
+                      <h4 className="font-lora font-bold text-sm sm:text-base text-[#341512]/80 leading-tight">
                         {rev.name}
                       </h4>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <div className="flex items-center text-[#C58B3C] text-xs">
-                          {'★'.repeat(rev.stars)}{'☆'.repeat(5 - rev.stars)}
+                        <div className="flex items-center text-[#C58B3C]">
+                          {[1, 2, 3, 4, 5].map((st) => (
+                            <StarIcon key={st} filled={st <= rev.stars} className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          ))}
                         </div>
-                        <span className="text-[10px] sm:text-[11px] text-[#5C4535] font-medium">
+                        <span className="text-[10px] sm:text-[11px] text-[#341512]/70 font-inter">
                           {rev.date}
                         </span>
                       </div>
@@ -1298,25 +1261,62 @@ export function LawyerDetailView({
                   </div>
 
                   {/* Body Text */}
-                  <p className="text-xs sm:text-[13px] text-[#34150F] leading-relaxed text-justify">
+                  <p className="text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify font-inter">
                     {rev.content}
                   </p>
 
+                  {/* Footer Action Links: Reply & Helpful? */}
+                  <div className="flex items-center gap-4 pt-1 text-[11px] font-medium text-[#341512]/80 font-inter">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReplyingToId(replyingToId === rev.id ? null : rev.id);
+                        setReplyText('');
+                      }}
+                      className="inline-flex items-center gap-1.5 hover:text-[#341512] transition-colors cursor-pointer"
+                    >
+                      <svg className="w-3.5 h-3.5 text-[#341512]/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 17 4 12 9 7" />
+                        <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                      </svg>
+                      <span>Reply</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleHelpful(rev.id)}
+                      className="inline-flex items-center gap-1.5 hover:text-[#341512] transition-colors cursor-pointer"
+                    >
+                      <svg
+                        className={`w-3.5 h-3.5 ${userVotedHelpful[rev.id] ? 'fill-current text-[#C58B3C]' : 'text-[#341512]/80'}`}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+                      </svg>
+                      <span>Helpful?</span>
+                    </button>
+                  </div>
+
                   {/* Attorney Reply Bubble if present */}
                   {rev.reply && (
-                    <div className="p-3 rounded-xl bg-[#ECE1D2]/90 border border-[#D5C2AB] text-xs space-y-1">
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#23150F]">
-                        <span>⚖️</span>
+                    <div className="mt-2 p-3.5 rounded-[14px] bg-[#E5D8CB]/80 neu-recessed text-xs space-y-1">
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#341512]/80 font-lora">
+                        <ScalesIcon className="w-3.5 h-3.5 text-[#C58B3C]" />
                         <span>Response from {lawyer.fullName}</span>
                       </div>
-                      <p className="text-[#4A3525] text-xs leading-relaxed">{rev.reply}</p>
+                      <p className="text-[#341512]/80 text-xs leading-relaxed font-inter">{rev.reply}</p>
                     </div>
                   )}
 
                   {/* Inline reply form when replyingToId === rev.id */}
                   {replyingToId === rev.id && (
-                    <div className="p-3 rounded-xl bg-[#ECE1D2] border border-[#C58B3C]/50 space-y-2">
-                      <label className="text-[11px] font-semibold text-[#23150F] block">
+                    <div className="mt-2 p-3.5 rounded-[14px] neu-recessed bg-[#E5D8CB] space-y-2">
+                      <label className="text-[11px] font-semibold text-[#341512]/80 block font-lora">
                         Write a response to {rev.name}:
                       </label>
                       <textarea
@@ -1324,7 +1324,7 @@ export function LawyerDetailView({
                         onChange={(e) => setReplyText(e.target.value)}
                         placeholder="Type response as counsel or verified client..."
                         rows={2}
-                        className="w-full p-2.5 rounded-lg text-xs bg-[#F5EDE2] border border-[#D5C2AB] text-[#23150F] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
+                        className="w-full p-2.5 rounded-lg text-xs bg-[#E5D8CB] border border-[#D5C2AB] text-[#341512]/80 focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
                       />
                       <div className="flex items-center justify-end gap-2">
                         <button
@@ -1333,7 +1333,7 @@ export function LawyerDetailView({
                             setReplyingToId(null);
                             setReplyText('');
                           }}
-                          className="px-3 py-1 text-xs text-[#5C4535] hover:text-[#23150F]"
+                          className="px-3 py-1 text-xs text-[#341512]/80 hover:text-[#341512]"
                         >
                           Cancel
                         </button>
@@ -1347,46 +1347,11 @@ export function LawyerDetailView({
                       </div>
                     </div>
                   )}
-
-                  {/* Footer Action Links */}
-                  <div className="flex items-center gap-5 pt-1 text-[11px] font-medium text-[#5C4535]">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReplyingToId(replyingToId === rev.id ? null : rev.id);
-                        setReplyText('');
-                      }}
-                      className="inline-flex items-center gap-1.5 hover:text-[#23150F] transition-colors"
-                    >
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="9 17 4 12 9 7" />
-                        <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
-                      </svg>
-                      <span>Reply</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => toggleHelpful(rev.id)}
-                      className="inline-flex items-center gap-1.5 hover:text-[#23150F] transition-colors"
-                    >
-                      <svg
-                        className={`w-3.5 h-3.5 ${userVotedHelpful[rev.id] ? 'fill-current text-[#C58B3C]' : ''}`}
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
-                      </svg>
-                      <span>Helpful? ({helpfulCounts[rev.id] || 0})</span>
-                    </button>
-                  </div>
                 </div>
               ))}
 
               {filteredReviews.length === 0 && (
-                <div className="py-10 text-center text-xs text-[#7D6855]">
+                <div className="py-10 text-center text-xs text-[#341512]/80 font-lora">
                   No reviews found for this star filter rating.
                 </div>
               )}
@@ -1400,11 +1365,7 @@ export function LawyerDetailView({
                 type="button"
                 onClick={() => setReviewPage((p) => Math.max(1, p - 1))}
                 disabled={reviewPage <= 1}
-                className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
-                style={{
-                  boxShadow:
-                    '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
-                }}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 flex items-center justify-center text-[#341512]/80 hover:text-[#341512] disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
                 aria-label="Previous reviews page"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -1412,7 +1373,7 @@ export function LawyerDetailView({
                 </svg>
               </button>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 {Array.from({ length: totalReviewPages }).map((_, idx) => {
                   const p = idx + 1;
                   const isActive = p === reviewPage;
@@ -1421,8 +1382,11 @@ export function LawyerDetailView({
                       key={p}
                       type="button"
                       onClick={() => setReviewPage(p)}
-                      className={`w-2.5 h-2.5 rounded-full transition-all ${isActive ? 'bg-[#362519] scale-125' : 'bg-[#C58B3C]/80 hover:bg-[#362519]'
-                        }`}
+                      className={`rounded-full transition-all cursor-pointer ${
+                        isActive
+                          ? 'w-2.5 h-2.5 bg-[#D39758] scale-125'
+                          : 'w-2 h-2 bg-[#341512]/70 hover:bg-[#341512]'
+                      }`}
                       aria-label={`Go to review page ${p}`}
                     />
                   );
@@ -1433,11 +1397,7 @@ export function LawyerDetailView({
                 type="button"
                 onClick={() => setReviewPage((p) => Math.min(totalReviewPages, p + 1))}
                 disabled={reviewPage >= totalReviewPages}
-                className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
-                style={{
-                  boxShadow:
-                    '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
-                }}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 flex items-center justify-center text-[#341512]/80 hover:text-[#341512] disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
                 aria-label="Next reviews page"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -1463,8 +1423,8 @@ export function LawyerDetailView({
           {bookingStatus === 'submitted' && (
             <div className="p-6 rounded-3xl bg-emerald-100/95 border border-emerald-300 text-emerald-950 space-y-3">
               <div className="flex items-center gap-2">
-                <span className="text-xl">✅</span>
-                <h3 className="font-cormorant font-bold text-lg">Consultation Request Confirmed</h3>
+                <CheckCircleIcon className="w-6 h-6 text-emerald-800" />
+                <h3 className="font-lora font-bold text-lg">Consultation Request Confirmed</h3>
               </div>
               <p className="text-xs sm:text-sm">
                 Your booking request for <strong>{lawyer.fullName}</strong> on <strong>{formattedDateStr} ({selectedTimeSlot})</strong> has been received under confidential attorney-client privilege.
@@ -1504,7 +1464,7 @@ export function LawyerDetailView({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
             {/* Calendar Card (Left - 8 cols) */}
             <div
-              className="lg:col-span-8 rounded-[28px] p-6 sm:p-8 bg-[#ECE1D2] flex flex-col justify-between"
+              className="lg:col-span-8 rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] flex flex-col justify-between"
               style={{
                 boxShadow:
                   '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
@@ -1513,13 +1473,13 @@ export function LawyerDetailView({
               <div className="flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-10">
                 {/* Big Date Highlight */}
                 <div className="text-center sm:text-left sm:pr-8 sm:border-r border-[#D1BEA8]/80 shrink-0 min-w-[120px]">
-                  <div className="font-cormorant text-base font-bold uppercase tracking-widest text-[#4A3525]">
+                  <div className="font-lora text-base font-bold uppercase tracking-widest text-[#4A3525]">
                     {selectedMonthShort}
                   </div>
-                  <div className="font-cormorant text-6xl sm:text-7xl font-bold text-[#C58B3C] leading-none my-1">
+                  <div className="font-lora text-6xl sm:text-7xl font-bold text-[#C58B3C] leading-none my-1">
                     {selectedDay}
                   </div>
-                  <div className="font-cormorant text-xs sm:text-sm font-bold tracking-widest uppercase text-[#4A3525]">
+                  <div className="font-lora text-xs sm:text-sm font-bold tracking-widest uppercase text-[#4A3525]">
                     {selectedDayOfWeek}
                   </div>
                 </div>
@@ -1528,14 +1488,14 @@ export function LawyerDetailView({
                 <div className="flex-1 w-full max-w-sm sm:max-w-none">
                   {/* Month Navigation Bar */}
                   <div className="flex items-center justify-between pb-3 px-1">
-                    <span className="font-cormorant text-base sm:text-lg font-bold text-[#4A3525] tracking-wide">
+                    <span className="font-lora text-base sm:text-lg font-bold text-[#4A3525] tracking-wide">
                       {selectedMonthName} {currentYear}
                     </span>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={handleGoToToday}
-                        className="px-2.5 py-0.5 rounded-full bg-[#E5D5C1] hover:bg-[#D5C2AB] text-[#34150F] text-[10px] font-bold uppercase tracking-wider transition-colors shadow-xs"
+                        className="px-2.5 py-0.5 rounded-full bg-[#E5D8CB] hover:bg-[#D5C2AB] text-[#34150F] text-[10px] font-bold uppercase tracking-wider transition-colors shadow-xs"
                         title="Snap to Today"
                       >
                         Today
@@ -1544,7 +1504,7 @@ export function LawyerDetailView({
                         <button
                           type="button"
                           onClick={handlePrevMonth}
-                          className="w-7 h-7 rounded-full bg-[#E5D5C1] hover:bg-[#D5C2AB] text-[#34150F] flex items-center justify-center font-bold text-sm transition-colors shadow-xs active:scale-95"
+                          className="w-7 h-7 rounded-full bg-[#E5D8CB] hover:bg-[#D5C2AB] text-[#34150F] flex items-center justify-center font-bold text-sm transition-colors shadow-xs active:scale-95"
                           title="Previous Month"
                           aria-label="Previous Month"
                         >
@@ -1553,7 +1513,7 @@ export function LawyerDetailView({
                         <button
                           type="button"
                           onClick={handleNextMonth}
-                          className="w-7 h-7 rounded-full bg-[#E5D5C1] hover:bg-[#D5C2AB] text-[#34150F] flex items-center justify-center font-bold text-sm transition-colors shadow-xs active:scale-95"
+                          className="w-7 h-7 rounded-full bg-[#E5D8CB] hover:bg-[#D5C2AB] text-[#34150F] flex items-center justify-center font-bold text-sm transition-colors shadow-xs active:scale-95"
                           title="Next Month"
                           aria-label="Next Month"
                         >
@@ -1593,7 +1553,7 @@ export function LawyerDetailView({
                           type="button"
                           onClick={() => setSelectedDay(item.day!)}
                           className={`h-8 w-8 mx-auto rounded-full flex flex-col items-center justify-center font-medium text-xs transition-all cursor-pointer relative ${isSelected
-                            ? 'bg-[#DFC5A4] text-[#C58B3C] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.18)] scale-105'
+                            ? 'bg-[#E5D8CB] text-[#C58B3C] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.18)] scale-105'
                             : isToday
                               ? 'text-[#23150F] font-bold border border-[#C58B3C]/60 bg-[#E8DDD0]'
                               : 'text-[#3E2A1E] hover:bg-[#DECEB8] hover:text-[#23150F]'
@@ -1613,7 +1573,7 @@ export function LawyerDetailView({
 
             {/* Time Slots Card (Right - 4 cols) */}
             <div
-              className="lg:col-span-4 rounded-[28px] p-6 bg-[#ECE1D2] flex flex-col justify-center space-y-3"
+              className="lg:col-span-4 rounded-[28px] p-6 bg-[#E5D8CB] flex flex-col justify-center space-y-3"
               style={{
                 boxShadow:
                   '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
@@ -1631,8 +1591,8 @@ export function LawyerDetailView({
                     className={`w-full py-2.5 px-3 rounded-full text-xs font-medium transition-all text-center relative ${isBooked
                       ? 'opacity-40 cursor-not-allowed bg-stone-300 text-stone-500 line-through'
                       : isSelected
-                        ? 'bg-[#DFC5A4] text-[#23150F] font-bold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
-                        : 'bg-[#E6D7C3] hover:bg-[#DFC5A4]/60 text-[#5C4535] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
+                        ? 'bg-[#E5D8CB] text-[#23150F] font-bold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
+                        : 'bg-[#E6D7C3] hover:bg-[#E5D8CB]/60 text-[#5C4535] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
                       }`}
                   >
                     <span>{slot}</span>
@@ -1649,9 +1609,9 @@ export function LawyerDetailView({
 
           {/* Mode of Communication Section */}
           <div className="space-y-3">
-            <h2 className="font-cormorant text-2xl font-bold text-[#23150F]">Mode of Communication</h2>
+            <h2 className="font-lora text-2xl font-bold text-[#23150F]">Mode of Communication</h2>
             <div
-              className="rounded-[28px] p-5 sm:p-6 bg-[#ECE1D2] space-y-3"
+              className="rounded-[28px] p-5 sm:p-6 bg-[#E5D8CB] space-y-3"
               style={{
                 boxShadow:
                   '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
@@ -1661,8 +1621,8 @@ export function LawyerDetailView({
               <div
                 onClick={() => setCommunicationMode('video')}
                 className={`flex items-start gap-3.5 p-4 rounded-[20px] cursor-pointer transition-all ${communicationMode === 'video'
-                  ? 'bg-[#DFC5A4] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
-                  : 'bg-transparent hover:bg-[#E5D5C1]/50'
+                  ? 'bg-[#E5D8CB] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
+                  : 'bg-transparent hover:bg-[#E5D8CB]/50'
                   }`}
               >
                 <div className="mt-0.5">
@@ -1680,7 +1640,7 @@ export function LawyerDetailView({
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                     <span className="text-xs sm:text-sm font-bold text-[#23150F]">Video Consultation</span>
-                    <span className="text-[9px] uppercase tracking-wider font-bold bg-[#ECE1D2] text-[#9E6C28] px-2 py-0.5 rounded-full ml-1">
+                    <span className="text-[9px] uppercase tracking-wider font-bold bg-[#E5D8CB] text-[#9E6C28] px-2 py-0.5 rounded-full ml-1">
                       Recommended
                     </span>
                   </div>
@@ -1694,8 +1654,8 @@ export function LawyerDetailView({
               <div
                 onClick={() => setCommunicationMode('audio')}
                 className={`flex items-start gap-3.5 p-4 rounded-[20px] cursor-pointer transition-all ${communicationMode === 'audio'
-                  ? 'bg-[#DFC5A4] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
-                  : 'bg-transparent hover:bg-[#E5D5C1]/50'
+                  ? 'bg-[#E5D8CB] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
+                  : 'bg-transparent hover:bg-[#E5D8CB]/50'
                   }`}
               >
                 <div className="mt-0.5">
@@ -1724,9 +1684,9 @@ export function LawyerDetailView({
 
           {/* Purpose of Consultation Section */}
           <div className="space-y-3">
-            <h2 className="font-cormorant text-2xl font-bold text-[#23150F]">Purpose of Consultation</h2>
+            <h2 className="font-lora text-2xl font-bold text-[#23150F]">Purpose of Consultation</h2>
             <div
-              className="rounded-[28px] p-6 sm:p-8 bg-[#ECE1D2] space-y-5"
+              className="rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-5"
               style={{
                 boxShadow:
                   '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
@@ -1800,8 +1760,8 @@ export function LawyerDetailView({
                 {attachedFiles.length > 0 && (
                   <div className="space-y-1.5 pt-1">
                     {attachedFiles.map((file, idx) => (
-                      <div key={idx} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#DFC5A4]/60 text-xs text-[#23150F]">
-                        <span className="truncate">📎 {file}</span>
+                      <div key={idx} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#E5D8CB]/60 text-xs text-[#23150F]">
+                        <div className="flex items-center gap-1.5 truncate"><PaperclipIcon className="w-3.5 h-3.5 text-[#C58B3C] shrink-0" /><span className="truncate">{file}</span></div>
                         <button
                           type="button"
                           onClick={() => setAttachedFiles(attachedFiles.filter((_, i) => i !== idx))}
@@ -1821,12 +1781,7 @@ export function LawyerDetailView({
                 <button
                   type="button"
                   onClick={handleOpenDocPicker}
-                  className="px-8 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-[#23150F] hover:bg-[#D4B892] transition-all mx-auto block"
-                  style={{
-                    backgroundColor: '#DFC5A4',
-                    boxShadow:
-                      '4px 5px 12px rgba(165, 135, 105, 0.35), -3px -3px 8px rgba(255, 255, 255, 0.85)',
-                  }}
+                  className="neu-raised-sm bg-[#E5D8CB] px-8 py-2.5 rounded-full text-xs sm:text-sm font-inter font-semibold text-[#34150F] hover:text-[#C58B3C] active:scale-95 transition-all mx-auto block cursor-pointer select-none"
                 >
                   Share Uploaded Files from your Documents
                 </button>
@@ -1836,14 +1791,14 @@ export function LawyerDetailView({
               <div className="space-y-4 pt-3 border-t border-[#D1BEA8]/60">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <h3 className="font-cormorant text-xl font-bold text-[#23150F]">
+                    <h3 className="font-lora text-xl font-bold text-[#23150F]">
                       Consultation Retainer & Proof of Payment
                     </h3>
                     <p className="text-[11px] text-[#5C4535]">
                       Upload your payment confirmation so counsel can verify and accept your appointment.
                     </p>
                   </div>
-                  <div className="px-3.5 py-1.5 rounded-full bg-[#DFC5A4] text-xs font-bold text-[#23150F] self-start sm:self-auto shadow-xs">
+                  <div className="px-3.5 py-1.5 rounded-full bg-[#E5D8CB] text-xs font-bold text-[#23150F] self-start sm:self-auto shadow-xs">
                     ₱{(lawyer.feeStandard60min ?? 1500).toLocaleString()}.00 (60-Min Session)
                   </div>
                 </div>
@@ -1860,7 +1815,7 @@ export function LawyerDetailView({
                         onClick={() => setPaymentMethod(method)}
                         className={`py-2 px-3 rounded-xl text-xs font-bold transition-all ${isSelected
                           ? 'bg-[#23150F] text-[#ded7cb] shadow-sm'
-                          : 'bg-[#E5D5C1] text-[#5C4535] hover:bg-[#DECDBA]'
+                          : 'bg-[#E5D8CB] text-[#5C4535] hover:bg-[#DECDBA]'
                           }`}
                       >
                         {label}
@@ -1923,7 +1878,7 @@ export function LawyerDetailView({
                     Proof of Payment (Screenshot Receipt / Deposit Slip):
                   </label>
                   <div className="flex items-center gap-3">
-                    <label className="cursor-pointer px-4 py-2 rounded-xl bg-[#DFC5A4] hover:bg-[#D4B892] text-xs font-semibold text-[#23150F] transition shadow-xs">
+                    <label className="cursor-pointer px-4 py-2 rounded-xl bg-[#E5D8CB] hover:bg-[#D4B892] text-xs font-semibold text-[#23150F] transition shadow-xs">
                       <span>Upload Receipt (PNG, JPG, PDF)</span>
                       <input
                         type="file"
@@ -1955,7 +1910,7 @@ export function LawyerDetailView({
 
               {bookingError && (
                 <div className="p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 text-xs font-semibold">
-                  ⚠ {bookingError}
+                  <span className="flex items-center gap-1.5"><svg className="w-4 h-4 text-rose-600 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg><span>{bookingError}</span></span>
                 </div>
               )}
 
@@ -1979,19 +1934,14 @@ export function LawyerDetailView({
             <button
               type="button"
               onClick={handleClearInputs}
-              className="w-full sm:w-auto px-6 py-2 rounded-xl border border-[#C8B59E] text-xs font-medium text-[#5C4535] hover:bg-[#E5D5C1] transition-colors"
+              className="w-full sm:w-auto px-6 py-2 rounded-xl border border-[#C8B59E] text-xs font-medium text-[#5C4535] hover:bg-[#E5D8CB] transition-colors"
             >
               Clear All Inputs
             </button>
             <button
               type="button"
               onClick={handleSaveDraft}
-              className="w-full sm:w-auto px-8 py-2 rounded-xl text-xs font-semibold text-[#23150F] hover:bg-[#D4B892] transition-all"
-              style={{
-                backgroundColor: '#DFC5A4',
-                boxShadow:
-                  '3px 4px 8px rgba(165, 135, 105, 0.3), -2px -2px 6px rgba(255, 255, 255, 0.85)',
-              }}
+              className="neu-raised-sm bg-[#E5D8CB] w-full sm:w-auto px-8 py-2.5 rounded-full text-xs font-inter font-semibold text-[#5C4535] hover:text-[#34150F] active:scale-95 transition-all cursor-pointer select-none"
             >
               Save
             </button>
@@ -2004,12 +1954,7 @@ export function LawyerDetailView({
           <div className="pt-2 pb-6">
             <button
               type="submit"
-              className="w-full max-w-xs mx-auto block py-3 px-10 rounded-2xl text-sm sm:text-base font-bold text-[#23150F] text-center transition-all hover:brightness-105"
-              style={{
-                backgroundColor: '#DFC5A4',
-                boxShadow:
-                  '6px 8px 18px rgba(165, 135, 105, 0.45), -4px -4px 12px rgba(255, 255, 255, 0.85)',
-              }}
+              className="neu-btn-caramel w-full max-w-xs mx-auto block py-3 px-10 rounded-full text-sm sm:text-base font-lora font-bold text-white text-center transition-all cursor-pointer shadow-md active:scale-95"
             >
               {submittingBooking ? 'Submitting Request...' : 'Submit Booking'}
             </button>
@@ -2024,7 +1969,7 @@ export function LawyerDetailView({
           {casesHandled.map((caseItem) => (
             <div
               key={caseItem.id}
-              className="rounded-[28px] p-6 sm:p-8 bg-[#ECE1D2] space-y-2.5"
+              className="rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-2.5"
               style={{
                 boxShadow:
                   '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
@@ -2033,7 +1978,7 @@ export function LawyerDetailView({
               <div className="font-bold text-[10px] sm:text-[11px] text-[#C58B3C] uppercase tracking-wider">
                 {caseItem.docket}
               </div>
-              <h3 className="font-cormorant text-lg sm:text-xl font-bold text-[#23150F] leading-tight">
+              <h3 className="font-lora text-lg sm:text-xl font-bold text-[#23150F] leading-tight">
                 {caseItem.title}
               </h3>
               <p className="text-xs sm:text-[13px] text-[#3E2A1E] leading-relaxed text-justify">
@@ -2048,7 +1993,7 @@ export function LawyerDetailView({
               type="button"
               onClick={() => setCasePage((p) => Math.max(1, p - 1))}
               disabled={casePage <= 1}
-              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
+              className="w-9 h-9 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
               style={{
                 boxShadow:
                   '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
@@ -2080,7 +2025,7 @@ export function LawyerDetailView({
               type="button"
               onClick={() => setCasePage((p) => Math.min(4, p + 1))}
               disabled={casePage >= 4}
-              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
+              className="w-9 h-9 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
               style={{
                 boxShadow:
                   '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
@@ -2099,7 +2044,7 @@ export function LawyerDetailView({
       {showDocPickerModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
           <div
-            className="w-full max-w-3xl rounded-[32px] p-6 sm:p-8 bg-[#ECE1D2] space-y-5 max-h-[90vh] flex flex-col"
+            className="w-full max-w-3xl rounded-[32px] p-6 sm:p-8 bg-[#E5D8CB] space-y-5 max-h-[90vh] flex flex-col"
             style={{
               boxShadow: '16px 16px 40px rgba(0,0,0,0.35), -8px -8px 24px #FFFFFF',
             }}
@@ -2107,11 +2052,11 @@ export function LawyerDetailView({
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-[#D1BEA8]/80">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-[#DFC5A4] flex items-center justify-center text-xl shadow-xs">
-                  📁
+                <div className="w-10 h-10 rounded-2xl bg-[#E5D8CB] flex items-center justify-center text-xl shadow-xs">
+
                 </div>
                 <div>
-                  <h3 className="font-cormorant text-2xl font-bold text-[#23150F] leading-tight">
+                  <h3 className="font-lora text-2xl font-bold text-[#23150F] leading-tight">
                     My Documents Vault
                   </h3>
                   <p className="text-xs text-[#5C4535]">
@@ -2122,7 +2067,7 @@ export function LawyerDetailView({
               <button
                 type="button"
                 onClick={() => setShowDocPickerModal(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#23150F] hover:bg-[#DFC5A4]/40 font-bold transition-colors"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#23150F] hover:bg-[#E5D8CB]/40 font-bold transition-colors"
               >
                 ✕
               </button>
@@ -2190,7 +2135,7 @@ export function LawyerDetailView({
                 <button
                   type="submit"
                   disabled={isCreatingPickerFolder || !pickerNewFolderName.trim()}
-                  className="px-3 py-1.5 rounded-xl bg-[#DFC5A4] text-xs font-bold text-[#23150F] hover:bg-[#D4B892] disabled:opacity-50 transition-all shadow-xs"
+                  className="px-3 py-1.5 rounded-xl bg-[#E5D8CB] text-xs font-bold text-[#23150F] hover:bg-[#D4B892] disabled:opacity-50 transition-all shadow-xs"
                 >
                   {isCreatingPickerFolder ? 'Creating...' : '+ Folder'}
                 </button>
@@ -2219,10 +2164,10 @@ export function LawyerDetailView({
                         onClick={() => setActivePickerFolderId(folder.id)}
                         className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-all flex items-center justify-between ${isActive
                           ? 'bg-[#23150F] text-[#ded7cb] shadow-sm font-bold'
-                          : 'bg-[#E5D5C1] text-[#23150F] hover:bg-[#DFC5A4]'
+                          : 'bg-[#E5D8CB] text-[#23150F] hover:bg-[#E5D8CB]'
                           }`}
                       >
-                        <span className="truncate">📁 {folder.name}</span>
+                        <span className="truncate"> {folder.name}</span>
                         <span className="text-[10px] opacity-75 shrink-0 ml-1">
                           {folder.files?.length || 0}
                         </span>
@@ -2249,7 +2194,7 @@ export function LawyerDetailView({
                   if (files.length === 0) {
                     return (
                       <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-2">
-                        <div className="text-3xl">📄</div>
+                        <div className="text-[#7A6756]"><FileDocIcon className="w-8 h-8" /></div>
                         <p className="text-xs font-semibold text-[#23150F]">No files in this folder</p>
                         <p className="text-[11px] text-[#7D6855]">
                           Use "Upload to Vault" above to add documents to this folder.
@@ -2272,7 +2217,7 @@ export function LawyerDetailView({
                             key={file.id || file.name}
                             onClick={() => handleToggleSelectDoc(file.name)}
                             className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${isSelected
-                              ? 'bg-[#DFC5A4] border-[#C58B3C] shadow-sm text-[#23150F]'
+                              ? 'bg-[#E5D8CB] border-[#C58B3C] shadow-sm text-[#23150F]'
                               : 'bg-[#E8DDD0] border-[#D8C7B5] hover:bg-[#E2D4C3] text-[#34150F]'
                               }`}
                           >
@@ -2283,7 +2228,7 @@ export function LawyerDetailView({
                                 onChange={() => { }} // handled by parent onClick
                                 className="w-4 h-4 rounded text-[#C58B3C] accent-[#C58B3C]"
                               />
-                              <span className="text-sm">📄</span>
+                              <FileDocIcon className="w-4 h-4 text-[#7A6756]" />
                               <div className="truncate">
                                 <div className="text-xs font-semibold truncate">{file.name}</div>
                                 <div className="text-[10px] text-[#7D6855]">
@@ -2315,7 +2260,7 @@ export function LawyerDetailView({
                 <button
                   type="button"
                   onClick={() => setShowDocPickerModal(false)}
-                  className="px-5 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-semibold text-[#5C4535] hover:bg-[#E5D5C1]"
+                  className="px-5 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-semibold text-[#5C4535] hover:bg-[#E5D8CB]"
                 >
                   Cancel
                 </button>
