@@ -67,7 +67,7 @@ export default async function LawyerProfilePage({ params }: Props) {
   }
 
   return (
-    <div className="p-4 sm:p-8">
+    <div className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-10 max-w-[1300px] mx-auto bg-[#E5D8CB] min-h-[calc(100vh-4rem)]">
       <LawyerDetailView lawyer={lawyerData} defaultTab="about" />
     </div>
   );
