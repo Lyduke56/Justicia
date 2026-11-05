@@ -3,7 +3,7 @@ import { AdminKnowledgeBaseView } from '@/components/admin/views/AdminKnowledgeB
 
 export const metadata: Metadata = {
   title: 'Philippine Legal Knowledge Base | Justicia Admin',
-  description: 'Manage legal corpus, Supreme Court rulings, Republic Acts, and vector indexing.',
+  description: 'Status of planned legal source review and indexing tools.',
 };
 
 export default function KnowledgeBasePage() {

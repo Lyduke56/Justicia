@@ -154,6 +154,44 @@ function extractSuggestedFilters(text: string, query: string): Record<string, st
   return filters;
 }
 
+async function generateGeminiContentWithRetry(
+  ai: GoogleGenAI,
+  contents: any[],
+  model: string = 'gemini-3.8-flash'
+) {
+  const maxAttempts = 3;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents,
+        config: {
+          systemInstruction: PHILIPPINE_LEGAL_SYSTEM_PROMPT,
+          temperature: 0.25,
+        },
+      });
+      return response;
+    } catch (err: any) {
+      lastError = err;
+      const status = err?.status || err?.code;
+      const isTransient = status === 503 || status === 429 || (err?.message && err.message.includes('high demand'));
+
+      if (isTransient && attempt < maxAttempts) {
+        const delayMs = attempt * 1500;
+        console.warn(`[Gemini API] ${model} is experiencing temporary high demand (503). Retrying in ${delayMs}ms (attempt ${attempt}/${maxAttempts})...`);
+        await new Promise((res) => setTimeout(res, delayMs));
+        continue;
+      }
+
+      break;
+    }
+  }
+
+  throw lastError;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -190,14 +228,8 @@ export async function POST(request: NextRequest) {
           };
         });
 
-        const response = await ai.models.generateContent({
-          model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
-          contents,
-          config: {
-            systemInstruction: PHILIPPINE_LEGAL_SYSTEM_PROMPT,
-            temperature: 0.25,
-          },
-        });
+        const targetModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+        const response = await generateGeminiContentWithRetry(ai, contents, targetModel);
 
         const generatedText = response.text || '';
 
@@ -213,7 +245,9 @@ export async function POST(request: NextRequest) {
           offTopic: false,
         });
       } catch (geminiError: unknown) {
-        console.error('[Gemini API Error]', geminiError);
+        const errObj = geminiError as any;
+        const code = errObj?.status || errObj?.code || 500;
+        console.warn(`[Gemini AI] Upstream model unavailable (${code}). Serving verified Philippine legal KB response.`);
         // Fall back to knowledge base answer below
       }
     }

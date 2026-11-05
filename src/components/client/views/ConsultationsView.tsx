@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { getClientConsultationsAction } from '@/app/actions/consultationActions';
 import Link from 'next/link';
 import type { ViewKey } from '@/components/client/ClientShell';
 
@@ -28,6 +30,16 @@ interface Appointment {
 }
 
 export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
+  const router = useRouter();
+  const [dbAppointments, setDbAppointments] = useState<Appointment[]>([]);
+
+  useEffect(() => {
+    getClientConsultationsAction().then((data: any) => {
+      if (data && data.length > 0) {
+        setDbAppointments(data);
+      }
+    });
+  }, []);
   const [selectedDay, setSelectedDay] = useState<number>(23);
   const [activeAppointmentIndex, setActiveAppointmentIndex] = useState<number>(0);
   const [showCancelModal, setShowCancelModal] = useState<boolean>(false);
@@ -40,7 +52,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
     if (idx === activeAppointmentIndex) return;
     setIsSwitching(true);
     setActiveAppointmentIndex(idx);
-    setSelectedDay(appointments[idx].day);
+    setSelectedDay(allAppointments[idx]?.day || 23);
     setTimeout(() => setIsSwitching(false), 200);
   };
 
@@ -123,7 +135,9 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
     },
   ];
 
-  const currentAppointment = appointments[activeAppointmentIndex] || appointments[0];
+  const allAppointments = dbAppointments;
+  const hasAppointments = allAppointments.length > 0;
+  const currentAppointment = allAppointments[activeAppointmentIndex] || allAppointments[0] || appointments[0];
 
   // Calendar dates: September 2026 begins on Tuesday (2 blank spaces for Sunday & Monday)
   const daysInMonth = [
@@ -137,6 +151,27 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   return (
     <div className="max-w-[1240px] mx-auto px-2 sm:px-6 py-6 space-y-6">
       {/* ─── Main 2-Column Grid (Exact Figma Layout) ───────────────────────── */}
+      {!hasAppointments ? (
+        <div className="rounded-[28px] p-12 bg-[#ECE1D2] text-center space-y-4 max-w-xl mx-auto shadow-md">
+          <div className="text-4xl">📅</div>
+          <h2 className="font-cormorant text-2xl font-bold text-[#34150F]">No Consultations Scheduled Yet</h2>
+          <p className="text-xs text-[#7D6855] leading-relaxed">
+            You do not have any active or pending consultations in the system. Explore verified Philippine legal practitioners to schedule your confidential consultation session.
+          </p>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (onNavigate) onNavigate('lawyers');
+                else router.push('/client/lawyers');
+              }}
+              className="px-6 py-2.5 rounded-2xl bg-[#C58B3C] text-white hover:bg-[#B3792E] text-xs font-bold transition shadow-sm"
+            >
+              Find a Lawyer
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-7 items-start">
         {/* ─── Left Column: Calendar & Reminders (5 cols) ───────────────────── */}
         <div className="lg:col-span-5 space-y-6">
@@ -490,6 +525,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
           </div>
         </div>
       </div>
+      )}
 
       {/* ─── Cancel Consultation Modal ─────────────────────────────────────── */}
       {showCancelModal && (
@@ -580,7 +616,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
 
               <div className="p-3.5 rounded-xl bg-[#DFC5A4]/50 space-y-1">
                 <p className="font-bold text-[#23150F]">Attached Privilege Files:</p>
-                <p className="text-[11px]">📎 Residential_Lease_Agreement_Makati.pdf</p>
+                <p className="text-[11px] text-[#7D6855]">No extra files attached to this session.</p>
               </div>
             </div>
 

@@ -21,6 +21,8 @@ import {
 import { LawyerDashboardView } from './views/LawyerDashboardView';
 import { LawyerConsultationsView } from './views/LawyerConsultationsView';
 import { DocumentsView } from '@/components/documents/DocumentsView';
+import { getUserNotificationsAction } from '@/app/actions/consultationActions';
+import { MessagesView } from '@/components/client/views/MessagesView';
 
 export type LawyerViewKey =
   | 'dashboard'
@@ -94,6 +96,13 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [liveLawyerNotifs, setLiveLawyerNotifs] = useState<any[]>([]);
+
+  useEffect(() => {
+    getUserNotificationsAction('lawyer').then((data) => {
+      if (data && data.length > 0) setLiveLawyerNotifs(data);
+    });
+  }, [notificationsOpen]);
 
   useEffect(() => {
     setActiveView(pathnameToView(pathname));
@@ -118,7 +127,9 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
   function renderView() {
     switch (activeView) {
       case 'consultations':
-        return <LawyerConsultationsView />;
+        return <LawyerConsultationsView lawyerUserId={user.id} lawyerName={user.fullName} />;
+      case 'messages':
+        return <MessagesView role="lawyer" />;
       case 'dashboard':
         return <LawyerDashboardView />;
       case 'documents':
@@ -209,15 +220,30 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
                   <span className="font-semibold text-[#ded7cb]">Lawyer Notifications</span>
                   <span className="text-[10px] text-[#C58B3C]">Active</span>
                 </div>
-                <div className="py-3 space-y-2 text-[#C4B7A5]">
-                  <div className="p-2 rounded-lg bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer">
-                    <p className="font-medium text-[#ded7cb]">Verified Counsel Status</p>
-                    <p className="text-[10px] text-[#A69584] mt-0.5">Your profile is visible in Find a Lawyer directory.</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer">
-                    <p className="font-medium text-[#ded7cb]">Consultation Requests</p>
-                    <p className="text-[10px] text-[#A69584] mt-0.5">Calendar availability is active for client bookings.</p>
-                  </div>
+                <div className="py-3 space-y-2 text-[#C4B7A5] max-h-64 overflow-y-auto">
+                  {liveLawyerNotifs.length > 0 ? (
+                    liveLawyerNotifs.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => {
+                          if (n.type?.includes('consultation')) navigate('consultations');
+                        }}
+                        className="p-2.5 rounded-xl bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer border border-[#482B1F]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="font-bold text-[#ded7cb] text-xs">{n.title}</p>
+                          <span className="text-[9px] text-[#C58B3C]">
+                            {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#A69584] mt-1 leading-snug">{n.body}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-2 rounded-lg bg-[#341F16] text-[#A69584] text-center text-[11px]">
+                      No new notifications
+                    </div>
+                  )}
                 </div>
               </div>
             )}

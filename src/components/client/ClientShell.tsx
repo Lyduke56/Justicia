@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { getUserNotificationsAction } from '@/app/actions/consultationActions';
 import { useRouter, usePathname } from 'next/navigation';
 import { signOutAction } from '@/app/actions/auth';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
@@ -92,6 +93,13 @@ export function ClientShell({ user, children }: ClientShellProps) {
   const [mobileMenuOpen,    setMobileMenuOpen]    = useState(false);
   const [userDropdownOpen,  setUserDropdownOpen]  = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [liveNotifs, setLiveNotifs] = useState<any[]>([]);
+
+  useEffect(() => {
+    getUserNotificationsAction('client').then((data: any) => {
+      if (data && data.length > 0) setLiveNotifs(data);
+    });
+  }, [notificationsOpen]);
 
   // Keep view in sync when the user navigates with browser back/forward
   useEffect(() => {
@@ -217,15 +225,32 @@ export function ClientShell({ user, children }: ClientShellProps) {
                   <span className="font-semibold text-[#ded7cb]">Notifications</span>
                   <span className="text-[10px] text-[#C58B3C]">Mark all read</span>
                 </div>
-                <div className="py-3 space-y-2 text-[#C4B7A5]">
-                  <div className="p-2 rounded-lg bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer">
-                    <p className="font-medium text-[#ded7cb]">Consultation Confirmed</p>
-                    <p className="text-[10px] text-[#A69584] mt-0.5">Your booking with Atty. Santos is verified.</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer">
-                    <p className="font-medium text-[#ded7cb]">AI Assistant Update</p>
-                    <p className="text-[10px] text-[#A69584] mt-0.5">Civil Code and Labor Code references updated.</p>
-                  </div>
+                <div className="py-3 space-y-2 text-[#C4B7A5] max-h-64 overflow-y-auto">
+                  {liveNotifs.length > 0 ? (
+                    liveNotifs.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => {
+                          if (n.type?.includes('consultation')) navigate('consultations');
+                        }}
+                        className="p-2.5 rounded-xl bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer border border-[#482B1F]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="font-bold text-[#ded7cb] text-xs">{n.title}</p>
+                          <span className="text-[9px] text-[#C58B3C]">
+                            {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#A69584] mt-1 leading-snug">{n.body}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      <div className="p-2 rounded-lg bg-[#341F16] text-[#A69584] text-center text-[11px]">
+                        No new notifications
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}

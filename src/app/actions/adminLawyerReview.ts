@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { writeAuditLog, createNotification } from '@/lib/notifications';
-import type { LawyerVerificationStatus, VerificationStatus } from '@/types/database';
+import type { Database, LawyerVerificationStatus, VerificationStatus } from '@/types/database';
 
 export type ReviewDecision = 'approved' | 'rejected' | 'needs_resubmission';
 
@@ -29,16 +29,17 @@ export async function reviewLawyerApplicationAction(
 
     // Verify admin role
     const serviceSupabase = await createServiceClient();
-    if (adminUser) {
-      const { data: adminAcc } = await serviceSupabase
-        .from('user_accounts')
-        .select('role')
-        .eq('id', adminUser.id)
-        .single() as { data: { role: string } | null };
+    if (!adminUser) {
+      return { error: 'Administrator sign-in required.' };
+    }
+    const { data: adminAcc } = await serviceSupabase
+      .from('user_accounts')
+      .select('role')
+      .eq('id', adminUser.id)
+      .single() as { data: { role: string } | null };
 
-      if (adminAcc?.role !== 'admin' && adminUser.user_metadata?.role !== 'admin') {
-        return { error: 'Unauthorized: Only platform administrators can review applications.' };
-      }
+    if (adminAcc?.role !== 'admin') {
+      return { error: 'Unauthorized: Only platform administrators can review applications.' };
     }
 
     const now = new Date().toISOString();
@@ -58,10 +59,10 @@ export async function reviewLawyerApplicationAction(
     const adminNotes = decision === 'needs_resubmission' ? (reasonOrNotes?.trim() || 'Additional credential verification required.') : null;
 
     // 2. Update lawyer_profiles table
-    const updatePayload: Record<string, unknown> = {
+    const updatePayload: Database['public']['Tables']['lawyer_profiles']['Update'] = {
       verification_status: decision as LawyerVerificationStatus,
       reviewed_at: now,
-      reviewed_by: adminUser?.id || 'admin-system',
+      reviewed_by: adminUser.id,
       rejection_reason: rejectionReason,
       admin_notes: adminNotes,
       updated_at: now,
@@ -75,8 +76,8 @@ export async function reviewLawyerApplicationAction(
       updatePayload.is_available = false;
     }
 
-    const { error: updateProfErr } = await (serviceSupabase
-      .from('lawyer_profiles') as any)
+    const { error: updateProfErr } = await serviceSupabase
+      .from('lawyer_profiles')
       .update(updatePayload)
       .eq('user_id', lawyerId);
 
@@ -86,8 +87,8 @@ export async function reviewLawyerApplicationAction(
 
     // 3. Update user_accounts table
     const userAccStatus: VerificationStatus = decision === 'approved' ? 'verified' : decision === 'rejected' ? 'rejected' : 'pending';
-    await (serviceSupabase
-      .from('user_accounts') as any)
+    await serviceSupabase
+      .from('user_accounts')
       .update({
         role: 'lawyer',
         verification_status: userAccStatus,
