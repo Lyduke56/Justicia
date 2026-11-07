@@ -259,7 +259,7 @@ export function LawyerConsultationsView({
   ];
 
   return (
-    <div className="p-6 sm:p-9 lg:p-10 max-w-7xl mx-auto space-y-7">
+    <div className="lawyer-consultations p-6 sm:p-9 lg:p-10 max-w-7xl mx-auto space-y-7">
       {/* ── Top Status Tabs & Search Section ─────────────────────────────────── */}
       <div className="space-y-4">
         {/* Status Tab Pills */}
@@ -446,10 +446,6 @@ export function LawyerConsultationsView({
             </div>
           </div>
 
-          {/* Extruded "Pending Approval" pill */}
-          <div className="neu-plate rounded-full px-7 py-2.5 text-xs sm:text-sm font-bold text-[#381F17] inline-flex items-center cursor-pointer hover:shadow-[inset_2px_2px_4px_rgba(165,135,105,0.4),inset_-2px_-2px_4px_rgba(255,255,255,0.8)] transition-all">
-            Pending Approval
-          </div>
         </div>
 
         {/* ── Right Column: Consultation Detail Hero Card ───────────────────── */}
@@ -691,6 +687,16 @@ export function LawyerConsultationsView({
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="lawyer-consultations-pending-header flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+        <button type="button" onClick={() => setActiveTab('pending')} className="neu-plate rounded-full text-[#381F17]">
+          Pending Approval for Consultations
+        </button>
+        <select aria-label="Filter pending consultations by period" defaultValue="month" className="neu-inset-sm text-[#381F17]">
+          <option value="month">Filter By: Month</option>
+          <option value="week">Filter By: Week</option>
+        </select>
       </div>
 
       {/* Receipt Preview Modal */}

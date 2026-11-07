@@ -20,6 +20,7 @@ export interface DocumentItem {
 export interface FolderItem {
   id: string;
   name: string;
+  kind?: 'shared' | 'owned';
   isRecentlyCreated?: boolean;
   files: DocumentItem[];
 }
@@ -33,13 +34,16 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const [loadingDocs, setLoadingDocs] = useState<boolean>(true);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [currentSection, setCurrentSection] = useState<'shared' | 'owned' | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [hoveredFolderId, setHoveredFolderId] = useState<string | null>(null);
+  const [hoveredSection, setHoveredSection] = useState<'shared' | 'owned' | null>(null);
   const [isNavigating, setIsNavigating] = useState<boolean>(false);
 
   // Independent interacted state per user role (client vs lawyer)
   const storageKey = `justicia_interacted_folders_${role}`;
+  const customStorageKey = role === 'lawyer' ? 'justicia_lawyer_custom_folders' : 'justicia_client_custom_folders';
   const [interactedFolderIds, setInteractedFolderIds] = useState<string[]>([]);
 
   // Modals
@@ -57,6 +61,20 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const [folderError, setFolderError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const navigationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (navigationTimerRef.current) clearTimeout(navigationTimerRef.current);
+  }, []);
+
+  const animateFolderNavigation = () => {
+    if (navigationTimerRef.current) clearTimeout(navigationTimerRef.current);
+    setIsNavigating(true);
+    navigationTimerRef.current = setTimeout(() => {
+      setIsNavigating(false);
+      navigationTimerRef.current = null;
+    }, 240);
+  };
 
   // Load real folders and documents from Supabase
   useEffect(() => {
@@ -78,12 +96,12 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
 
       // Also merge any instant local custom folders
       try {
-        const custom = localStorage.getItem('justicia_client_custom_folders');
+        const custom = localStorage.getItem(customStorageKey);
         if (custom) {
           const parsed: FolderItem[] = JSON.parse(custom);
           if (parsed && Array.isArray(parsed)) {
             const existingIds = new Set(combined.map((f) => f.id));
-            const extra = parsed.filter((f) => !existingIds.has(f.id));
+            const extra = parsed.filter((f) => !existingIds.has(f.id)).map((f) => ({ ...f, kind: 'owned' as const }));
             combined = [...extra, ...combined];
           }
         }
@@ -94,14 +112,14 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       setFolders(combined);
       setLoadingDocs(false);
     });
-  }, [role, storageKey]);
+  }, [role, storageKey, customStorageKey]);
 
   // Handle clicking on a folder:
   // 1. Shows sleek skeleton transition
   // 2. Marks it as interacted for this role (removes NEW badge permanently for this user)
   // 3. Opens the folder
   const handleFolderClick = (folder: FolderItem) => {
-    setIsNavigating(true);
+    animateFolderNavigation();
     if (!interactedFolderIds.includes(folder.id)) {
       const updated = [...interactedFolderIds, folder.id];
       setInteractedFolderIds(updated);
@@ -112,20 +130,26 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       }
     }
     setCurrentFolderId(folder.id);
-    setTimeout(() => setIsNavigating(false), 240);
   };
 
   const handleBackToRoot = () => {
-    if (!currentFolderId) return;
-    setIsNavigating(true);
+    if (!currentFolderId && !currentSection) return;
+    animateFolderNavigation();
     setCurrentFolderId(null);
-    setTimeout(() => setIsNavigating(false), 240);
+    if (!currentFolderId) setCurrentSection(null);
+  };
+
+  const navigateLawyerDocuments = (section: 'shared' | 'owned' | null, folderId: string | null = null) => {
+    animateFolderNavigation();
+    setCurrentSection(section);
+    setCurrentFolderId(folderId);
   };
 
   const currentFolder = folders.find((f) => f.id === currentFolderId) || null;
 
   // Filtered lists
   const filteredFolders = folders.filter((f) =>
+    (role !== 'lawyer' || !currentSection || (f.kind ?? 'shared') === currentSection) &&
     f.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -134,6 +158,9 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
         file.name.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : [];
+
+  const getFolderArtwork = (isNew: boolean, isHovered: boolean) =>
+    isNew ? '/assets/new_folder_icon.svg' : isHovered ? '/assets/folder_hover.svg' : '/assets/folder_icon.svg';
 
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,16 +179,18 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       const created: FolderItem = (res && 'folder' in res && res.folder) ? res.folder : {
         id: `fld-${Date.now()}`,
         name: newFolderName.trim(),
+        kind: 'owned',
         isRecentlyCreated: true,
         files: [],
       };
 
       setFolders((prev) => [created, ...prev]);
+      if (role === 'lawyer') navigateLawyerDocuments('owned');
 
       try {
-        const custom = localStorage.getItem('justicia_client_custom_folders');
+        const custom = localStorage.getItem(customStorageKey);
         const parsed: FolderItem[] = custom ? JSON.parse(custom) : [];
-        localStorage.setItem('justicia_client_custom_folders', JSON.stringify([created, ...parsed]));
+        localStorage.setItem(customStorageKey, JSON.stringify([created, ...parsed]));
       } catch {
         // ignore
       }
@@ -272,7 +301,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   };
 
   return (
-    <div className="max-w-[1300px] mx-auto px-4 sm:px-8 py-6 space-y-8">
+    <div className={`${role === 'lawyer' ? 'lawyer-documents' : ''} max-w-[1300px] mx-auto px-4 sm:px-8 py-6 space-y-8`}>
       {/* ─── Top Toolbar (Exact Figma Design in Image 2 & 3) ────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         {/* Left: + New Button */}
@@ -307,15 +336,24 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
         >
           <button
             type="button"
-            onClick={handleBackToRoot}
+            onClick={role === 'lawyer' ? () => navigateLawyerDocuments(null) : handleBackToRoot}
             className={`font-medium transition-colors ${
               currentFolder
                 ? 'text-[#5C4535] hover:text-[#23150F]'
                 : 'text-[#23150F] font-bold'
             }`}
           >
-            My Documents
+            {role === 'lawyer' ? 'Client Documents' : 'My Documents'}
           </button>
+
+          {role === 'lawyer' && currentSection && (
+            <>
+              <span aria-hidden="true">›</span>
+              <button type="button" onClick={() => navigateLawyerDocuments(currentSection)} className="font-medium text-[#341512]">
+                {currentSection === 'shared' ? 'Shared With You' : 'Your Documents'}
+              </button>
+            </>
+          )}
 
           {currentFolder && (
             <>
@@ -414,7 +452,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       {/* ─── Skeleton Loading State during Navigation ─── */}
       {isNavigating ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 sm:gap-8 items-start pt-4 animate-in fade-in duration-150">
-          {Array.from({ length: 10 }).map((_, i) => (
+          {Array.from({ length: role === 'lawyer' ? (currentFolder ? 5 : 3) : 10 }).map((_, i) => (
             <div key={i} className="flex flex-col items-center justify-center p-3 rounded-2xl space-y-3">
               <div
                 className="w-32 h-24 sm:w-36 sm:h-26 rounded-2xl neu-skeleton"
@@ -429,7 +467,41 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       ) : (
         <>
           {/* ─── SCENARIO A: Top-level Folders View (Matches Image 2) ────────────── */}
-          {!currentFolder && (
+          {role === 'lawyer' && !currentSection && !currentFolder && (
+            <div className="lawyer-document-categories grid grid-cols-2 sm:grid-cols-[repeat(3,190px)] gap-6 pt-4 animate-in fade-in duration-150">
+              {([{ key: 'shared', label: 'Shared With You' }, { key: 'owned', label: 'Your Documents' }] as const).map((section) => {
+                const isNew = folders.some((folder) =>
+                  (folder.kind ?? 'shared') === section.key && folder.isRecentlyCreated && !interactedFolderIds.includes(folder.id)
+                );
+                const iconSrc = getFolderArtwork(isNew, hoveredSection === section.key);
+                return (
+                  <button
+                    key={section.key}
+                    type="button"
+                    onClick={() => navigateLawyerDocuments(section.key)}
+                    onMouseEnter={() => setHoveredSection(section.key)}
+                    onMouseLeave={() => setHoveredSection(null)}
+                    onFocus={() => setHoveredSection(section.key)}
+                    onBlur={() => setHoveredSection(null)}
+                    className="group flex flex-col items-center justify-center cursor-pointer p-3 rounded-2xl hover:bg-[#EFE5D8]/40 transition-all select-none focus-visible:outline-2 focus-visible:outline-[#85441e]"
+                  >
+                    <div className="relative w-32 h-26 sm:w-36 sm:h-28 flex items-center justify-center transition-transform duration-200 group-hover:scale-105 group-focus-visible:scale-105">
+                      <Image src={iconSrc} alt="" width={140} height={110} className="w-full h-full object-contain drop-shadow-sm" priority />
+                    </div>
+                    <span className="font-serif text-xs sm:text-[13px] text-[#23150F] text-center mt-2.5 font-medium leading-tight max-w-[150px] group-hover:text-[#C58B3C] transition-colors">{section.label}</span>
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setShowNewFolderModal(true)}
+                aria-label="Create new folder"
+                className="lawyer-document-category-add self-center justify-self-center w-20 h-20 sm:w-22 sm:h-22 rounded-full flex items-center justify-center text-3xl font-light text-[#8C7A6A] hover:text-[#23150F] transition-all hover:scale-105"
+                style={{ backgroundColor: '#ECE1D2', boxShadow: '8px 8px 18px rgba(182, 155, 130, 0.4), -8px -8px 18px #FFFFFF, 2px 2px 5px rgba(182, 155, 130, 0.2)' }}
+              >+</button>
+            </div>
+          )}
+          {!currentFolder && (role !== 'lawyer' || currentSection) && (
             <div className="space-y-6 animate-in fade-in duration-150">
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 sm:gap-8 items-start pt-4">
@@ -443,12 +515,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                     // If it's NEW -> new_folder_icon.svg (with yellow NEW badge)
                     // If hovered -> folder_hover.svg (open folder)
                     // Otherwise -> folder_icon.svg (closed folder)
-                    let iconSrc = '/assets/folder_icon.svg';
-                    if (isNew) {
-                      iconSrc = '/assets/new_folder_icon.svg';
-                    } else if (isHovered) {
-                      iconSrc = '/assets/folder_hover.svg';
-                    }
+                    const iconSrc = getFolderArtwork(isNew, isHovered);
 
                     return (
                       <div
@@ -480,10 +547,12 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
 
                   {filteredFolders.length === 0 && !loadingDocs && (
                     <div className="col-span-full py-16 text-center space-y-2">
-                      <div className="text-4xl text-[#8C7A6A]">📁</div>
-                      <p className="text-sm font-semibold text-[#34150F]">No case folders in your vault yet</p>
+                      <Image src="/assets/folder_icon.svg" alt="" width={64} height={52} className="mx-auto opacity-60" />
+                      <p className="text-sm font-semibold text-[#34150F]">{role === 'lawyer' ? 'No folders here yet' : 'No case folders in your vault yet'}</p>
                       <p className="text-xs text-[#7D6855] max-w-md mx-auto">
-                        Folders and attached files from your booked consultations will automatically appear here. You can also click + to create a custom folder.
+                        {role === 'lawyer' && currentSection === 'shared'
+                          ? 'Documents shared through consultations will appear here.'
+                          : 'Folders and attached files from your booked consultations will automatically appear here. You can also click + to create a custom folder.'}
                       </p>
                     </div>
                   )}

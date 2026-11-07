@@ -290,9 +290,6 @@ function FigmaConsultationCard({ consultation }: { consultation: ScheduledConsul
           <p className="text-xs sm:text-[13px] text-[#665246] leading-relaxed">
             {consultation.caseDescription}
           </p>
-          <p className="text-xs sm:text-[13px] text-[#665246] leading-relaxed">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-          </p>
         </div>
       </div>
 
@@ -365,7 +362,7 @@ export function LawyerDashboardView({
   };
 
   return (
-    <div className="p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-7">
+    <div className="lawyer-dashboard p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-7">
       {/* ── 4 Top KPI Cards (Matching Figma Layout) ─────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <FigmaKPICard
