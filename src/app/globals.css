@@ -30,11 +30,11 @@ body {
 }
 
 .font-cinzel {
-  font-family: var(--font-cinzel), 'Times New Roman', Georgia, serif;
+  font-family: var(--font-cinzel), "Times New Roman", Georgia, serif;
 }
 
 .font-cormorant {
-  font-family: var(--font-cormorant), 'Times New Roman', Georgia, serif;
+  font-family: var(--font-cormorant), "Times New Roman", Georgia, serif;
 }
 
 .font-lora {
@@ -42,7 +42,14 @@ body {
 }
 
 .font-inter {
-  font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    var(--font-inter),
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
 }
 
 .font-cormorant-unicase {
@@ -99,12 +106,12 @@ body {
 
 #client-main-content::-webkit-scrollbar-track,
 #lawyer-main-content::-webkit-scrollbar-track {
-  background: #E5D8CB;
+  background: #e5d8cb;
 }
 
 #client-main-content::-webkit-scrollbar-thumb,
 #lawyer-main-content::-webkit-scrollbar-thumb {
-  background: #C8B59E;
+  background: #c8b59e;
   border-radius: 3px;
 }
 
@@ -144,51 +151,51 @@ body {
 
 /* Extruded large main cards (Consultation card, major containers) */
 .neu-card {
-  background-color: #ECE1D2;
+  background-color: #ece1d2;
   box-shadow:
     16px 16px 36px rgba(182, 155, 130, 0.45),
     4px 4px 10px rgba(182, 155, 130, 0.25),
-    -16px -16px 36px #FFFFFF,
-    -4px -4px 10px #FFFFFF;
+    -16px -16px 36px #ffffff,
+    -4px -4px 10px #ffffff;
   border: none;
 }
 
 /* Medium extruded cards (KPI tiles, calendar, status bar) */
 .neu-card-md {
-  background-color: #ECE1D2;
+  background-color: #ece1d2;
   box-shadow:
     10px 10px 24px rgba(182, 155, 130, 0.4),
     3px 3px 8px rgba(182, 155, 130, 0.2),
-    -10px -10px 24px #FFFFFF,
-    -3px -3px 8px #FFFFFF;
+    -10px -10px 24px #ffffff,
+    -3px -3px 8px #ffffff;
   border: none;
 }
 
 /* Warm peach extruded inner plates (Client profile box, KPI number plates, list containers) */
 .neu-plate {
-  background-color: #DFC5A4;
+  background-color: #dfc5a4;
   box-shadow:
     10px 12px 24px rgba(165, 135, 105, 0.45),
     3px 4px 8px rgba(165, 135, 105, 0.25),
     -10px -10px 22px rgba(255, 255, 255, 0.95),
-    -3px -3px 6px #FFFFFF;
+    -3px -3px 6px #ffffff;
   border: none;
 }
 
 /* Smaller extruded warm plates / pills */
 .neu-plate-sm {
-  background-color: #DFC5A4;
+  background-color: #dfc5a4;
   box-shadow:
     5px 6px 14px rgba(165, 135, 105, 0.4),
     2px 2px 5px rgba(165, 135, 105, 0.2),
     -5px -5px 12px rgba(255, 255, 255, 0.9),
-    -2px -2px 4px #FFFFFF;
+    -2px -2px 4px #ffffff;
   border: none;
 }
 
 /* Warm peach recessed / inset inner plates (Metrics box in Lawyer Card) */
 .neu-plate-inset {
-  background-color: #DFC5A4;
+  background-color: #dfc5a4;
   border: none;
   box-shadow:
     inset 3px 3px 6px rgba(145, 115, 88, 0.45),
@@ -199,12 +206,12 @@ body {
 
 /* Monolithic extruded button on peach plate (e.g. Message button) */
 .neu-btn-peach {
-  background-color: #DFC5A4;
+  background-color: #dfc5a4;
   box-shadow:
     5px 6px 14px rgba(145, 115, 88, 0.45),
     2px 2px 5px rgba(145, 115, 88, 0.25),
     -5px -5px 12px rgba(255, 255, 255, 0.85),
-    -2px -2px 4px #FFFFFF;
+    -2px -2px 4px #ffffff;
   border: none;
   transition: all 140ms ease;
 }
@@ -221,34 +228,34 @@ body {
 
 /* Debossed / Inset elements (search input, debossed appointment list items) */
 .neu-inset {
-  background-color: #E6D7C3;
+  background-color: #e6d7c3;
   box-shadow:
     inset 3px 3px 6px rgba(165, 140, 115, 0.55),
     inset 1.5px 1.5px 3px rgba(165, 140, 115, 0.35),
     inset -3px -3px 6px rgba(255, 255, 255, 0.95),
-    inset -1.5px -1.5px 3px #FFFFFF;
+    inset -1.5px -1.5px 3px #ffffff;
   border: none;
 }
 
 /* Small debossed / inset pills (date pill, time pill, calendar month badge) */
 .neu-inset-sm {
-  background-color: #E6D7C3;
+  background-color: #e6d7c3;
   box-shadow:
     inset 2px 2px 5px rgba(165, 140, 115, 0.5),
     inset 1px 1px 2px rgba(165, 140, 115, 0.3),
     inset -2px -2px 5px rgba(255, 255, 255, 0.95),
-    inset -1px -1px 2px #FFFFFF;
+    inset -1px -1px 2px #ffffff;
   border: none;
 }
 
 /* Raised extruded buttons (interactive click press on parchment) */
 .neu-btn {
-  background-color: #ECE1D2;
+  background-color: #ece1d2;
   box-shadow:
     5px 5px 12px rgba(182, 155, 130, 0.4),
     2px 2px 5px rgba(182, 155, 130, 0.2),
-    -5px -5px 12px #FFFFFF,
-    -2px -2px 4px #FFFFFF;
+    -5px -5px 12px #ffffff,
+    -2px -2px 4px #ffffff;
   border: none;
   transition: all 140ms ease;
 }
@@ -260,12 +267,12 @@ body {
 .neu-btn:active {
   box-shadow:
     inset 2px 2px 5px rgba(182, 155, 130, 0.5),
-    inset -2px -2px 5px #FFFFFF;
+    inset -2px -2px 5px #ffffff;
 }
 
 /* Caramel / Gold primary action button (Join Meet) */
 .neu-btn-caramel {
-  background-color: #D49E56;
+  background-color: #d49e56;
   box-shadow:
     0 6px 16px rgba(212, 158, 86, 0.4),
     inset 0 1px 1px rgba(255, 255, 255, 0.4);
@@ -274,7 +281,7 @@ body {
 }
 
 .neu-btn-caramel:hover {
-  background-color: #C58B3C;
+  background-color: #c58b3c;
 }
 
 .neu-btn-caramel:active {
@@ -283,16 +290,17 @@ body {
 
 /* Tactile Capsule Button with real physical plunge & inset shadow */
 .neu-btn-tactile {
-  background-color: rgba(211, 151, 88, 0.30);
+  background-color: rgba(211, 151, 88, 0.3);
   border: none;
   box-shadow:
-    5px 5px 13px 0 rgba(206, 194, 183, 0.90),
-    -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
-    5px -5px 10px 0 rgba(206, 194, 183, 0.20),
-    -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
-    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
-  transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+    5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.3);
+  transition:
+    transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
     box-shadow 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
     filter 0.15s ease;
   will-change: transform, box-shadow;
@@ -303,24 +311,24 @@ body {
   box-shadow:
     7px 8px 16px 0 rgba(206, 194, 183, 0.95),
     -6px -6px 12px 0 rgba(252, 238, 223, 0.95),
-    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.40),
-    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.40);
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.4),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.4);
   filter: brightness(1.02);
 }
 
 .neu-btn-tactile:active {
   transform: translateY(2px) scale(0.97);
   box-shadow:
-    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
-    inset 4px 4px 9px 0 rgba(180, 140, 100, 0.70),
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 4px 4px 9px 0 rgba(180, 140, 100, 0.7),
     inset -4px -4px 8px 0 rgba(255, 255, 255, 0.85);
   transition-duration: 0.06s;
 }
 
 /* Dark espresso action button (View Details) */
 .neu-btn-espresso {
-  background-color: #4A2E25;
+  background-color: #4a2e25;
   box-shadow:
     0 6px 16px rgba(74, 46, 37, 0.38),
     inset 0 1px 1px rgba(255, 255, 255, 0.15);
@@ -329,7 +337,7 @@ body {
 }
 
 .neu-btn-espresso:hover {
-  background-color: #3D251D;
+  background-color: #3d251d;
 }
 
 .neu-btn-espresso:active {
@@ -338,25 +346,1073 @@ body {
 
 /* Confirmed appointment badge (vibrant emerald pill) */
 .neu-badge-green {
-  background-color: #27AE60;
+  background-color: #27ae60;
   box-shadow:
     4px 6px 16px rgba(39, 174, 96, 0.4),
     -2px -2px 6px rgba(255, 255, 255, 0.25);
   border: none;
 }
 
+/* Lawyer portal surfaces follow the restrained parchment treatment in Figma. */
+.lawyer-portal {
+  --lawyer-paper: #e5d8cb;
+  --lawyer-ink: #341512;
+  --lawyer-peach: #dfc5a9;
+  --lawyer-light: rgba(252, 238, 223, 0.9);
+  --lawyer-shade: rgba(206, 194, 183, 0.8);
+  --lawyer-raised-shadow:
+    -5px -5px 10px rgba(252, 238, 223, 0.85),
+    5px 5px 13px rgba(206, 194, 183, 0.72),
+    inset 1px 1px 2px rgba(252, 238, 223, 0.3),
+    inset -1px -1px 2px rgba(206, 194, 183, 0.5);
+  --lawyer-recessed-shadow:
+    1px 1px 2px rgba(252, 238, 223, 0.3),
+    -1px -1px 2px rgba(206, 194, 183, 0.5),
+    inset -5px -5px 10px rgba(252, 238, 223, 0.78),
+    inset 5px 5px 13px rgba(206, 194, 183, 0.68);
+  --lawyer-pressed-shadow:
+    inset 3px 3px 7px rgba(177, 160, 146, 0.55),
+    inset -3px -3px 7px rgba(252, 238, 223, 0.8);
+  font-family: var(--font-lora), Georgia, serif;
+}
+
+.lawyer-portal aside nav button,
+.lawyer-portal aside > div:last-child button {
+  height: 44px;
+  min-height: 44px;
+  border-radius: 15px;
+  padding: 8px 16px;
+  gap: 10px;
+  color: #341512;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 28px;
+}
+
+.lawyer-portal aside nav button[data-active="true"] {
+  background: #dbc9ba;
+  box-shadow:
+    1px 1px 2px rgba(241, 221, 205, 0.3),
+    -1px -1px 2px rgba(197, 181, 167, 0.5),
+    inset -5px 5px 10px rgba(197, 181, 167, 0.2),
+    inset 5px -5px 10px rgba(197, 181, 167, 0.2),
+    inset -5px -5px 10px rgba(241, 221, 205, 0.9),
+    inset 5px 5px 13px rgba(197, 181, 167, 0.75);
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.lawyer-portal aside {
+  height: min(579px, calc(100vh - 64px));
+  align-self: flex-start;
+  justify-content: flex-start;
+  padding: 16px 11px 43px 13px;
+  border-right: 1px solid rgba(0, 0, 0, 0.25);
+  background: rgba(133, 68, 30, 0.1);
+  scrollbar-width: none;
+}
+
+.lawyer-portal aside::-webkit-scrollbar {
+  display: none;
+}
+
+.lawyer-portal aside nav {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 29px;
+}
+
+.lawyer-portal aside nav > button {
+  margin: 0 !important;
+}
+
+.lawyer-portal aside nav > button:nth-child(6) {
+  margin-top: 2px !important;
+}
+.lawyer-portal aside nav > button:nth-child(7) {
+  margin-top: 1px !important;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.lawyer-portal aside nav button svg,
+.lawyer-portal aside > div:last-child button svg {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  color: #341512;
+}
+
+.lawyer-portal aside > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: none;
+  margin-top: 26px;
+  padding-top: 0;
+}
+
+.lawyer-portal aside > div:last-child > hr {
+  flex: none;
+  width: 143px;
+  height: 1px;
+  margin: 0 0 23px 38px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.lawyer-portal aside > div:last-child > button,
+.lawyer-portal aside > div:last-child > form {
+  margin: 0 !important;
+}
+
+@media (min-width: 768px) {
+  .lawyer-portal > header {
+    padding-left: 55px;
+    padding-right: 46px;
+  }
+
+  .lawyer-portal #lawyer-nav-logo {
+    font-family: var(--font-lora), Georgia, serif;
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 28px;
+    letter-spacing: 0.4px;
+  }
+
+  .lawyer-portal > header > div:last-child {
+    gap: 17px;
+  }
+
+  .lawyer-portal > header > div:last-child > div {
+    display: flex;
+    align-items: center;
+  }
+
+  .lawyer-portal > header > div:last-child > button,
+  .lawyer-portal
+    > header
+    > div:last-child
+    > div
+    > button:not(#lawyer-nav-user-menu) {
+    width: 29px;
+    height: 29px;
+    padding: 0;
+  }
+
+  .lawyer-portal > header > div:last-child > button svg,
+  .lawyer-portal
+    > header
+    > div:last-child
+    > div
+    > button:not(#lawyer-nav-user-menu)
+    svg {
+    width: 29px;
+    height: 29px;
+  }
+
+  .lawyer-portal #lawyer-nav-user-menu {
+    width: 45px;
+    height: 45px;
+    padding: 0;
+  }
+
+  .lawyer-portal #lawyer-nav-user-menu svg {
+    width: 45px;
+    height: 45px;
+  }
+}
+
+.lawyer-designed-view .neu-card,
+.lawyer-designed-view .neu-card-md {
+  background: var(--lawyer-paper);
+  box-shadow: var(--lawyer-recessed-shadow);
+  border-radius: 15px;
+}
+
+.lawyer-designed-view .neu-plate,
+.lawyer-designed-view .neu-plate-sm,
+.lawyer-designed-view .neu-btn-peach {
+  background: rgba(211, 151, 88, 0.3);
+  box-shadow: var(--lawyer-raised-shadow);
+  border-radius: 11px;
+}
+
+.lawyer-designed-view .neu-inset,
+.lawyer-designed-view .neu-inset-sm {
+  background: var(--lawyer-paper);
+  box-shadow: var(--lawyer-recessed-shadow);
+}
+
+.lawyer-designed-view .neu-btn {
+  background: var(--lawyer-paper);
+  box-shadow: var(--lawyer-raised-shadow);
+}
+
+.lawyer-designed-view .neu-btn:active,
+.lawyer-designed-view .neu-btn-peach:active,
+.lawyer-designed-view .neu-plate-sm:active {
+  box-shadow: var(--lawyer-pressed-shadow);
+}
+
+.lawyer-designed-view .neu-btn-espresso {
+  background: rgba(52, 21, 18, 0.8);
+  box-shadow:
+    2px 3px 6px rgba(52, 21, 18, 0.2),
+    inset 1px 1px 2px rgba(252, 238, 223, 0.2);
+}
+
+.lawyer-designed-view .neu-btn-caramel {
+  background: rgba(211, 151, 88, 0.7);
+  box-shadow: var(--lawyer-raised-shadow);
+}
+
+.lawyer-designed-view .neu-btn-caramel:active {
+  box-shadow: var(--lawyer-pressed-shadow);
+}
+
+.lawyer-designed-view .neu-badge-green {
+  background: #33a94e;
+  box-shadow: 1px 2px 4px rgba(51, 169, 78, 0.2);
+}
+
+.lawyer-designed-view .neu-card.rounded-\[36px\],
+.lawyer-designed-view .neu-card.rounded-\[40px\] {
+  border-radius: 16px;
+  padding: 22px;
+}
+
+.lawyer-designed-view .neu-card .neu-plate {
+  padding: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lawyer-designed-view *,
+  .lawyer-designed-view *::before,
+  .lawyer-designed-view *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.lawyer-dashboard {
+  max-width: 1196px;
+  padding: 48px 66px 44px;
+  font-family: var(--font-lora), Georgia, serif;
+}
+
+.lawyer-dashboard > .grid:first-child {
+  gap: 20px;
+}
+
+.lawyer-dashboard > .grid:first-child .neu-card-md {
+  height: 158px;
+  padding: 16px 22px 21px;
+  border-radius: 10px;
+}
+
+.lawyer-dashboard > .grid:first-child .neu-card-md h3 {
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.lawyer-dashboard > .grid:first-child .neu-plate {
+  height: 88px;
+  min-height: 88px;
+  margin-top: 0;
+  padding: 10px 16px 12px;
+  border-radius: 10px;
+  box-shadow: var(--dashboard-pill-raised);
+}
+
+.lawyer-dashboard > .grid:first-child .neu-plate svg {
+  width: 42px;
+  height: 42px;
+}
+
+.lawyer-dashboard > .grid:first-child .neu-plate span {
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 40px;
+  font-weight: 600;
+}
+
+.lawyer-dashboard > .grid:first-child .neu-plate p {
+  font-size: 7px;
+  margin-top: 2px;
+}
+
+.lawyer-dashboard > hr {
+  max-width: 78%;
+  margin: 38px auto 44px !important;
+  border-top: 2px solid rgba(52, 21, 18, 0.26);
+}
+
+.lawyer-dashboard > .flex .neu-plate,
+.lawyer-consultations > .grid .neu-plate.rounded-full {
+  border-radius: 20px;
+  padding: 8px 22px;
+  font-weight: 500;
+}
+
+.lawyer-dashboard > .flex .neu-plate {
+  width: min(310px, 100%);
+  height: 44px;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.lawyer-dashboard > .overflow-hidden {
+  margin-top: 12px !important;
+}
+
+.lawyer-dashboard > hr + .flex {
+  margin-bottom: 0 !important;
+}
+
+@media (min-width: 1280px) {
+  .lawyer-designed-view .lawyer-dashboard .neu-card {
+    height: 440px;
+    padding: 27px 38px 41px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .lawyer-dashboard .neu-card > * + * {
+    margin-top: 25px !important;
+  }
+
+  .lawyer-dashboard .neu-card > * {
+    margin-bottom: 0 !important;
+  }
+
+  .lawyer-dashboard .neu-card > div:last-child {
+    margin-top: auto !important;
+  }
+
+  .lawyer-dashboard .neu-card > .neu-plate {
+    min-height: 109px;
+    padding: 14px 16px;
+  }
+
+  .lawyer-dashboard .neu-card > .space-y-1\.5 {
+    padding-top: 0;
+  }
+
+  .lawyer-dashboard .neu-card > .space-y-1\.5 > p:first-child {
+    font-size: 7px;
+  }
+
+  .lawyer-dashboard .neu-card > .space-y-1\.5 h3 {
+    font-size: 16px;
+  }
+
+  .lawyer-dashboard .neu-card > .space-y-1\.5 p:last-child {
+    font-family: var(--font-inter), Arial, sans-serif;
+    font-size: 10px;
+    line-height: 15px;
+    text-align: justify;
+  }
+}
+
+.lawyer-dashboard .neu-card .neu-plate h4,
+.lawyer-consultations .neu-card .neu-plate h4,
+.lawyer-dashboard .neu-card h3,
+.lawyer-consultations .neu-card h3 {
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 17px;
+}
+
+.lawyer-dashboard .neu-card .neu-plate p,
+.lawyer-consultations .neu-card .neu-plate p {
+  font-size: 11px;
+}
+
+.lawyer-dashboard .neu-card .neu-plate svg,
+.lawyer-consultations .neu-card .neu-plate svg {
+  max-width: 80px;
+  max-height: 80px;
+}
+
+/* Lawyer dashboard pills: dimensions and material taken from the Figma frame. */
+.lawyer-dashboard {
+  --dashboard-pill-raised:
+    -5px 5px 10px rgba(206, 194, 183, 0.2),
+    5px -5px 10px rgba(206, 194, 183, 0.2),
+    -5px -5px 10px rgba(252, 238, 223, 0.9),
+    5px 5px 13px rgba(206, 194, 183, 0.9),
+    inset 1px 1px 2px rgba(252, 238, 223, 0.3),
+    inset -1px -1px 2px rgba(206, 194, 183, 0.5);
+  --dashboard-pill-recessed:
+    1px 1px 2px rgba(252, 238, 223, 0.3),
+    -1px -1px 2px rgba(206, 194, 183, 0.5),
+    inset -5px 5px 10px rgba(206, 194, 183, 0.2),
+    inset 5px -5px 10px rgba(206, 194, 183, 0.2),
+    inset -5px -5px 10px rgba(252, 238, 223, 0.9),
+    inset 5px 5px 13px rgba(206, 194, 183, 0.9);
+}
+
+.lawyer-dashboard > hr + .flex {
+  flex-wrap: wrap;
+}
+
+.lawyer-dashboard > hr + .flex .lawyer-dashboard-heading-pill {
+  background: rgba(211, 151, 88, 0.3);
+  border-radius: 20px;
+  box-shadow: var(--dashboard-pill-raised);
+  color: rgba(52, 21, 18, 0.8);
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.32px;
+  justify-content: flex-start;
+  padding-left: 29px;
+}
+
+.lawyer-dashboard .lawyer-dashboard-filter-pill {
+  width: min(246px, 100%);
+  height: 33px;
+  padding: 0 17px;
+  gap: 0;
+  justify-content: space-between;
+  flex: none;
+  border-radius: 10px;
+  background: #e5d8cb;
+  box-shadow: var(--dashboard-pill-recessed);
+  color: rgba(52, 21, 18, 0.8);
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.22px;
+  white-space: nowrap;
+}
+
+.lawyer-dashboard .lawyer-dashboard-filter-pill svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.lawyer-dashboard .lawyer-dashboard-view-pill {
+  position: relative;
+  width: 92px;
+  height: 33px;
+  padding: 0 10px 0 12px;
+  gap: 0;
+  justify-content: space-between;
+  flex: none;
+  border-radius: 10px;
+  background: #e5d8cb;
+  box-shadow: var(--dashboard-pill-recessed);
+}
+
+.lawyer-dashboard .lawyer-dashboard-view-pill::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 45px;
+  border-radius: 0 10px 10px 0;
+  background: #e5d8cb;
+  box-shadow:
+    -5px 5px 10px rgba(195, 184, 173, 0.2),
+    5px -5px 10px rgba(195, 184, 173, 0.2),
+    -5px -5px 10px rgba(255, 248, 233, 0.9),
+    5px 5px 13px rgba(195, 184, 173, 0.9),
+    inset 1px 1px 2px rgba(255, 248, 233, 0.3),
+    inset -1px -1px 2px rgba(195, 184, 173, 0.5);
+  pointer-events: none;
+}
+
+.lawyer-dashboard .lawyer-dashboard-view-pill svg {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  z-index: 1;
+}
+
+.lawyer-dashboard .lawyer-dashboard-date-pill,
+.lawyer-dashboard .lawyer-dashboard-time-pill,
+.lawyer-dashboard .lawyer-dashboard-status-pill {
+  height: 27px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  flex: none;
+  border-radius: 20px;
+  box-shadow: var(--dashboard-pill-raised);
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.16px;
+  white-space: nowrap;
+}
+
+.lawyer-dashboard .lawyer-dashboard-date-pill {
+  width: 142px;
+  padding-left: 13px;
+  background: #e5d8cb;
+  color: rgba(52, 21, 18, 0.8);
+}
+
+.lawyer-dashboard .lawyer-dashboard-time-pill {
+  width: 159px;
+  background: #e5d8cb;
+  color: rgba(52, 21, 18, 0.8);
+}
+
+.lawyer-dashboard .lawyer-dashboard-status-pill {
+  width: 140px;
+  height: 26px;
+  background: #33a94e;
+  color: #e5d8cb;
+}
+
+.lawyer-dashboard .lawyer-dashboard-message-pill {
+  width: 87px;
+  height: 25px;
+  padding: 0;
+  flex: none;
+  border-radius: 10px;
+  background: #e2c7ab;
+  box-shadow:
+    -5px 5px 10px rgba(203, 179, 154, 0.2),
+    5px -5px 10px rgba(203, 179, 154, 0.2),
+    -5px -5px 10px rgba(249, 219, 188, 0.9),
+    5px 5px 13px rgba(203, 179, 154, 0.9),
+    inset 1px 1px 2px rgba(249, 219, 188, 0.3),
+    inset -1px -1px 2px rgba(203, 179, 154, 0.5);
+  color: rgba(52, 21, 18, 0.8);
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.24px;
+  text-align: center;
+}
+
+.lawyer-dashboard .lawyer-dashboard-cancel-pill,
+.lawyer-dashboard .lawyer-dashboard-details-pill,
+.lawyer-dashboard .lawyer-dashboard-join-pill {
+  height: 35px;
+  padding: 0;
+  flex: none;
+  border-radius: 10px;
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.24px;
+}
+
+.lawyer-dashboard .lawyer-dashboard-cancel-pill {
+  width: 97px;
+  border: 1px solid rgba(52, 21, 18, 0.8);
+  background: #e5d8cb;
+  box-shadow: none;
+  color: #341512;
+}
+
+.lawyer-dashboard .lawyer-dashboard-details-pill {
+  width: 111px;
+  background: rgba(52, 21, 18, 0.8);
+  box-shadow: var(--dashboard-pill-raised);
+  color: #e5d8cb;
+}
+
+.lawyer-dashboard .lawyer-dashboard-join-pill {
+  width: 110px;
+  gap: 5px;
+  background: rgba(211, 151, 88, 0.7);
+  box-shadow: var(--dashboard-pill-raised);
+  color: #341512;
+}
+
+.lawyer-dashboard .lawyer-dashboard-join-pill svg {
+  width: 22px;
+  height: 22px;
+}
+
+.lawyer-dashboard .neu-card > div:last-child > div {
+  gap: 18px;
+  margin-right: -2px;
+}
+
+.lawyer-dashboard .lawyer-dashboard-prev-pill {
+  background: transparent;
+  box-shadow: none;
+  font-size: 30px;
+  font-weight: 400;
+}
+
+.lawyer-dashboard .lawyer-dashboard-next-pill {
+  background: #e5d8cb;
+  box-shadow: var(--dashboard-pill-raised);
+  font-size: 30px;
+  font-weight: 400;
+}
+
+@media (min-width: 1280px) {
+  .lawyer-dashboard > hr + .flex {
+    position: relative;
+  }
+
+  .lawyer-dashboard > hr + .flex > div:last-child {
+    position: absolute;
+    top: 10px;
+    right: 5px;
+    width: 359px;
+    gap: 21px;
+  }
+
+  .lawyer-dashboard .neu-card > div:first-child > div:first-child {
+    gap: 15px;
+  }
+
+  .lawyer-dashboard .lawyer-dashboard-status-pill {
+    margin-right: -2px;
+  }
+
+  .lawyer-dashboard .lawyer-dashboard-message-pill {
+    margin-right: 19px;
+    position: relative;
+    top: 1px;
+  }
+}
+
+.lawyer-dashboard > .flex:last-child {
+  gap: 51px;
+  padding-left: 18px;
+  margin-top: 38px !important;
+}
+
+.lawyer-dashboard > .flex:last-child > div {
+  gap: 4px;
+}
+
+@media (max-width: 639px) {
+  .lawyer-dashboard .neu-card > div:last-child > div {
+    flex-wrap: wrap;
+  }
+
+  .lawyer-dashboard > hr + .flex > div:last-child {
+    width: 100%;
+    gap: 5px;
+  }
+
+  .lawyer-dashboard .lawyer-dashboard-filter-pill {
+    width: calc(100% - 97px);
+    min-width: 0;
+  }
+
+  .lawyer-dashboard .lawyer-dashboard-filter-pill span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.lawyer-consultations {
+  max-width: 1196px;
+  padding: 44px 66px 60px;
+  font-family: var(--font-lora), Georgia, serif;
+}
+
+.lawyer-consultations > .space-y-4 {
+  padding: 29px;
+  background: var(--lawyer-paper);
+  border-radius: 16px;
+  box-shadow: var(--lawyer-raised-shadow);
+}
+
+.lawyer-consultations > .space-y-4 > div + div {
+  margin-top: 28px;
+}
+
+.lawyer-consultations > .space-y-4 button,
+.lawyer-consultations > .space-y-4 input,
+.lawyer-consultations > .space-y-4 select {
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.lawyer-consultations > .grid {
+  column-gap: 35px;
+  margin-top: 55px !important;
+}
+
+@media (min-width: 1280px) {
+  .lawyer-consultations > .space-y-4 > .flex:first-child {
+    gap: 20px;
+  }
+
+  .lawyer-consultations > .space-y-4 > .flex:first-child > button {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 33px;
+    padding: 0 8px;
+    border-radius: 5px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .lawyer-consultations > .grid {
+    grid-template-columns: 360px minmax(0, 1fr);
+  }
+
+  .lawyer-consultations > .grid > div:first-child {
+    width: 360px;
+  }
+
+  .lawyer-consultations > .grid > div:first-child > .neu-plate.rounded-full {
+    width: 360px;
+    height: 44px;
+    justify-content: center;
+    font-size: 16px;
+    margin-bottom: 0 !important;
+  }
+
+  .lawyer-consultations > .grid > div:first-child > .neu-card-md {
+    margin-top: 14px;
+    margin-bottom: 52px !important;
+  }
+
+  .lawyer-consultations
+    > .grid
+    > div:first-child
+    > .neu-plate:not(.rounded-full) {
+    height: 251px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .lawyer-consultations
+    > .grid
+    > div:first-child
+    > .neu-plate:not(.rounded-full)
+    > h4 {
+    font-family: var(--font-lora), Georgia, serif;
+    font-size: 14px;
+    line-height: 18px;
+    margin-bottom: 6px !important;
+  }
+
+  .lawyer-consultations
+    > .grid
+    > div:first-child
+    > .neu-plate:not(.rounded-full)
+    > div {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .lawyer-consultations
+    > .grid
+    > div:first-child
+    > .neu-plate:not(.rounded-full)
+    > div
+    > button {
+    height: 44px;
+    flex-shrink: 0;
+    padding: 4px 10px;
+  }
+
+  .lawyer-consultations
+    > .grid
+    > div:first-child
+    > .neu-plate:not(.rounded-full)
+    > div
+    > button:not(:last-child) {
+    margin-bottom: 6px !important;
+  }
+
+  .lawyer-designed-view .lawyer-consultations .neu-card {
+    min-height: 546px;
+    padding: 22px 30px 28px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .lawyer-consultations .neu-card > * {
+    margin-bottom: 0 !important;
+  }
+
+  .lawyer-consultations .neu-card > * + * {
+    margin-top: 28px !important;
+  }
+
+  .lawyer-consultations .neu-card > div:last-child {
+    margin-top: auto !important;
+  }
+
+  .lawyer-consultations .neu-card > div:first-child .neu-inset-sm,
+  .lawyer-consultations .neu-card > div:first-child .neu-badge-green {
+    height: 26px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 8px;
+    white-space: nowrap;
+  }
+
+  .lawyer-consultations .neu-card > .neu-plate {
+    min-height: 109px;
+    padding: 14px 16px;
+  }
+
+  .lawyer-consultations .neu-card > .neu-plate p {
+    font-size: 8px;
+    line-height: 12px;
+  }
+
+  .lawyer-consultations .neu-card > .neu-plate h4 {
+    font-size: 16px;
+  }
+
+  .lawyer-consultations .neu-card > .neu-plate button {
+    height: 30px;
+    padding: 0 16px;
+    font-size: 10px;
+  }
+
+  .lawyer-consultations .neu-card > .space-y-1\.5 > p:first-child {
+    font-size: 7px;
+  }
+
+  .lawyer-consultations .neu-card > .space-y-1\.5 h3 {
+    font-size: 16px;
+  }
+
+  .lawyer-consultations .neu-card > .space-y-1\.5 > div p {
+    font-family: var(--font-inter), Arial, sans-serif;
+    font-size: 10px;
+    line-height: 15px;
+    text-align: justify;
+  }
+}
+
+.lawyer-consultations-pending-header {
+  margin-top: 71px !important;
+}
+
+.lawyer-consultations-pending-header > button {
+  width: min(749px, 100%);
+  height: 44px;
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.lawyer-consultations-pending-header > select {
+  width: min(270px, 100%);
+  height: 40px;
+  padding: 0 16px;
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 14px;
+  border-radius: 10px;
+}
+
+@media (min-width: 640px) and (max-width: 1279px) {
+  .lawyer-consultations > .space-y-4 {
+    padding: 20px;
+  }
+
+  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > div:first-child {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+
+  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > button {
+    width: 161px;
+    height: 40px;
+    justify-self: start;
+  }
+
+  .lawyer-consultations-pending-header {
+    margin-top: 40px !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .lawyer-consultations > .space-y-4 {
+    padding: 16px;
+  }
+
+  .lawyer-consultations-pending-header {
+    margin-top: 32px !important;
+  }
+}
+
+@media (min-width: 1400px) {
+  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) {
+    display: grid;
+    grid-template-columns: 421px 161px 356px;
+    gap: 19px;
+    align-items: center;
+  }
+
+  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > div:first-child {
+    width: 421px;
+    max-width: none;
+  }
+
+  .lawyer-consultations
+    > .space-y-4
+    > .flex:nth-child(2)
+    > div:first-child
+    input {
+    height: 40px;
+    border-radius: 5px;
+    font-family: var(--font-inter), Arial, sans-serif;
+    font-size: 14px;
+  }
+
+  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > button {
+    width: 161px;
+    height: 33px;
+    padding: 0;
+  }
+
+  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > div:last-child {
+    width: 356px;
+    margin-left: 27px;
+  }
+
+  .lawyer-consultations
+    > .space-y-4
+    > .flex:nth-child(2)
+    > div:last-child
+    select {
+    width: 100%;
+    height: 40px;
+    border-radius: 5px;
+  }
+}
+
+.lawyer-consultations .neu-card-md,
+.lawyer-consultations .neu-plate:not(.rounded-full) {
+  border-radius: 14px;
+}
+
+.lawyer-documents {
+  max-width: 1196px;
+  padding: 24px 38px;
+  font-family: var(--font-lora), Georgia, serif;
+}
+
+.lawyer-documents > .flex:first-child > button,
+.lawyer-documents > .flex:first-child > div {
+  border-radius: 8px;
+  background-color: var(--lawyer-paper) !important;
+  box-shadow:
+    3px 3px 8px var(--lawyer-shade),
+    -3px -3px 8px var(--lawyer-light) !important;
+}
+
+.lawyer-documents > .flex:first-child > div:nth-child(2),
+.lawyer-documents > .flex:first-child > div:last-child > div:last-child {
+  background-color: #e6d9cc !important;
+  box-shadow:
+    inset 2px 2px 5px rgba(173, 151, 135, 0.3),
+    inset -2px -2px 5px var(--lawyer-light) !important;
+}
+
+.lawyer-documents > .flex:first-child > div:last-child {
+  background: none !important;
+  box-shadow: none !important;
+}
+
+.lawyer-documents > .flex:first-child > div:last-child > div:first-child {
+  background: var(--lawyer-paper) !important;
+  box-shadow:
+    3px 3px 8px var(--lawyer-shade),
+    -3px -3px 8px var(--lawyer-light) !important;
+  border-radius: 8px;
+}
+
+.lawyer-documents > div > .grid {
+  gap: 16px 28px;
+}
+
+.lawyer-documents .group .relative.w-32 {
+  width: 160px;
+  height: 130px;
+}
+
+.lawyer-documents .group .relative.w-28 {
+  width: 100px;
+  height: 130px;
+}
+
+.lawyer-documents .group img {
+  filter: none;
+}
+
+.lawyer-documents .group span {
+  font-family: var(--font-lora), Georgia, serif;
+  color: var(--lawyer-ink);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.lawyer-documents button[aria-label="Create new folder"],
+.lawyer-documents button[aria-label="Upload document"] {
+  width: 54px;
+  height: 54px;
+  background: var(--lawyer-paper) !important;
+  box-shadow:
+    3px 3px 8px var(--lawyer-shade),
+    -3px -3px 8px var(--lawyer-light) !important;
+}
+
+.lawyer-documents .lawyer-document-categories {
+  justify-content: start;
+}
+
+.lawyer-documents .lawyer-document-categories button {
+  min-height: 128px;
+}
+
+.lawyer-documents .lawyer-document-categories .lawyer-document-category-add {
+  min-height: 54px;
+  font-family: var(--font-inter), Arial, sans-serif;
+}
+
+@media (max-width: 640px) {
+  .lawyer-dashboard,
+  .lawyer-consultations,
+  .lawyer-documents {
+    padding: 20px 16px 40px;
+  }
+
+  .lawyer-documents .group .relative.w-32 {
+    width: min(100%, 136px);
+    height: auto;
+    aspect-ratio: 16 / 13;
+  }
+}
+
 /* Raised containers / cards (Figma spec: large raised surface #E5D8CB) */
 .neu-raised {
-  background-color: #E5D8CB;
+  background-color: #e5d8cb;
   border: none;
   box-shadow:
-    8px 8px 20px 0 rgba(206, 194, 183, 0.90),
-    -8px -8px 16px 0 rgba(252, 238, 223, 0.90),
-    8px -8px 16px 0 rgba(206, 194, 183, 0.20),
-    -8px 8px 16px 0 rgba(206, 194, 183, 0.20),
-    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
-  transition: box-shadow 0.2s ease, filter 0.2s ease;
+    8px 8px 20px 0 rgba(206, 194, 183, 0.9),
+    -8px -8px 16px 0 rgba(252, 238, 223, 0.9),
+    8px -8px 16px 0 rgba(206, 194, 183, 0.2),
+    -8px 8px 16px 0 rgba(206, 194, 183, 0.2),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.3);
+  transition:
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
 }
 
 .neu-raised:hover {
@@ -365,16 +1421,19 @@ body {
 
 /* Raised containers with highlight tint (#D39758 at 30% opacity) */
 .neu-raised-highlight {
-  background-color: rgba(211, 151, 88, 0.30);
+  background-color: rgba(211, 151, 88, 0.3);
   border: none;
   box-shadow:
-    8px 8px 20px 0 rgba(206, 194, 183, 0.90),
-    -8px -8px 16px 0 rgba(252, 238, 223, 0.90),
-    8px -8px 16px 0 rgba(206, 194, 183, 0.20),
-    -8px 8px 16px 0 rgba(206, 194, 183, 0.20),
-    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
-  transition: box-shadow 0.2s ease, filter 0.2s ease, background-color 0.2s ease;
+    8px 8px 20px 0 rgba(206, 194, 183, 0.9),
+    -8px -8px 16px 0 rgba(252, 238, 223, 0.9),
+    8px -8px 16px 0 rgba(206, 194, 183, 0.2),
+    -8px 8px 16px 0 rgba(206, 194, 183, 0.2),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.3);
+  transition:
+    box-shadow 0.2s ease,
+    filter 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .neu-raised-highlight:hover {
@@ -383,16 +1442,18 @@ body {
 
 /* Raised role buttons, cards, pills (Figma spec, small/medium raised) */
 .neu-raised-sm {
-  background-color: #E5D8CB;
+  background-color: #e5d8cb;
   border: none;
   box-shadow:
-    5px 5px 13px 0 rgba(206, 194, 183, 0.90),
-    -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
-    5px -5px 10px 0 rgba(206, 194, 183, 0.20),
-    -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
-    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
-  transition: box-shadow 0.2s ease, filter 0.2s ease;
+    5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.3);
+  transition:
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
 }
 
 .neu-raised-sm:hover {
@@ -401,16 +1462,19 @@ body {
 
 /* Small raised containers/pills with highlight tint (#D39758 at 30% opacity) */
 .neu-raised-highlight-sm {
-  background-color: rgba(211, 151, 88, 0.30);
+  background-color: rgba(211, 151, 88, 0.3);
   border: none;
   box-shadow:
-    5px 5px 13px 0 rgba(206, 194, 183, 0.90),
-    -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
-    5px -5px 10px 0 rgba(206, 194, 183, 0.20),
-    -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
-    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
-  transition: box-shadow 0.2s ease, filter 0.2s ease, background-color 0.2s ease;
+    5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.3);
+  transition:
+    box-shadow 0.2s ease,
+    filter 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .neu-raised-highlight-sm:hover {
@@ -420,59 +1484,61 @@ body {
 /* Recessed / Pressed-in surface (matches #E5D8CB surface) */
 .neu-recessed,
 .neu-pressed {
-  background-color: #E5D8CB;
+  background-color: #e5d8cb;
   border: none;
   box-shadow:
-    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
-    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
-    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
-    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
-    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20);
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.2);
 }
 
 /* Default recessed card on #E5D8CB, smoothly transforms to raised with highlight on hover */
 .neu-card-recessed-to-rise {
-  background-color: #E5D8CB;
+  background-color: #e5d8cb;
   border: none;
   box-shadow:
-    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
-    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
-    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
-    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
-    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20);
-  transition: background-color 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.2);
+  transition:
+    background-color 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
     box-shadow 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
     filter 0.2s ease;
   will-change: background-color, box-shadow;
 }
 
 .neu-card-recessed-to-rise:hover {
-  background-color: rgba(211, 151, 88, 0.30);
+  background-color: rgba(211, 151, 88, 0.3);
   box-shadow:
-    8px 8px 20px 0 rgba(206, 194, 183, 0.90),
-    -8px -8px 16px 0 rgba(252, 238, 223, 0.90),
-    8px -8px 16px 0 rgba(206, 194, 183, 0.20),
-    -8px 8px 16px 0 rgba(206, 194, 183, 0.20),
-    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
+    8px 8px 20px 0 rgba(206, 194, 183, 0.9),
+    -8px -8px 16px 0 rgba(252, 238, 223, 0.9),
+    8px -8px 16px 0 rgba(206, 194, 183, 0.2),
+    -8px 8px 16px 0 rgba(206, 194, 183, 0.2),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.3);
   filter: brightness(1.015);
 }
 
 /* Interactive Lawyer Card: Recessed at rest, smoothly rises into raised look on hover, tactile press on click */
 .neu-card-interactive {
-  background-color: #E5D8CB;
+  background-color: #e5d8cb;
   border: none;
   box-shadow:
-    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
-    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
-    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
-    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
-    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20);
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.2);
   transform: translateY(0) scale(1);
-  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+  transition:
+    transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
     box-shadow 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
     filter 0.2s ease;
   will-change: transform, box-shadow;
@@ -481,20 +1547,20 @@ body {
 .neu-card-interactive:hover {
   transform: translateY(-4px);
   box-shadow:
-    8px 10px 22px 0 rgba(206, 194, 183, 0.90),
-    -8px -8px 16px 0 rgba(252, 238, 223, 0.90),
-    8px -8px 16px 0 rgba(206, 194, 183, 0.20),
-    -8px 8px 16px 0 rgba(206, 194, 183, 0.20),
-    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
+    8px 10px 22px 0 rgba(206, 194, 183, 0.9),
+    -8px -8px 16px 0 rgba(252, 238, 223, 0.9),
+    8px -8px 16px 0 rgba(206, 194, 183, 0.2),
+    -8px 8px 16px 0 rgba(206, 194, 183, 0.2),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.3);
   filter: brightness(1.015);
 }
 
 .neu-card-interactive:active {
   transform: translateY(1px) scale(0.985);
   box-shadow:
-    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
     inset 6px 6px 14px 0 rgba(190, 178, 167, 0.95),
     inset -6px -6px 12px 0 rgba(252, 238, 223, 0.95),
     inset 6px -6px 12px 0 rgba(190, 178, 167, 0.25),
@@ -506,17 +1572,19 @@ body {
 .neu-btn-create {
   background-color: #431407;
   /* orange-950 */
-  color: #D6D3D1;
+  color: #d6d3d1;
   /* stone-300 */
   border: none;
   box-shadow:
-    5px 5px 13px 0 rgba(206, 194, 183, 0.90),
-    -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
-    5px -5px 10px 0 rgba(206, 194, 183, 0.20),
-    -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
-    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.30);
-  transition: box-shadow 0.2s ease, filter 0.2s ease;
+    5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.3);
+  transition:
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
 }
 
 .neu-btn-create:hover:not(:disabled) {
@@ -526,24 +1594,24 @@ body {
 /* Pressed state: sinks in when clicked */
 .neu-btn-create:active:not(:disabled) {
   box-shadow:
-    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
     inset 3px 3px 8px 0 rgba(0, 0, 0, 0.45),
     inset -3px -3px 8px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Soft recessed neumorphic field (matches #E5D8CB surface) */
 .neu-input {
-  background-color: #E5D8CB;
+  background-color: #e5d8cb;
   border: none;
   outline: none;
   box-shadow:
-    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
-    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
-    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
-    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
-    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20);
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.2);
   transition: box-shadow 0.25s ease;
 }
 
@@ -552,42 +1620,42 @@ body {
 }
 
 .neu-input:focus {
-  background-color: #E5D8CB;
+  background-color: #e5d8cb;
   box-shadow:
-    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
-    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
-    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
-    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
-    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
-    0 0 0 2px rgba(185, 131, 60, 0.30);
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.2),
+    0 0 0 2px rgba(185, 131, 60, 0.3);
 }
 
 .neu-input-error,
 .neu-input-error:focus {
   box-shadow:
-    -1px -1px 2px 0 rgba(206, 194, 183, 0.50),
-    1px 1px 2px 0 rgba(252, 238, 223, 0.30),
-    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
-    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90),
-    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.20),
-    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.20),
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.2),
     0 0 0 2px rgba(220, 38, 38, 0.35);
 }
 
 /* Sign-in modal container (Figma spec: inset body + outer rim, #D39758 outline) */
 .neu-modal {
-  background-color: #E5D8CB;
+  background-color: #e5d8cb;
   border-radius: 20px;
-  outline: 4px solid #D39758;
+  outline: 4px solid #d39758;
 
   box-shadow:
-    -1px -1px 2px 0 rgba(188, 177, 166, 0.50),
-    1px 1px 2px 0 rgba(255, 255, 240, 0.30),
-    inset 8px 8px 20px 0 rgba(188, 177, 166, 0.90),
-    inset -8px -8px 16px 0 rgba(255, 255, 240, 0.90),
-    inset 8px -8px 16px 0 rgba(188, 177, 166, 0.20),
-    inset -8px 8px 16px 0 rgba(188, 177, 166, 0.20);
+    -1px -1px 2px 0 rgba(188, 177, 166, 0.5),
+    1px 1px 2px 0 rgba(255, 255, 240, 0.3),
+    inset 8px 8px 20px 0 rgba(188, 177, 166, 0.9),
+    inset -8px -8px 16px 0 rgba(255, 255, 240, 0.9),
+    inset 8px -8px 16px 0 rgba(188, 177, 166, 0.2),
+    inset -8px 8px 16px 0 rgba(188, 177, 166, 0.2);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -606,12 +1674,14 @@ body {
 }
 
 .neu-skeleton {
-  background: linear-gradient(90deg,
-      #ECE1D2 0%,
-      #F5EDE2 35%,
-      #FDFBF7 50%,
-      #F5EDE2 65%,
-      #ECE1D2 100%);
+  background: linear-gradient(
+    90deg,
+    #ece1d2 0%,
+    #f5ede2 35%,
+    #fdfbf7 50%,
+    #f5ede2 65%,
+    #ece1d2 100%
+  );
   background-size: 200% 100%;
   animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   box-shadow:
@@ -621,12 +1691,14 @@ body {
 }
 
 .neu-skeleton-plate {
-  background: linear-gradient(90deg,
-      #DFC5A4 0%,
-      #E8D3B8 35%,
-      #F3E4CF 50%,
-      #E8D3B8 65%,
-      #DFC5A4 100%);
+  background: linear-gradient(
+    90deg,
+    #dfc5a4 0%,
+    #e8d3b8 35%,
+    #f3e4cf 50%,
+    #e8d3b8 65%,
+    #dfc5a4 100%
+  );
   background-size: 200% 100%;
   animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   box-shadow:
@@ -636,12 +1708,14 @@ body {
 }
 
 .neu-skeleton-inset {
-  background: linear-gradient(90deg,
-      #E6D7C3 0%,
-      #EDE1D0 35%,
-      #F6EFE5 50%,
-      #EDE1D0 65%,
-      #E6D7C3 100%);
+  background: linear-gradient(
+    90deg,
+    #e6d7c3 0%,
+    #ede1d0 35%,
+    #f6efe5 50%,
+    #ede1d0 65%,
+    #e6d7c3 100%
+  );
   background-size: 200% 100%;
   animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   box-shadow:
@@ -651,24 +1725,25 @@ body {
 }
 
 .neu-skeleton-text {
-  background: linear-gradient(90deg,
-      rgba(140, 122, 106, 0.22) 0%,
-      rgba(140, 122, 106, 0.38) 50%,
-      rgba(140, 122, 106, 0.22) 100%);
+  background: linear-gradient(
+    90deg,
+    rgba(140, 122, 106, 0.22) 0%,
+    rgba(140, 122, 106, 0.38) 50%,
+    rgba(140, 122, 106, 0.22) 100%
+  );
   background-size: 200% 100%;
   animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   border-radius: 9999px;
 }
-
 
 /* ─── Neumorphic text field autofill fix to preserve #E5D8CB background ─── */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
   -webkit-box-shadow:
-    0 0 0 1000px #E5D8CB inset,
-    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.90),
-    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.90) !important;
-  -webkit-text-fill-color: #34150F !important;
+    0 0 0 1000px #e5d8cb inset,
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9) !important;
+  -webkit-text-fill-color: #34150f !important;
   transition: background-color 5000s ease-in-out 0s;
 }

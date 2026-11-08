@@ -10,6 +10,7 @@ import {
   UserCircleIcon,
   GearIcon,
   DashboardGridIcon,
+  EarningsPayoutsIcon,
   ConsultationChatIcon,
   MessagesIcon,
   CalendarGridIcon,
@@ -61,9 +62,10 @@ interface LawyerShellProps {
  * 4. Calendar
  * 5. Client Documents
  * 6. Lawyer Profile
+ * 7. Earnings & Payouts (navigation placeholder until linked)
  * ── Divider ──
- * 7. Settings
- * 8. Logout
+ * 8. Settings
+ * 9. Logout
  */
 const LAWYER_NAV_ITEMS: LawyerNavItem[] = [
   { key: 'dashboard',      name: 'Lawyer Dashboard',  href: '/lawyer/dashboard',      icon: DashboardGridIcon },
@@ -148,10 +150,10 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
      *     aside (overflow-y-auto)→ locked column, scrollable only if nav items overflow
      *     main  (overflow-y-auto)→ THE ONLY scrollable zone
      */
-    <div className="flex flex-col h-screen bg-[#EFE5D8] text-[#34150F] selection:bg-[#C58B3C]/30">
+    <div className="lawyer-portal flex flex-col h-screen bg-[#E5D8CB] text-[#341512] selection:bg-[#D39758]/30" data-view={activeView}>
 
       {/* ─── Top Navigation Bar ────────────────────────────────────────────── */}
-      <header className="shrink-0 h-16 w-full bg-[#23150F] border-b border-[#352219] flex items-center justify-between px-4 sm:px-8 shadow-md z-40">
+      <header className="shrink-0 h-16 w-full bg-[#341512] flex items-center justify-between px-4 sm:px-8 z-40">
         {/* Left: Brand / Logo */}
         <div className="flex items-center gap-3">
           {/* Mobile hamburger */}
@@ -188,7 +190,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
             id="lawyer-nav-home"
             onClick={navigateToDashboard}
             className={`p-1.5 rounded-lg transition-colors hover:text-[#C58B3C] ${
-              activeView === 'dashboard' ? 'text-[#C58B3C]' : ''
+              activeView === 'dashboard' ? 'text-[#E5D8CB]' : ''
             }`}
             title="Dashboard Home"
             aria-label="Dashboard Home"
@@ -336,9 +338,9 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
 
       {/* ─── Body: Sidebar + Content ─────────────────────────────────────────── */}
       <div className="flex flex-row flex-1 min-h-0 relative">
-        {/* Desktop Sidebar (Figma Mockup: 6 main items + Divider + Settings + Logout) */}
+        {/* Desktop Sidebar (Figma Mockup: 7 main items + Divider + Settings + Logout) */}
         <aside
-          className="w-64 shrink-0 bg-[#DECEB8] border-r border-[#D1BEA8] p-5 hidden md:flex flex-col justify-between overflow-y-auto"
+          className="w-[244px] shrink-0 bg-[rgba(133,68,30,0.1)] border-r border-[#341512]/20 p-4 hidden md:flex flex-col justify-between overflow-y-auto"
           aria-label="Lawyer practice navigation"
         >
           <div className="space-y-6">
@@ -351,6 +353,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
                     key={item.key}
                     type="button"
                     id={`lawyer-sidebar-nav-${item.key}`}
+                    data-active={active}
                     onClick={() => navigate(item.key)}
                     className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs sm:text-sm font-medium transition-all text-left ${
                       active
@@ -358,11 +361,15 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
                         : 'text-[#3E2A1E] hover:bg-[#E5D7C5] hover:text-[#34150F]'
                     }`}
                   >
-                    <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-[#C58B3C]' : 'text-[#5C4535]'}`} />
+                    <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-[#341512]' : 'text-[#5C4535]'}`} />
                     <span className="truncate">{item.name}</span>
                   </button>
                 );
               })}
+              <button type="button" disabled title="Coming soon" className="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs sm:text-sm font-medium text-left">
+                <EarningsPayoutsIcon className="w-5 h-5 shrink-0" />
+                <span>Earnings &amp; Payouts</span>
+              </button>
             </nav>
           </div>
 
@@ -405,7 +412,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
             />
 
             {/* Drawer */}
-            <div className="relative w-72 max-w-[80vw] bg-[#DECEB8] h-full shadow-2xl p-5 flex flex-col justify-between z-10">
+            <div className="relative w-72 max-w-[80vw] bg-[#dbc8b8] h-full shadow-2xl p-5 flex flex-col justify-between z-10">
               <div className="space-y-6">
                 <div className="flex items-center justify-between pb-3 border-b border-[#D1BEA8]">
                   <span className="font-cinzel text-sm font-semibold tracking-wider text-[#34150F]">
@@ -429,17 +436,22 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
                         key={item.key}
                         type="button"
                         onClick={() => navigate(item.key)}
+                        data-active={active}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-left ${
                           active
                             ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                             : 'text-[#3E2A1E] hover:bg-[#E5D7C5]'
                         }`}
                       >
-                        <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-[#C58B3C]' : 'text-[#5C4535]'}`} />
+                        <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-[#341512]' : 'text-[#5C4535]'}`} />
                         <span>{item.name}</span>
                       </button>
                     );
                   })}
+                  <button type="button" disabled title="Coming soon" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-left opacity-60">
+                    <EarningsPayoutsIcon className="w-5 h-5 shrink-0" />
+                    <span>Earnings &amp; Payouts</span>
+                  </button>
                 </nav>
               </div>
 
@@ -467,7 +479,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
         )}
 
         {/* Main Content Viewport */}
-        <main className="flex-1 overflow-y-auto bg-[#ECE1D2]" id="lawyer-main-content">
+        <main className={`flex-1 overflow-y-auto bg-[#E5D8CB] ${['dashboard', 'consultations', 'documents'].includes(activeView) ? 'lawyer-designed-view' : ''}`} id="lawyer-main-content">
           <div key={activeView} className="client-view-enter">
             {renderView()}
           </div>

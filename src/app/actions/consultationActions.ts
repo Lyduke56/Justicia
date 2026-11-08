@@ -30,6 +30,7 @@ export interface BookConsultationInput {
 export interface DocumentFolderItem {
   id: string;
   name: string;
+  kind?: 'shared' | 'owned';
   isRecentlyCreated?: boolean;
   files: Array<{
     id: string;
@@ -560,6 +561,7 @@ export async function createDocumentFolderAction(folderName: string, role: 'clie
       folder: {
         id: folderId,
         name: folderName.trim(),
+        kind: 'owned' as const,
         isRecentlyCreated: true,
         files: [],
       },
@@ -669,6 +671,7 @@ export async function getUserDocumentsDataAction(role: 'client' | 'lawyer' = 'cl
           customFolderMap.set(d.id, {
             id: d.id,
             name: folderName,
+            kind: 'owned',
             isRecentlyCreated: true,
             files: [],
           });
@@ -706,6 +709,7 @@ export async function getUserDocumentsDataAction(role: 'client' | 'lawyer' = 'cl
         folders.push({
           id: 'uploaded-records',
           name: 'Client Vault & Uploaded Records',
+          kind: 'owned',
           isRecentlyCreated: false,
           files: generalFiles,
         });
@@ -757,6 +761,7 @@ export async function getUserDocumentsDataAction(role: 'client' | 'lawyer' = 'cl
         folders.push({
           id: c.id,
           name: meta.subject || 'Consultation Intake Documents',
+          kind: 'shared',
           isRecentlyCreated: c.status === 'pending',
           files,
         });
