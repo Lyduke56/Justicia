@@ -390,12 +390,15 @@ CREATE TABLE IF NOT EXISTS public.document_access_grants (
 );
 
 CREATE TABLE IF NOT EXISTS public.reviews (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_id  UUID NOT NULL REFERENCES public.user_accounts(id),
-  lawyer_id  UUID NOT NULL REFERENCES public.user_accounts(id),
-  rating     SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
-  comment    TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id          UUID NOT NULL REFERENCES public.user_accounts(id),
+  lawyer_id          UUID NOT NULL REFERENCES public.user_accounts(id),
+  rating             SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comment            TEXT,
+  counsel_reply      TEXT,
+  counsel_replied_at TIMESTAMPTZ,
+  helpful_count      INTEGER DEFAULT 0,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.reports (
@@ -705,12 +708,18 @@ CREATE POLICY "grantee_read" ON public.document_access_grants
   FOR SELECT USING (auth.uid() = grantee_id);
 
 DROP POLICY IF EXISTS "authenticated_read_reviews" ON public.reviews;
-CREATE POLICY "authenticated_read_reviews" ON public.reviews
-  FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "public_read_reviews" ON public.reviews;
+CREATE POLICY "public_read_reviews" ON public.reviews
+  FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "client_own_reviews" ON public.reviews;
-CREATE POLICY "client_own_reviews" ON public.reviews
-  FOR INSERT WITH CHECK (auth.uid() = client_id);
+DROP POLICY IF EXISTS "allow_insert_reviews" ON public.reviews;
+CREATE POLICY "allow_insert_reviews" ON public.reviews
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "allow_update_reviews" ON public.reviews;
+CREATE POLICY "allow_update_reviews" ON public.reviews
+  FOR UPDATE USING (true);
 
 DROP POLICY IF EXISTS "reporter_own_reports" ON public.reports;
 CREATE POLICY "reporter_own_reports" ON public.reports

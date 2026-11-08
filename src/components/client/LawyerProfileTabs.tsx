@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { getLawyerReviewsAction, addLawyerReviewAction } from '@/app/actions/reviewActions';
 import type {
   LawyerProfileRow,
   LawyerPracticeAreaDetailRow,
@@ -299,15 +300,16 @@ interface ProfileReview {
   reply?: string;
 }
 
-function ReviewsTab({ lawyerId: _lawyerId, lawyerName }: { lawyerId: string; lawyerName: string }) {
+function ReviewsTab({ lawyerId, lawyerName }: { lawyerId: string; lawyerName: string }) {
   const [selectedStar, setSelectedStar] = useState<number | 'all'>('all');
   const [showWriteForm, setShowWriteForm] = useState(false);
   const [newRating, setNewRating] = useState(5);
   const [newName, setNewName] = useState('');
   const [newFeedback, setNewFeedback] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
   const [submittedToast, setSubmittedToast] = useState(false);
 
-  const [reviews, setReviews] = useState<ProfileReview[]>([
+  const defaultReviews: ProfileReview[] = [
     {
       id: 'rev-p1',
       name: 'Maria Victoria Garcia',
@@ -345,7 +347,76 @@ function ReviewsTab({ lawyerId: _lawyerId, lawyerName }: { lawyerId: string; law
         'Professional, punctual, and very empathetic to our situation. Answered all follow-up questions promptly through the platform messaging.',
       helpfulCount: 9,
     },
-  ]);
+  ];
+
+  const getStoredReviews = useCallback((): ProfileReview[] => {
+    if (typeof window === 'undefined' || !lawyerId) return [];
+    try {
+      const raw = localStorage.getItem(`justicia_reviews_${lawyerId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            stars: r.stars,
+            date: r.date,
+            content: r.content,
+            reply: r.reply,
+            helpfulCount: r.helpfulCount || 0,
+          }));
+        }
+      }
+    } catch {}
+    return [];
+  }, [lawyerId]);
+
+  const [reviews, setReviews] = useState<ProfileReview[]>(defaultReviews);
+
+  // Sync with localStorage and Supabase on mount
+  useEffect(() => {
+    if (!lawyerId) return;
+
+    const local = getStoredReviews();
+    if (local.length > 0) {
+      setReviews((prev) => {
+        const existingIds = new Set(prev.map((r) => r.id));
+        const missing = local.filter((r) => !existingIds.has(r.id));
+        if (missing.length === 0) return prev;
+        return [...missing, ...prev];
+      });
+    }
+
+    async function loadLiveReviews() {
+      try {
+        const res = await getLawyerReviewsAction(lawyerId);
+        if (res.success && res.reviews && res.reviews.length > 0) {
+          const dbMapped: ProfileReview[] = res.reviews.map((r) => ({
+            id: r.id,
+            name: r.name,
+            stars: r.stars,
+            date: r.date,
+            content: r.content,
+            reply: r.reply,
+            helpfulCount: r.helpfulCount || 0,
+          }));
+
+          setReviews((prev) => {
+            const dbIds = new Set(dbMapped.map((r) => r.id));
+            const pendingLocal = prev.filter(
+              (r) => !dbIds.has(r.id) && String(r.id).startsWith('rev-')
+            );
+            const rest = defaultReviews.filter((r) => !dbIds.has(r.id));
+            return [...dbMapped, ...pendingLocal, ...rest];
+          });
+        }
+      } catch (err) {
+        console.warn('loadLiveReviews notice:', err);
+      }
+    }
+
+    loadLiveReviews();
+  }, [lawyerId, getStoredReviews]);
 
   const filteredReviews = reviews.filter((r) =>
     selectedStar === 'all' ? true : r.stars === selectedStar
@@ -372,12 +443,14 @@ function ReviewsTab({ lawyerId: _lawyerId, lawyerName }: { lawyerId: string; law
     );
   };
 
-  const handleSubmitReview = (e: React.FormEvent) => {
+  const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFeedback.trim()) return;
 
+    setSubmittingReview(true);
+    const tempId = `rev-${Date.now()}`;
     const newRev: ProfileReview = {
-      id: `rev-${Date.now()}`,
+      id: tempId,
       name: newName.trim() || 'Verified Client',
       stars: newRating,
       date: 'Just now',
@@ -385,7 +458,42 @@ function ReviewsTab({ lawyerId: _lawyerId, lawyerName }: { lawyerId: string; law
       helpfulCount: 0,
     };
 
+    // 1. Update in-memory state
     setReviews((prev) => [newRev, ...prev]);
+
+    // 2. Persist to localStorage
+    try {
+      const existing = getStoredReviews();
+      const updated = [newRev, ...existing.filter((r) => r.id !== tempId)];
+      localStorage.setItem(`justicia_reviews_${lawyerId}`, JSON.stringify(updated));
+    } catch {}
+
+    // 3. Persist to Supabase
+    try {
+      const res = await addLawyerReviewAction({
+        lawyerId,
+        lawyerName,
+        rating: newRating,
+        comment: newFeedback.trim(),
+        reviewerName: newName.trim() || 'Verified Client',
+      });
+
+      if (res.success && res.review) {
+        const dbRev = res.review;
+        setReviews((prev) =>
+          prev.map((r) => (r.id === tempId ? { ...r, id: dbRev.id } : r))
+        );
+        try {
+          const existing = getStoredReviews();
+          const updated = existing.map((r) => (r.id === tempId ? { ...r, id: dbRev.id } : r));
+          localStorage.setItem(`justicia_reviews_${lawyerId}`, JSON.stringify(updated));
+        } catch {}
+      }
+    } catch (err) {
+      console.warn('addLawyerReviewAction notice:', err);
+    }
+
+    setSubmittingReview(false);
     setNewName('');
     setNewFeedback('');
     setShowWriteForm(false);

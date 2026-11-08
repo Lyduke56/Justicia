@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getLawyerReviewsAction, addReviewReplyAction } from '@/app/actions/reviewActions';
 
 interface LawyerReviewItem {
   id: string;
@@ -73,6 +74,68 @@ export function LawyerReviewsView() {
   const [replyDraft, setReplyDraft] = useState('');
   const [flagToast, setFlagToast] = useState<string | null>(null);
 
+  // Sync with localStorage and Supabase on mount
+  useEffect(() => {
+    const lawyerId = '22222222-2222-4222-8222-000000000001';
+
+    // 1. Check localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(`justicia_reviews_${lawyerId}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const localItems: LawyerReviewItem[] = parsed.map((p: any) => ({
+              id: String(p.id),
+              clientName: p.name || 'Verified Client',
+              category: 'General Practice',
+              stars: p.stars || 5,
+              date: p.date || 'Recent',
+              feedback: p.content || '',
+              reply: p.reply,
+            }));
+            setReviews((prev) => {
+              const existingIds = new Set(prev.map((r) => r.id));
+              const missing = localItems.filter((m) => !existingIds.has(m.id));
+              return [...missing, ...prev];
+            });
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Fetch live reviews from Supabase
+    async function fetchCounselReviews() {
+      try {
+        const res = await getLawyerReviewsAction(lawyerId);
+        if (res.success && res.reviews && res.reviews.length > 0) {
+          const dbItems: LawyerReviewItem[] = res.reviews.map((r) => ({
+            id: r.id,
+            clientName: r.name,
+            category: 'Legal Consultation',
+            stars: r.stars,
+            date: r.date,
+            feedback: r.content,
+            reply: r.reply,
+          }));
+
+          setReviews((prev) => {
+            const dbIds = new Set(dbItems.map((r) => r.id));
+            const pendingLocal = prev.filter(
+              (r) => !dbIds.has(r.id) && String(r.id).startsWith('rev-')
+            );
+            const rest = INITIAL_LAWYER_REVIEWS.filter((r) => !dbIds.has(r.id));
+            return [...dbItems, ...pendingLocal, ...rest];
+          });
+        }
+      } catch (err) {
+        console.warn('fetchCounselReviews notice:', err);
+      }
+    }
+
+    fetchCounselReviews();
+  }, []);
+
   const filteredReviews = reviews.filter((r) => {
     if (selectedFilter === '5') return r.stars === 5;
     if (selectedFilter === '4') return r.stars === 4;
@@ -80,11 +143,41 @@ export function LawyerReviewsView() {
     return true;
   });
 
-  const handlePostReply = (id: string) => {
+  const handlePostReply = async (id: string) => {
     if (!replyDraft.trim()) return;
+    const cleanReply = replyDraft.trim();
     setReviews((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, reply: replyDraft.trim() } : r))
+      prev.map((r) => (r.id === id ? { ...r, reply: cleanReply } : r))
     );
+
+    // Save reply to localStorage
+    const lawyerId = '22222222-2222-4222-8222-000000000001';
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(`justicia_reviews_${lawyerId}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            const updated = parsed.map((p: any) =>
+              String(p.id) === id ? { ...p, reply: cleanReply } : p
+            );
+            localStorage.setItem(`justicia_reviews_${lawyerId}`, JSON.stringify(updated));
+          }
+        }
+      } catch {}
+    }
+
+    // Persist to Supabase if UUID
+    if (!id.startsWith('rev-')) {
+      try {
+        await addReviewReplyAction({
+          reviewId: id,
+          replyText: cleanReply,
+          lawyerId,
+        });
+      } catch {}
+    }
+
     setReplyingId(null);
     setReplyDraft('');
   };

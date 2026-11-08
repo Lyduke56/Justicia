@@ -223,6 +223,9 @@ export type ReviewRow = {
   lawyer_id: string;
   rating: number;
   comment: string | null;
+  counsel_reply?: string | null;
+  counsel_replied_at?: string | null;
+  helpful_count?: number | null;
   created_at: string;
 };
 
