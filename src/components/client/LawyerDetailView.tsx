@@ -14,7 +14,6 @@ import {
 } from '@/app/actions/consultationActions';
 import {
   getLawyerReviewsAction,
-  addLawyerReviewAction,
   addReviewReplyAction,
 } from '@/app/actions/reviewActions';
 
@@ -470,14 +469,6 @@ export function LawyerDetailView({
   });
   const [userVotedHelpful, setUserVotedHelpful] = useState<{ [id: string | number]: boolean }>({});
 
-  const [showWriteReview, setShowWriteReview] = useState<boolean>(false);
-  const [newReviewStars, setNewReviewStars] = useState<number>(5);
-  const [newReviewHoverStars, setNewReviewHoverStars] = useState<number | null>(null);
-  const [newReviewName, setNewReviewName] = useState<string>('');
-  const [newReviewContent, setNewReviewContent] = useState<string>('');
-  const [submittingReview, setSubmittingReview] = useState<boolean>(false);
-  const [reviewSuccessNotice, setReviewSuccessNotice] = useState<boolean>(false);
-
   const [replyingToId, setReplyingToId] = useState<string | number | null>(null);
   const [replyText, setReplyText] = useState<string>('');
 
@@ -779,71 +770,6 @@ export function LawyerDetailView({
   const standardFee = lawyer.feeStandard60min ?? 1500;
   const initialFee = lawyer.feeInitial30min ?? 700;
   const extendedFee = lawyer.feeExtended120min ?? 2300;
-
-  const handleAddReview = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newReviewContent.trim()) {
-      alert('Please enter your review feedback.');
-      return;
-    }
-    setSubmittingReview(true);
-    const tempId = `rev-${Date.now()}`;
-    const newRev: ReviewItem = {
-      id: tempId,
-      name: newReviewName.trim() || 'Verified Client',
-      stars: newReviewStars,
-      date: new Date().toLocaleDateString('en-US', {
-        month: '2-digit',
-        day: '2-digit',
-        year: 'numeric',
-      }),
-      content: newReviewContent.trim(),
-    };
-
-    // 1. Immediately update in-memory state
-    setReviewsList((prev) => [newRev, ...prev]);
-
-    // 2. Immediately persist to localStorage so data is NEVER lost on refresh
-    try {
-      const existing = getStoredReviews(lawyer.userId);
-      const updated = [newRev, ...existing.filter((r) => r.id !== tempId)];
-      localStorage.setItem(`justicia_reviews_${lawyer.userId}`, JSON.stringify(updated));
-    } catch (err) {
-      console.warn('localStorage save notice:', err);
-    }
-
-    // 3. Persist to Supabase via server action
-    try {
-      const res = await addLawyerReviewAction({
-        lawyerId: lawyer.userId,
-        lawyerName: lawyer.fullName,
-        rating: newReviewStars,
-        comment: newReviewContent.trim(),
-        reviewerName: newReviewName.trim() || 'Verified Client',
-      });
-
-      if (res.success && res.review) {
-        const dbRev = res.review;
-        setReviewsList((prev) =>
-          prev.map((r) => (r.id === tempId ? { ...r, id: dbRev.id } : r))
-        );
-        try {
-          const existing = getStoredReviews(lawyer.userId);
-          const updated = existing.map((r) => (r.id === tempId ? { ...r, id: dbRev.id } : r));
-          localStorage.setItem(`justicia_reviews_${lawyer.userId}`, JSON.stringify(updated));
-        } catch {}
-      }
-    } catch (err) {
-      console.warn('addLawyerReviewAction notice:', err);
-    }
-
-    setSubmittingReview(false);
-    setShowWriteReview(false);
-    setNewReviewContent('');
-    setNewReviewName('');
-    setReviewSuccessNotice(true);
-    setTimeout(() => setReviewSuccessNotice(false), 5000);
-  };
 
   const handleSendReply = async (reviewId: string | number) => {
     if (!replyText.trim()) return;
@@ -1276,140 +1202,26 @@ export function LawyerDetailView({
         <div className="space-y-6 animate-in fade-in duration-150">
           {/* Main Large Reviews Outer Container (Recessed Look) */}
           <div className="rounded-[28px] sm:rounded-[32px] p-6 sm:p-9 neu-recessed bg-[#E5D8CB] space-y-6 select-none">
-            {/* Score header: 4.9/5 ★★★★★ (53 Reviews) + Write a Review Action */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex flex-wrap items-baseline gap-2 sm:gap-3">
-                <span className="font-lora text-4xl sm:text-5xl font-bold text-[#341512]/80 leading-none">
-                  {averageRating.toFixed(1)}
-                </span>
-                <span className="font-lora text-2xl sm:text-3xl font-bold text-[#341512]/80">
-                  /5
-                </span>
+            {/* Score header: 4.9/5 ★★★★★ (53 Reviews) */}
+            <div className="flex flex-wrap items-baseline gap-2 sm:gap-3">
+              <span className="font-lora text-4xl sm:text-5xl font-bold text-[#341512]/80 leading-none">
+                {averageRating.toFixed(1)}
+              </span>
+              <span className="font-lora text-2xl sm:text-3xl font-bold text-[#341512]/80">
+                /5
+              </span>
 
-                {/* Stars */}
-                <div className="flex items-center gap-1 text-[#C58B3C] text-xl sm:text-2xl ml-2 sm:ml-4">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <StarIcon key={s} filled={s <= Math.round(averageRating)} className="w-5 h-5 sm:w-6 sm:h-6" />
-                  ))}
-                </div>
-
-                <span className="font-lora text-sm sm:text-base font-normal text-[#341512]/80 ml-2">
-                  ({totalReviewsCount} Reviews)
-                </span>
+              {/* Stars */}
+              <div className="flex items-center gap-1 text-[#C58B3C] text-xl sm:text-2xl ml-2 sm:ml-4">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <StarIcon key={s} filled={s <= Math.round(averageRating)} className="w-5 h-5 sm:w-6 sm:h-6" />
+                ))}
               </div>
 
-              {/* Write a Review Button */}
-              <button
-                type="button"
-                onClick={() => setShowWriteReview((prev) => !prev)}
-                className="px-5 py-2.5 rounded-[14px] bg-[#C58B3C] hover:bg-[#B3792E] active:scale-95 text-white text-xs sm:text-sm font-semibold shadow-md transition-all flex items-center gap-2 cursor-pointer select-none"
-              >
-                <StarIcon filled className="w-4 h-4 text-white" />
-                <span>{showWriteReview ? 'Close Form' : 'Write a Review'}</span>
-              </button>
+              <span className="font-lora text-sm sm:text-base font-normal text-[#341512]/80 ml-2">
+                ({totalReviewsCount} Reviews)
+              </span>
             </div>
-
-            {/* Write a Review Form Card */}
-            {showWriteReview && (
-              <form
-                onSubmit={handleAddReview}
-                className="rounded-[20px] p-5 sm:p-6 bg-[#E5D8CB] neu-raised space-y-4 shadow-sm"
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="font-lora font-bold text-base sm:text-lg text-[#341512]">
-                    Write a Review for {lawyer.fullName}
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowWriteReview(false)}
-                    className="text-[#341512]/60 hover:text-[#341512] text-sm cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Rating Stars Picker */}
-                <div>
-                  <label className="text-xs font-semibold text-[#341512]/80 block mb-1 font-lora">
-                    Your Rating:
-                  </label>
-                  <div className="flex items-center gap-1.5 text-2xl text-[#C58B3C]">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onMouseEnter={() => setNewReviewHoverStars(star)}
-                        onMouseLeave={() => setNewReviewHoverStars(null)}
-                        onClick={() => setNewReviewStars(star)}
-                        className="transition-transform hover:scale-110 focus:outline-none cursor-pointer p-0.5"
-                      >
-                        <StarIcon
-                          filled={star <= (newReviewHoverStars ?? newReviewStars)}
-                          className="w-6 h-6 text-[#C58B3C]"
-                        />
-                      </button>
-                    ))}
-                    <span className="text-xs font-medium text-[#341512]/70 ml-2 font-inter">
-                      ({newReviewHoverStars ?? newReviewStars} out of 5 stars)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Reviewer Name */}
-                <div>
-                  <label className="text-xs font-semibold text-[#341512]/80 block mb-1 font-lora">
-                    Your Name:
-                  </label>
-                  <input
-                    type="text"
-                    value={newReviewName}
-                    onChange={(e) => setNewReviewName(e.target.value)}
-                    placeholder="e.g. Juan dela Cruz (Leave blank for 'Verified Client')"
-                    className="w-full px-3.5 py-2.5 rounded-[12px] text-xs neu-input bg-[#E5D8CB] text-[#341512] placeholder-[#341512]/40 focus:outline-none focus:ring-1 focus:ring-[#C58B3C] font-inter"
-                  />
-                </div>
-
-                {/* Review Feedback */}
-                <div>
-                  <label className="text-xs font-semibold text-[#341512]/80 block mb-1 font-lora">
-                    Feedback &amp; Experience:
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={newReviewContent}
-                    onChange={(e) => setNewReviewContent(e.target.value)}
-                    placeholder="Describe your consultation experience, professionalism, and advice received..."
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-[12px] text-xs neu-input bg-[#E5D8CB] text-[#341512] placeholder-[#341512]/40 focus:outline-none focus:ring-1 focus:ring-[#C58B3C] font-inter"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowWriteReview(false)}
-                    className="px-4 py-2 rounded-[12px] text-xs font-medium text-[#341512]/70 hover:text-[#341512] cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submittingReview}
-                    className="px-5 py-2.5 rounded-[12px] bg-[#C58B3C] hover:bg-[#B3792E] text-white text-xs font-semibold shadow-md disabled:opacity-50 cursor-pointer"
-                  >
-                    {submittingReview ? 'Submitting…' : 'Publish Review'}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Review Success Confirmation Toast */}
-            {reviewSuccessNotice && (
-              <div className="p-3.5 rounded-[14px] bg-[#C58B3C]/15 border border-[#C58B3C]/40 text-xs text-[#341512] flex items-center gap-2 font-inter">
-                <span className="font-bold text-[#C58B3C]">✓</span>
-                <span className="font-medium">Thank you! Your rating &amp; review has been saved successfully.</span>
-              </div>
-            )}
 
             {/* Filter pills: ★ 5, ★ 4, ★ 3, ★ 2, ★ 1 */}
             <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-1">

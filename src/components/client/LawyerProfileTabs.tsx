@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { getLawyerReviewsAction, addLawyerReviewAction } from '@/app/actions/reviewActions';
+import { getLawyerReviewsAction } from '@/app/actions/reviewActions';
 import type {
   LawyerProfileRow,
   LawyerPracticeAreaDetailRow,
@@ -302,12 +302,6 @@ interface ProfileReview {
 
 function ReviewsTab({ lawyerId, lawyerName }: { lawyerId: string; lawyerName: string }) {
   const [selectedStar, setSelectedStar] = useState<number | 'all'>('all');
-  const [showWriteForm, setShowWriteForm] = useState(false);
-  const [newRating, setNewRating] = useState(5);
-  const [newName, setNewName] = useState('');
-  const [newFeedback, setNewFeedback] = useState('');
-  const [submittingReview, setSubmittingReview] = useState(false);
-  const [submittedToast, setSubmittedToast] = useState(false);
 
   const defaultReviews: ProfileReview[] = [
     {
@@ -443,64 +437,6 @@ function ReviewsTab({ lawyerId, lawyerName }: { lawyerId: string; lawyerName: st
     );
   };
 
-  const handleSubmitReview = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newFeedback.trim()) return;
-
-    setSubmittingReview(true);
-    const tempId = `rev-${Date.now()}`;
-    const newRev: ProfileReview = {
-      id: tempId,
-      name: newName.trim() || 'Verified Client',
-      stars: newRating,
-      date: 'Just now',
-      content: newFeedback.trim(),
-      helpfulCount: 0,
-    };
-
-    // 1. Update in-memory state
-    setReviews((prev) => [newRev, ...prev]);
-
-    // 2. Persist to localStorage
-    try {
-      const existing = getStoredReviews();
-      const updated = [newRev, ...existing.filter((r) => r.id !== tempId)];
-      localStorage.setItem(`justicia_reviews_${lawyerId}`, JSON.stringify(updated));
-    } catch {}
-
-    // 3. Persist to Supabase
-    try {
-      const res = await addLawyerReviewAction({
-        lawyerId,
-        lawyerName,
-        rating: newRating,
-        comment: newFeedback.trim(),
-        reviewerName: newName.trim() || 'Verified Client',
-      });
-
-      if (res.success && res.review) {
-        const dbRev = res.review;
-        setReviews((prev) =>
-          prev.map((r) => (r.id === tempId ? { ...r, id: dbRev.id } : r))
-        );
-        try {
-          const existing = getStoredReviews();
-          const updated = existing.map((r) => (r.id === tempId ? { ...r, id: dbRev.id } : r));
-          localStorage.setItem(`justicia_reviews_${lawyerId}`, JSON.stringify(updated));
-        } catch {}
-      }
-    } catch (err) {
-      console.warn('addLawyerReviewAction notice:', err);
-    }
-
-    setSubmittingReview(false);
-    setNewName('');
-    setNewFeedback('');
-    setShowWriteForm(false);
-    setSubmittedToast(true);
-    setTimeout(() => setSubmittedToast(false), 5000);
-  };
-
   return (
     <div className="space-y-6">
       {/* Top Rating Summary Card */}
@@ -522,101 +458,7 @@ function ReviewsTab({ lawyerId, lawyerName }: { lawyerId: string; lawyerName: st
             ({reviews.length} Verified Reviews)
           </span>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setShowWriteForm((v) => !v)}
-          className="px-4 py-2 rounded-xl bg-[#C58B3C] text-white text-xs font-semibold hover:bg-[#B07A2E] transition-colors shadow-sm"
-        >
-          {showWriteForm ? '✕ Close Form' : '★ Write a Review'}
-        </button>
       </div>
-
-      {/* Review Submission Form */}
-      {showWriteForm && (
-        <form
-          onSubmit={handleSubmitReview}
-          className="rounded-xl p-5 bg-[#F5EDE2] border border-[#E8DCCB] space-y-4"
-          style={{ boxShadow: 'inset 1px 1px 4px rgba(0,0,0,0.04)' }}
-        >
-          <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-sm text-[#34150F]">
-              Review your consultation with {lawyerName}
-            </h4>
-            <button
-              type="button"
-              onClick={() => setShowWriteForm(false)}
-              className="text-[#7D6855] text-xs hover:text-[#34150F]"
-            >
-              Cancel
-            </button>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-[#5C4535] block mb-1">Rating:</label>
-            <div className="flex items-center gap-1.5 text-2xl text-[#C58B3C]">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  onClick={() => setNewRating(star)}
-                  className="transition-transform hover:scale-110 focus:outline-none"
-                >
-                  {star <= newRating ? '★' : '☆'}
-                </button>
-              ))}
-              <span className="text-xs text-[#7D6855] ml-2">({newRating} of 5 stars)</span>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-[#5C4535] block mb-1">Your Name:</label>
-            <input
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="e.g. Maria Santos (or leave blank for Verified Client)"
-              className="w-full px-3 py-2 rounded-lg text-xs bg-[#EFE5D8] border border-[#D8CAAD] text-[#34150F] placeholder-[#A69584] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-[#5C4535] block mb-1">Feedback &amp; Experience:</label>
-            <textarea
-              rows={3}
-              value={newFeedback}
-              onChange={(e) => setNewFeedback(e.target.value)}
-              placeholder="Share how counsel helped your legal inquiry, clarity of legal advice, punctuality..."
-              required
-              className="w-full px-3 py-2 rounded-lg text-xs bg-[#EFE5D8] border border-[#D8CAAD] text-[#34150F] placeholder-[#A69584] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => setShowWriteForm(false)}
-              className="px-4 py-1.5 rounded-lg text-xs text-[#5C4535] hover:text-[#34150F]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-1.5 rounded-lg bg-[#C58B3C] text-white text-xs font-semibold hover:bg-[#B07A2E] transition-colors"
-            >
-              Submit Review
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* Success Notice */}
-      {submittedToast && (
-        <div className="p-3.5 rounded-xl bg-[#D4C1AB]/40 border border-[#C58B3C]/50 text-xs text-[#34150F] flex items-center gap-2">
-          <span>✓</span>
-          <span className="font-medium">Thank you! Your review has been submitted successfully.</span>
-        </div>
-      )}
 
       {/* Star Filter Pills */}
       <div className="flex flex-wrap items-center gap-2">

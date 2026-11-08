@@ -938,6 +938,7 @@ export async function getClientConsultationsAction(clientId?: string) {
 
       return {
         id: row.id,
+        lawyerId: row.lawyer_id || meta.lawyerId || 'lw-001',
         dateStr: meta.dateStr ? meta.dateStr.toUpperCase() : 'SCHEDULED SESSION',
         day: meta.day || 23,
         timeSlot: meta.timeSlot || 'Scheduled Session',
@@ -958,6 +959,26 @@ export async function getClientConsultationsAction(clientId?: string) {
   } catch (err) {
     console.error('[getClientConsultationsAction] catch:', err);
     return [];
+  }
+}
+
+/**
+ * Mark a consultation as completed (e.g. after video conference ends)
+ */
+export async function completeConsultationAction(consultationId: string) {
+  try {
+    const supabase = await createServiceClient();
+    const { error } = await (supabase as any)
+      .from('consultations')
+      .update({ status: 'completed' })
+      .eq('id', consultationId);
+    if (error) {
+      console.warn('[completeConsultationAction] DB update error:', error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to complete consultation' };
   }
 }
 
