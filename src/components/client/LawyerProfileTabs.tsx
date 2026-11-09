@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { getLawyerReviewsAction } from '@/app/actions/reviewActions';
+import { useState } from 'react';
+import { useLawyerReviews } from './useLawyerReviews';
 import type {
   LawyerProfileRow,
   LawyerPracticeAreaDetailRow,
@@ -289,128 +289,10 @@ function CasesTab({ caseSummaries }: { caseSummaries: LawyerCaseSummaryRow[] }) 
 }
 
 // ─── Reviews Tab ────────────────────────────────────────────────────────────
-interface ProfileReview {
-  id: string;
-  name: string;
-  stars: number;
-  date: string;
-  content: string;
-  helpfulCount: number;
-  userVoted?: boolean;
-  reply?: string;
-}
-
 function ReviewsTab({ lawyerId, lawyerName }: { lawyerId: string; lawyerName: string }) {
   const [selectedStar, setSelectedStar] = useState<number | 'all'>('all');
 
-  const defaultReviews: ProfileReview[] = [
-    {
-      id: 'rev-p1',
-      name: 'Maria Victoria Garcia',
-      stars: 5,
-      date: 'Oct 24, 2026',
-      content:
-        'Atty. is exceptionally thorough, patient, and knowledgeable about Philippine legal proceedings. Provided actionable advice right during our very first video consultation.',
-      helpfulCount: 14,
-      reply: 'Maraming salamat po, Ms. Garcia! Glad we could establish a clear path forward for your case.',
-    },
-    {
-      id: 'rev-p2',
-      name: 'Ramon De Jesus',
-      stars: 5,
-      date: 'Oct 12, 2026',
-      content:
-        'Highly recommended counsel. Handled our corporate documentation and contract review with utmost speed and attention to detail. Very fair professional fee.',
-      helpfulCount: 8,
-    },
-    {
-      id: 'rev-p3',
-      name: 'Elena Santos',
-      stars: 4,
-      date: 'Sep 29, 2026',
-      content:
-        'Very helpful legal guidance regarding estate settlement. Straightforward advice and explained technical legal terms in simple terms we could easily understand.',
-      helpfulCount: 5,
-    },
-    {
-      id: 'rev-p4',
-      name: 'Carlos Mendoza',
-      stars: 5,
-      date: 'Sep 15, 2026',
-      content:
-        'Professional, punctual, and very empathetic to our situation. Answered all follow-up questions promptly through the platform messaging.',
-      helpfulCount: 9,
-    },
-  ];
-
-  const getStoredReviews = useCallback((): ProfileReview[] => {
-    if (typeof window === 'undefined' || !lawyerId) return [];
-    try {
-      const raw = localStorage.getItem(`justicia_reviews_${lawyerId}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          return parsed.map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            stars: r.stars,
-            date: r.date,
-            content: r.content,
-            reply: r.reply,
-            helpfulCount: r.helpfulCount || 0,
-          }));
-        }
-      }
-    } catch {}
-    return [];
-  }, [lawyerId]);
-
-  const [reviews, setReviews] = useState<ProfileReview[]>(defaultReviews);
-
-  // Sync with localStorage and Supabase on mount
-  useEffect(() => {
-    if (!lawyerId) return;
-
-    const local = getStoredReviews();
-    if (local.length > 0) {
-      setReviews((prev) => {
-        const existingIds = new Set(prev.map((r) => r.id));
-        const missing = local.filter((r) => !existingIds.has(r.id));
-        if (missing.length === 0) return prev;
-        return [...missing, ...prev];
-      });
-    }
-
-    async function loadLiveReviews() {
-      try {
-        const res = await getLawyerReviewsAction(lawyerId);
-        if (res.success && res.reviews && res.reviews.length > 0) {
-          const dbMapped: ProfileReview[] = res.reviews.map((r) => ({
-            id: r.id,
-            name: r.name,
-            stars: r.stars,
-            date: r.date,
-            content: r.content,
-            reply: r.reply,
-            helpfulCount: r.helpfulCount || 0,
-          }));
-
-          setReviews((prev) => {
-            const dbIds = new Set(dbMapped.map((r) => r.id));
-            const pendingLocal = prev.filter(
-              (r) => !dbIds.has(r.id) && String(r.id).startsWith('rev-')
-            );
-            const rest = defaultReviews.filter((r) => !dbIds.has(r.id));
-            return [...dbMapped, ...pendingLocal, ...rest];
-          });
-        }
-      } catch (err) {
-        console.warn('loadLiveReviews notice:', err);
-      }
-    }
-
-    loadLiveReviews();
-  }, [lawyerId, getStoredReviews]);
+  const { reviews, loading, error } = useLawyerReviews(lawyerId);
 
   const filteredReviews = reviews.filter((r) =>
     selectedStar === 'all' ? true : r.stars === selectedStar
@@ -419,26 +301,15 @@ function ReviewsTab({ lawyerId, lawyerName }: { lawyerId: string; lawyerName: st
   const avgScore =
     reviews.length > 0
       ? reviews.reduce((sum, r) => sum + r.stars, 0) / reviews.length
-      : 5.0;
+      : 0;
 
-  const handleVoteHelpful = (id: string) => {
-    setReviews((prev) =>
-      prev.map((r) => {
-        if (r.id === id) {
-          const voted = !r.userVoted;
-          return {
-            ...r,
-            userVoted: voted,
-            helpfulCount: voted ? r.helpfulCount + 1 : r.helpfulCount - 1,
-          };
-        }
-        return r;
-      })
-    );
-  };
+  const [helpfulVotes, setHelpfulVotes] = useState<Record<string, boolean>>({});
+  const handleVoteHelpful = (id: string) => setHelpfulVotes(prev => ({ ...prev, [id]: !prev[id] }));
 
   return (
     <div className="space-y-6">
+      {loading && <p role="status">Loading reviews…</p>}
+      {error && <p role="alert" className="text-red-700">{error}</p>}
       {/* Top Rating Summary Card */}
       <div
         className="rounded-2xl p-6 bg-[#EFE5D8] flex flex-wrap items-center justify-between gap-5"
@@ -531,11 +402,11 @@ function ReviewsTab({ lawyerId, lawyerName }: { lawyerId: string; lawyerName: st
                 type="button"
                 onClick={() => handleVoteHelpful(rev.id)}
                 className={`flex items-center gap-1.5 hover:text-[#34150F] transition-colors ${
-                  rev.userVoted ? 'text-[#C58B3C] font-semibold' : ''
+                  helpfulVotes[rev.id] ? 'text-[#C58B3C] font-semibold' : ''
                 }`}
               >
                 <span>👍</span>
-                <span>Helpful ({rev.helpfulCount})</span>
+                <span>Helpful ({(rev.helpfulCount || 0) + (helpfulVotes[rev.id] ? 1 : 0)})</span>
               </button>
             </div>
           </div>
@@ -543,7 +414,7 @@ function ReviewsTab({ lawyerId, lawyerName }: { lawyerId: string; lawyerName: st
 
         {filteredReviews.length === 0 && (
           <p className="text-center py-8 text-xs text-[#A69584]">
-            No reviews match this star rating.
+            {loading ? 'Loading reviews…' : error ? 'Reviews are currently unavailable.' : reviews.length === 0 ? 'No consultation reviews yet.' : 'No reviews match this rating.'}
           </p>
         )}
       </div>

@@ -6,8 +6,7 @@ import {
   getClientConsultationsAction,
   completeConsultationAction,
 } from '@/app/actions/consultationActions';
-import { addLawyerReviewAction } from '@/app/actions/reviewActions';
-import Link from 'next/link';
+import { addLawyerReviewAction, getMyConsultationRatingsAction } from '@/app/actions/reviewActions';
 import type { ViewKey } from '@/components/client/ClientShell';
 
 interface ConsultationsViewProps {
@@ -39,7 +38,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const [dbAppointments, setDbAppointments] = useState<Appointment[]>([]);
 
   useEffect(() => {
-    getClientConsultationsAction().then((data: any) => {
+    getClientConsultationsAction().then((data) => {
       if (data && data.length > 0) {
         setDbAppointments(data);
       }
@@ -65,7 +64,6 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const [rateAppointment, setRateAppointment] = useState<Appointment | null>(null);
   const [ratingStars, setRatingStars] = useState<number>(5);
   const [hoverStars, setHoverStars] = useState<number | null>(null);
-  const [reviewerName, setReviewerName] = useState<string>('');
   const [feedbackText, setFeedbackText] = useState<string>('');
   const [submittingRate, setSubmittingRate] = useState<boolean>(false);
   const [rateToast, setRateToast] = useState<{ show: boolean; message: string }>({
@@ -73,108 +71,23 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
     message: '',
   });
 
-  // Load rated consultations from localStorage
+  const [ratingsReady, setRatingsReady] = useState(false);
+  const [rateError, setRateError] = useState('');
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('justicia_rated_consultations');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object') {
-            setRatedMap(parsed);
-          }
-        }
-      } catch {}
-    }
+    getMyConsultationRatingsAction().then(result => {
+      if (result.success) { setRatedMap(result.ratings); setRatingsReady(true); }
+      else setRateError(result.error || 'Unable to load ratings.');
+    }).catch(() => setRateError('Unable to load ratings. Please refresh.'));
   }, []);
 
-  const appointments: Appointment[] = [
-    {
-      id: 'apt-001',
-      lawyerId: 'lw-001',
-      dateStr: 'TODAY, SEPTEMBER 23, 2026',
-      day: 23,
-      timeSlot: '3:00 PM - 4:00 PM • PST, GMT+8',
-      status: 'CONFIRMED APPOINTMENT',
-      lawyerName: 'Atty. Maria Elena Santos, Ll.B.',
-      rollNumber: '58942',
-      ibpChapter: 'MAKATI',
-      practiceAreas: ['Labor & Employment', 'Corporate', 'Civil Law'],
-      rating: '4.9 (53 Reviews)',
-      experienceYrs: 9,
-      ratePerHour: 1500,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      caseTitle: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
-      caseDescription:
-        'Legal consultation regarding unrefunded commercial and residential security deposits, dispute resolution protocols before barangay conciliation, and notice of formal dispute escalation.',
-      meetingLink: 'https://meet.justicia.ph/room/santos-clyde-20260923',
-    },
-    {
-      id: 'apt-002',
-      lawyerId: 'lw-002',
-      dateStr: 'SEPTEMBER 28, 2026',
-      day: 28,
-      timeSlot: '2:00 PM - 3:00 PM • PST, GMT+8',
-      status: 'CONFIRMED APPOINTMENT',
-      lawyerName: 'Atty. Joaquin Antonio Reyes, Ll.M.',
-      rollNumber: '61204',
-      ibpChapter: 'PASIG',
-      practiceAreas: ['Real Estate & Tenancy', 'Commercial Contracts'],
-      rating: '4.8 (41 Reviews)',
-      experienceYrs: 11,
-      ratePerHour: 1800,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      caseTitle: 'Commercial Tenancy Escrow Release & Final Turnover Notice',
-      caseDescription:
-        'Legal review of commercial tenancy contract addendum for retail space in Ortigas Center. Assisting in escrow account release following joint tenant-lessor clearance protocols and tax certificate turnover.',
-      meetingLink: 'https://meet.justicia.ph/room/reyes-clyde-20260928',
-    },
-    {
-      id: 'apt-003',
-      lawyerId: 'lw-003',
-      dateStr: 'OCTOBER 05, 2026',
-      day: 5,
-      timeSlot: '10:00 AM - 11:30 AM • PST, GMT+8',
-      status: 'CONFIRMED APPOINTMENT',
-      lawyerName: 'Atty. Beatrice Clara Tan, Ll.B.',
-      rollNumber: '59811',
-      ibpChapter: 'QUEZON CITY',
-      practiceAreas: ['Intellectual Property', 'Corporate Law'],
-      rating: '5.0 (29 Reviews)',
-      experienceYrs: 8,
-      ratePerHour: 1600,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      caseTitle: 'Trademark Filing Evaluation & Prior Art Search Assessment',
-      caseDescription:
-        'Pre-registration evaluation for proprietary software brand before the Intellectual Property Office of the Philippines (IPOPHL). Assessing trademark classification classes 9 and 42.',
-      meetingLink: 'https://meet.justicia.ph/room/tan-clyde-20261005',
-    },
-    {
-      id: 'apt-004',
-      lawyerId: 'lw-001',
-      dateStr: 'SEPTEMBER 18, 2026',
-      day: 18,
-      timeSlot: '4:00 PM - 5:00 PM • PST, GMT+8',
-      status: 'COMPLETED',
-      lawyerName: 'Atty. Maria Elena Santos, Ll.B.',
-      rollNumber: '58942',
-      ibpChapter: 'MAKATI',
-      practiceAreas: ['Labor & Employment', 'Corporate', 'Civil Law'],
-      rating: '4.9 (53 Reviews)',
-      experienceYrs: 9,
-      ratePerHour: 1500,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      caseTitle: 'Post-Inspection Demand Settlement & Escrow Verification',
-      caseDescription:
-        'Follow-up review of demand compliance notice from landlord. Verification of bank transmittal clearance for security deposit restitution and full quitclaim execution.',
-      meetingLink: 'https://meet.justicia.ph/room/santos-clyde-20260918',
-    },
-  ];
-
-  const allAppointments = dbAppointments.length > 0 ? dbAppointments : appointments;
+  const allAppointments = dbAppointments;
   const hasAppointments = allAppointments.length > 0;
-  const currentAppointment =
-    allAppointments[activeAppointmentIndex] || allAppointments[0] || appointments[0];
+  // An empty placeholder is never rendered; it keeps the existing empty-state layout safe.
+  const currentAppointment = allAppointments[activeAppointmentIndex] || allAppointments[0] || {
+    id: '', status: 'PENDING CONFIRMATION', lawyerName: '', practiceAreas: [],
+    dateStr: '', day: 0, timeSlot: '', rollNumber: '', ibpChapter: '', rating: '',
+    experienceYrs: 0, ratePerHour: 0, docket: '', caseTitle: '', caseDescription: '',
+  } satisfies Appointment;
 
   const handleSelectAppointment = (idx: number) => {
     if (idx === activeAppointmentIndex) return;
@@ -240,93 +153,28 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
       return;
     }
 
+    if (submittingRate || !ratingsReady) return;
     setSubmittingRate(true);
-    const targetLawyerId = rateAppointment.lawyerId || 'lw-001';
-    const cleanReviewerName = reviewerName.trim() || 'Verified Client';
-    const cleanComment = feedbackText.trim();
-    const currentRating = ratingStars;
-    const tempId = `rev-${Date.now()}`;
-
-    const newReviewItem = {
-      id: tempId,
-      name: cleanReviewerName,
-      stars: currentRating,
-      date: new Date().toLocaleDateString('en-US', {
-        month: '2-digit',
-        day: '2-digit',
-        year: 'numeric',
-      }),
-      content: cleanComment,
-    };
-
-    // 1. Immediately store into localStorage so it persists upon reload in all views
+    setRateError('');
     try {
-      const storageKey = `justicia_reviews_${targetLawyerId}`;
-      const existingRaw = localStorage.getItem(storageKey);
-      let existing: any[] = [];
-      if (existingRaw) {
-        try {
-          const parsed = JSON.parse(existingRaw);
-          if (Array.isArray(parsed)) existing = parsed;
-        } catch {}
-      }
-      const updatedList = [newReviewItem, ...existing.filter((r) => r.id !== tempId)];
-      localStorage.setItem(storageKey, JSON.stringify(updatedList));
-    } catch (e) {
-      console.warn('localStorage save review warning:', e);
-    }
-
-    // 2. Mark this consultation as rated in localStorage
-    const newRatedMap = {
-      ...ratedMap,
-      [rateAppointment.id]: { rating: currentRating, comment: cleanComment },
-    };
-    setRatedMap(newRatedMap);
-    try {
-      localStorage.setItem('justicia_rated_consultations', JSON.stringify(newRatedMap));
-    } catch {}
-
-    // 3. Persist to Supabase database via server action
-    try {
-      const res = await addLawyerReviewAction({
-        lawyerId: targetLawyerId,
-        lawyerName: rateAppointment.lawyerName,
-        rating: currentRating,
-        comment: cleanComment,
-        reviewerName: cleanReviewerName,
+      const result = await addLawyerReviewAction({
+        consultationId: rateAppointment.id, rating: ratingStars, comment: feedbackText.trim(),
       });
-
-      if (res.success && res.review) {
-        const dbRev = res.review;
-        try {
-          const storageKey = `justicia_reviews_${targetLawyerId}`;
-          const existingRaw = localStorage.getItem(storageKey);
-          if (existingRaw) {
-            const parsed = JSON.parse(existingRaw);
-            if (Array.isArray(parsed)) {
-              const synced = parsed.map((r: any) =>
-                r.id === tempId ? { ...r, id: dbRev.id } : r
-              );
-              localStorage.setItem(storageKey, JSON.stringify(synced));
-            }
-          }
-        } catch {}
-      }
-    } catch (err) {
-      console.warn('addLawyerReviewAction notice:', err);
+      if (!result.success) { setRateError(result.error || 'Unable to save your review.'); return; }
+      setRatedMap(prev => ({ ...prev, [rateAppointment.id]: { rating: ratingStars, comment: feedbackText.trim() } }));
+      setShowRateModal(false);
+      setRateToast({ show: true, message: 'Your consultation rating has been saved.' });
+      setTimeout(() => setRateToast({ show: false, message: '' }), 5000);
+    } catch {
+      setRateError('Your review could not be saved. Please try again.');
+    } finally {
+      setSubmittingRate(false);
     }
-
-    setSubmittingRate(false);
-    setShowRateModal(false);
-    setRateToast({
-      show: true,
-      message: `Your rating for ${rateAppointment.lawyerName} has been submitted successfully!`,
-    });
-    setTimeout(() => setRateToast({ show: false, message: '' }), 5000);
   };
 
   return (
     <div className="max-w-[1240px] mx-auto px-2 sm:px-6 py-6 space-y-6">
+      {rateError && !showRateModal && <p role="alert" className="text-sm text-red-700">{rateError}</p>}
       {/* ─── Main 2-Column Grid (Exact Figma Layout) ───────────────────────── */}
       {!hasAppointments ? (
         <div className="rounded-[28px] p-12 bg-[#ECE1D2] text-center space-y-4 max-w-xl mx-auto shadow-md">
@@ -587,7 +435,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                           {currentAppointment.practiceAreas.join(' • ')}
                         </p>
                         <p className="text-[11px] sm:text-xs text-[#5C4535] font-medium">
-                          ★ {currentAppointment.rating} • {currentAppointment.experienceYrs} yrs practice
+                          {currentAppointment.experienceYrs} yrs practice
                         </p>
                       </div>
                     </div>
@@ -653,11 +501,12 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                         <button
                           type="button"
                           onClick={() => {
+                            if (!ratingsReady) return;
                             setRateAppointment(currentAppointment);
                             setRatingStars(5);
                             setHoverStars(null);
                             setFeedbackText('');
-                            setReviewerName('');
+                            setRateError('');
                             setShowRateModal(true);
                           }}
                           className="px-6 py-2.5 rounded-xl text-xs font-bold text-[#23150F] flex items-center gap-2 transition-all hover:brightness-105 active:scale-95"
@@ -668,7 +517,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                           }}
                         >
                           <span className="text-sm leading-none text-[#23150F]">★</span>
-                          <span>Rate Consultation</span>
+                          <span>{ratingsReady ? 'Rate Consultation' : 'Loading ratings…'}</span>
                         </button>
                       )}
                     </div>
@@ -967,21 +816,20 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                 <button
                   type="button"
                   onClick={async () => {
-                    // Mark appointment as completed
-                    setCompletedStatusMap((prev) => ({
-                      ...prev,
-                      [currentAppointment.id]: true,
-                    }));
-                    if (currentAppointment.id && !currentAppointment.id.startsWith('apt-')) {
-                      await completeConsultationAction(currentAppointment.id);
+                    const result = await completeConsultationAction(currentAppointment.id);
+                    if (!result.success) {
+                      setRateError(result.error || 'Unable to complete consultation.');
+                      return;
                     }
+                    setCompletedStatusMap(prev => ({ ...prev, [currentAppointment.id]: true }));
                     setShowMeetModal(false);
+                    if (ratedMap[currentAppointment.id]) return;
                     // Automatically trigger the Post-Consultation Rating Modal
                     setRateAppointment(currentAppointment);
                     setRatingStars(5);
                     setHoverStars(null);
                     setFeedbackText('');
-                    setReviewerName('');
+                    setRateError('');
                     setShowRateModal(true);
                   }}
                   className="px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-semibold shadow-md transition"
@@ -1028,7 +876,8 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
               </div>
               <button
                 type="button"
-                onClick={() => setShowRateModal(false)}
+                disabled={submittingRate}
+                  onClick={() => setShowRateModal(false)}
                 className="text-[#5C4535] hover:text-[#23150F] font-bold p-1 rounded-full transition"
                 aria-label="Close rating modal"
               >
@@ -1038,6 +887,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
 
             {/* Modal Form */}
             <form onSubmit={handleSubmitRating} className="space-y-4">
+              {rateError && <p role="alert" className="text-sm text-red-700">{rateError}</p>}
               {/* Star Rating Section */}
               <div className="p-4 rounded-2xl bg-[#E5D8CB]/70 border border-[#D5C2AD] space-y-2 text-center">
                 <span className="text-xs font-semibold text-[#5C4535] uppercase tracking-wider block">
@@ -1070,24 +920,6 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                 </p>
               </div>
 
-              {/* Reviewer Name */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#5C4535] block">
-                  Client Display Name (Optional):
-                </label>
-                <input
-                  type="text"
-                  value={reviewerName}
-                  onChange={(e) => setReviewerName(e.target.value)}
-                  placeholder="e.g. Maria Santos (or leave blank for Verified Client)"
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#E5D8CB] border border-[#D5C2AD] text-xs text-[#23150F] placeholder-[#8C7662] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
-                  style={{
-                    boxShadow:
-                      'inset 2px 2px 4px rgba(165, 140, 115, 0.35), inset -2px -2px 4px #FFFFFF',
-                  }}
-                />
-              </div>
-
               {/* Feedback Content */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-[#5C4535] block">
@@ -1099,6 +931,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                   onChange={(e) => setFeedbackText(e.target.value)}
                   placeholder="Describe your consultation experience: clarity of counsel, understanding of law, punctuality, and responsiveness..."
                   required
+                  maxLength={5000}
                   className="w-full p-4 rounded-2xl bg-[#E5D8CB] border border-[#D5C2AD] text-xs text-[#23150F] placeholder-[#8C7662] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
                   style={{
                     boxShadow:
@@ -1122,7 +955,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                 </button>
                 <button
                   type="submit"
-                  disabled={submittingRate}
+                  disabled={submittingRate || !ratingsReady}
                   className="px-6 py-2.5 rounded-xl bg-[#D49E56] hover:bg-[#C58B3C] text-[#23150F] text-xs font-bold transition shadow-md disabled:opacity-50 flex items-center gap-2"
                   style={{
                     boxShadow:

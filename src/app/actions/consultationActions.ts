@@ -888,31 +888,14 @@ export async function getClientConsultationsAction(clientId?: string) {
   try {
     const serviceClient = await createServiceClient();
 
-    let targetClientId = clientId;
-    if (!targetClientId) {
-      const userClient = await createClient();
-      const { data: authData } = await userClient.auth.getUser();
-      targetClientId = authData?.user?.id;
-    }
-
-    const resolvedTarget = await getOrProvisionClientUserId(serviceClient, targetClientId);
+    const userClient = await createClient();
+    const { data: { user } } = await userClient.auth.getUser();
+    if (!user || (clientId && clientId !== user.id)) return [];
+    const resolvedTarget = user.id;
 
     const query = serviceClient
       .from('consultations')
-      .select(`
-        id,
-        client_id,
-        lawyer_id,
-        scheduled_time,
-        method,
-        status,
-        concern_summary,
-        user_accounts!consultations_lawyer_id_fkey (
-          id,
-          full_name,
-          email
-        )
-      `)
+      .select('*')
       .eq('client_id', resolvedTarget)
       .order('scheduled_time', { ascending: false });
 
@@ -922,6 +905,13 @@ export async function getClientConsultationsAction(clientId?: string) {
       return [];
     }
 
+    const lawyerIds = [...new Set((data || []).map(row => row.lawyer_id))];
+    const { data: lawyers, error: lawyersError } = lawyerIds.length
+      ? await serviceClient.from('lawyer_profiles').select('user_id,full_name').in('user_id', lawyerIds)
+      : { data: [], error: null };
+    if (lawyersError) throw lawyersError;
+    const lawyerNames = new Map((lawyers || []).map(lawyer => [lawyer.user_id, lawyer.full_name]));
+
     return (data || []).map((row: any) => {
       let meta: any = {};
       try {
@@ -930,7 +920,7 @@ export async function getClientConsultationsAction(clientId?: string) {
         meta = { subject: row.concern_summary || 'General Consultation' };
       }
 
-      const lawyerName = row.user_accounts?.full_name || meta.lawyerName || 'Atty. Maria Elena Santos, Ll.B.';
+      const lawyerName = lawyerNames.get(row.lawyer_id) || meta.lawyerName || 'your lawyer';
 
       let statusDisplay: 'CONFIRMED APPOINTMENT' | 'COMPLETED' | 'PENDING CONFIRMATION' = 'PENDING CONFIRMATION';
       if (row.status === 'confirmed') statusDisplay = 'CONFIRMED APPOINTMENT';
@@ -967,18 +957,31 @@ export async function getClientConsultationsAction(clientId?: string) {
  */
 export async function completeConsultationAction(consultationId: string) {
   try {
-    const supabase = await createServiceClient();
-    const { error } = await (supabase as any)
-      .from('consultations')
-      .update({ status: 'completed' })
-      .eq('id', consultationId);
-    if (error) {
-      console.warn('[completeConsultationAction] DB update error:', error);
-      return { success: false, error: error.message };
+    const auth = await createClient();
+    const { data: { user } } = await auth.auth.getUser();
+    if (!user) return { success: false, error: 'Please sign in to complete this consultation.' };
+    const db = await createServiceClient();
+    const { data: consultation, error: lookupError } = await db.from('consultations')
+      .select('*').eq('id', consultationId).maybeSingle();
+    if (lookupError) throw lookupError;
+    if (!consultation || (consultation.client_id !== user.id && consultation.lawyer_id !== user.id)) {
+      return { success: false, error: 'Consultation not found.' };
     }
+    if (consultation.status === 'completed') return { success: true };
+    const scheduledStart = 'scheduled_start' in consultation && typeof consultation.scheduled_start === 'string'
+      ? consultation.scheduled_start : consultation.scheduled_time;
+    const startsAt = scheduledStart ? new Date(scheduledStart).getTime() : NaN;
+    if (consultation.status !== 'confirmed' || !Number.isFinite(startsAt) || startsAt > Date.now()) {
+      return { success: false, error: 'Only a confirmed consultation that has started can be completed.' };
+    }
+    const { data, error } = await db.from('consultations').update({ status: 'completed' })
+      .eq('id', consultationId).eq('status', 'confirmed').select('id').maybeSingle();
+    if (error) throw error;
+    if (!data) return { success: false, error: 'Consultation status changed. Please refresh.' };
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Failed to complete consultation' };
+  } catch (error) {
+    console.error('[completeConsultationAction]', error);
+    return { success: false, error: 'Unable to save consultation completion. Please try again.' };
   }
 }
 

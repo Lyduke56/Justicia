@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import { useLawyerReviews } from './useLawyerReviews';
 import { motion, AnimatePresence } from 'motion/react';
 import { createClient } from '@/lib/supabase/client';
 import type { PublicLawyerProfile } from './LawyerGrid';
@@ -12,10 +13,6 @@ import {
   createDocumentFolderAction,
   uploadDocumentFileAction,
 } from '@/app/actions/consultationActions';
-import {
-  getLawyerReviewsAction,
-  addReviewReplyAction,
-} from '@/app/actions/reviewActions';
 
 export interface ReviewItem {
   id: number | string;
@@ -316,161 +313,11 @@ export function LawyerDetailView({
   };
 
   // ─── Reviews State ────────────────────────────────────────────────────────────
-  const LOREM_REVIEW_BODY =
-    'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
-
-  const initialReviews: ReviewItem[] = [
-    {
-      id: 0,
-      name: 'Clyde Justine Rosal',
-      stars: 5,
-      date: '10/17/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 1,
-      name: 'Benideck Longakit',
-      stars: 5,
-      date: '10/17/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 2,
-      name: 'Christopher John Rubio',
-      stars: 5,
-      date: '10/17/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 3,
-      name: 'Axziel Jay A. Bartolabac',
-      stars: 5,
-      date: '10/17/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 4,
-      name: 'Patricia Mae Santos',
-      stars: 5,
-      date: '10/14/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 5,
-      name: 'Rafael D. Mercado',
-      stars: 5,
-      date: '10/12/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 6,
-      name: 'Maria Cristina Veloso',
-      stars: 5,
-      date: '10/08/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 7,
-      name: 'Eduardo M. Tan',
-      stars: 5,
-      date: '10/03/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 8,
-      name: 'Danilo S. Fernandez',
-      stars: 5,
-      date: '09/27/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 9,
-      name: 'Giselle Gomez-Lim',
-      stars: 5,
-      date: '09/20/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 10,
-      name: 'Jerome Paulino',
-      stars: 5,
-      date: '09/15/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 11,
-      name: 'Rowena Castillo',
-      stars: 5,
-      date: '09/10/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 12,
-      name: 'Vicente Morales',
-      stars: 5,
-      date: '08/28/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 13,
-      name: 'Lourdes B. Reyes',
-      stars: 5,
-      date: '08/20/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 14,
-      name: 'Francis Alcantara',
-      stars: 4,
-      date: '08/14/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-    {
-      id: 15,
-      name: 'Katrina Mae Dizon',
-      stars: 5,
-      date: '08/02/2026',
-      content: LOREM_REVIEW_BODY,
-    },
-  ];
-
-  // Helper to read cached reviews for this lawyer from localStorage
-  const getStoredReviews = useCallback((lawyerId: string): ReviewItem[] => {
-    if (typeof window === 'undefined' || !lawyerId) return [];
-    try {
-      const raw = localStorage.getItem(`justicia_reviews_${lawyerId}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {}
-    return [];
-  }, []);
-
-  const [reviewsList, setReviewsList] = useState<ReviewItem[]>(() => {
-    if (typeof window !== 'undefined' && lawyer.userId) {
-      const stored = getStoredReviews(lawyer.userId);
-      if (stored.length > 0) {
-        const storedIds = new Set(stored.map((r) => r.id));
-        return [...stored, ...initialReviews.filter((r) => !storedIds.has(r.id))];
-      }
-    }
-    return initialReviews;
-  });
-  const [selectedReviewStar, setSelectedReviewStar] = useState<number | 'all'>(5);
+  const { reviews: reviewsList, loading: reviewsLoading, error: reviewsError } = useLawyerReviews(lawyer.userId);
+  const [selectedReviewStar, setSelectedReviewStar] = useState<number | 'all'>('all');
   const [reviewPage, setReviewPage] = useState<number>(1);
-  const [helpfulCounts, setHelpfulCounts] = useState<{ [id: string | number]: number }>({
-    0: 12,
-    1: 8,
-    2: 15,
-    3: 6,
-    4: 9,
-    5: 11,
-  });
+  const [helpfulCounts, setHelpfulCounts] = useState<{ [id: string | number]: number }>({});
   const [userVotedHelpful, setUserVotedHelpful] = useState<{ [id: string | number]: boolean }>({});
-
-  const [replyingToId, setReplyingToId] = useState<string | number | null>(null);
-  const [replyText, setReplyText] = useState<string>('');
 
   // Fetch booked slots for the selected day to prevent duplicate appointments
   useEffect(() => {
@@ -484,54 +331,6 @@ export function LawyerDetailView({
       }
     });
   }, [lawyer.userId, selectedDay, currentMonth, currentYear]);
-
-  // Fetch live reviews from database and sync with local storage
-  useEffect(() => {
-    if (!lawyer.userId) return;
-
-    // 1. Immediately read from localStorage on client mount
-    const local = getStoredReviews(lawyer.userId);
-    if (local.length > 0) {
-      setReviewsList((prev) => {
-        const existingIds = new Set(prev.map((r) => r.id));
-        const missingLocal = local.filter((r) => !existingIds.has(r.id));
-        if (missingLocal.length === 0) return prev;
-        return [...missingLocal, ...prev];
-      });
-    }
-
-    // 2. Fetch live reviews from Supabase via server action
-    async function fetchReviews() {
-      try {
-        const res = await getLawyerReviewsAction(lawyer.userId);
-        if (res.success && res.reviews && res.reviews.length > 0) {
-          const dbItems: ReviewItem[] = res.reviews.map((r) => ({
-            id: r.id,
-            name: r.name,
-            stars: r.stars,
-            date: r.date,
-            content: r.content || 'Client left a rating without comment.',
-            reply: r.reply,
-          }));
-
-          setReviewsList((prev) => {
-            const dbIds = new Set(dbItems.map((r) => r.id));
-            // Keep pending local reviews that aren't yet in the DB query
-            const pendingLocal = prev.filter(
-              (r) => !dbIds.has(r.id) && String(r.id).startsWith('rev-')
-            );
-            // Deduplicate initialReviews that don't match
-            const rest = initialReviews.filter((r) => !dbIds.has(r.id));
-            return [...dbItems, ...pendingLocal, ...rest];
-          });
-        }
-      } catch (err) {
-        console.warn('fetchReviews notice:', err);
-      }
-    }
-
-    fetchReviews();
-  }, [lawyer.userId, getStoredReviews]);
 
   // ─── Cases State ──────────────────────────────────────────────────────────────
   const [casePage, setCasePage] = useState<number>(1);
@@ -771,37 +570,6 @@ export function LawyerDetailView({
   const initialFee = lawyer.feeInitial30min ?? 700;
   const extendedFee = lawyer.feeExtended120min ?? 2300;
 
-  const handleSendReply = async (reviewId: string | number) => {
-    if (!replyText.trim()) return;
-    const cleanReply = replyText.trim();
-    setReviewsList((prev) =>
-      prev.map((r) => (r.id === reviewId ? { ...r, reply: cleanReply } : r))
-    );
-
-    // Save reply to localStorage
-    try {
-      const existing = getStoredReviews(lawyer.userId);
-      const updated = existing.map((r) =>
-        r.id === reviewId ? { ...r, reply: cleanReply } : r
-      );
-      localStorage.setItem(`justicia_reviews_${lawyer.userId}`, JSON.stringify(updated));
-    } catch {}
-
-    // If reviewId is UUID in DB, persist reply to Supabase
-    if (typeof reviewId === 'string' && !reviewId.startsWith('rev-')) {
-      try {
-        await addReviewReplyAction({
-          reviewId,
-          replyText: cleanReply,
-          lawyerId: lawyer.userId,
-        });
-      } catch {}
-    }
-
-    setReplyingToId(null);
-    setReplyText('');
-  };
-
   // Filtered reviews and dynamic rating metrics
   const filteredReviews = reviewsList.filter((rev) => {
     if (selectedReviewStar === 'all') return true;
@@ -811,10 +579,10 @@ export function LawyerDetailView({
   const averageRating =
     reviewsList.length > 0
       ? reviewsList.reduce((acc, r) => acc + r.stars, 0) / reviewsList.length
-      : 4.9;
+      : 0;
 
   const REVIEWS_PER_PAGE = 4;
-  const totalReviewsCount = 53 + (reviewsList.length - initialReviews.length);
+  const totalReviewsCount = reviewsList.length;
   const totalReviewPages = Math.max(1, Math.ceil(filteredReviews.length / REVIEWS_PER_PAGE));
   const pagedReviews = filteredReviews.slice(
     (reviewPage - 1) * REVIEWS_PER_PAGE,
@@ -1200,6 +968,8 @@ export function LawyerDetailView({
       {/* ─── TAB 2: REVIEWS (Matches Figma Specs) ───────────────────────────────── */}
       {activeTab === 'reviews' && (
         <div className="space-y-6 animate-in fade-in duration-150">
+          {reviewsLoading && <p role="status">Loading reviews…</p>}
+          {reviewsError && <p role="alert" className="text-red-700">{reviewsError}</p>}
           {/* Main Large Reviews Outer Container (Recessed Look) */}
           <div className="rounded-[28px] sm:rounded-[32px] p-6 sm:p-9 neu-recessed bg-[#E5D8CB] space-y-6 select-none">
             {/* Score header: 4.9/5 ★★★★★ (53 Reviews) */}
@@ -1287,23 +1057,8 @@ export function LawyerDetailView({
                     {rev.content}
                   </p>
 
-                  {/* Footer Action Links: Reply & Helpful? */}
+                  {/* Helpful feedback */}
                   <div className="flex items-center gap-4 pt-1 text-[11px] font-medium text-[#341512]/80 font-inter">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReplyingToId(replyingToId === rev.id ? null : rev.id);
-                        setReplyText('');
-                      }}
-                      className="inline-flex items-center gap-1.5 hover:text-[#341512] transition-colors cursor-pointer"
-                    >
-                      <svg className="w-3.5 h-3.5 text-[#341512]/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="9 17 4 12 9 7" />
-                        <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
-                      </svg>
-                      <span>Reply</span>
-                    </button>
-
                     <button
                       type="button"
                       onClick={() => toggleHelpful(rev.id)}
@@ -1335,46 +1090,12 @@ export function LawyerDetailView({
                     </div>
                   )}
 
-                  {/* Inline reply form when replyingToId === rev.id */}
-                  {replyingToId === rev.id && (
-                    <div className="mt-2 p-3.5 rounded-[14px] neu-recessed bg-[#E5D8CB] space-y-2">
-                      <label className="text-[11px] font-semibold text-[#341512]/80 block font-lora">
-                        Write a response to {rev.name}:
-                      </label>
-                      <textarea
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        placeholder="Type response as counsel or verified client..."
-                        rows={2}
-                        className="w-full p-2.5 rounded-lg text-xs bg-[#E5D8CB] border border-[#D5C2AB] text-[#341512]/80 focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
-                      />
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReplyingToId(null);
-                            setReplyText('');
-                          }}
-                          className="px-3 py-1 text-xs text-[#341512]/80 hover:text-[#341512]"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSendReply(rev.id)}
-                          className="px-3.5 py-1 rounded-lg bg-[#C58B3C] hover:bg-[#B3792E] text-white text-xs font-semibold"
-                        >
-                          Post Response
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               ))}
 
               {filteredReviews.length === 0 && (
                 <div className="py-10 text-center text-xs text-[#341512]/80 font-lora">
-                  No reviews found for this star filter rating.
+                  {reviewsLoading ? 'Loading reviews…' : reviewsError ? 'Reviews are currently unavailable.' : reviewsList.length === 0 ? 'No consultation reviews yet.' : 'No reviews match this rating.'}
                 </div>
               )}
             </div>

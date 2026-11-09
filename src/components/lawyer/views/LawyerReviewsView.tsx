@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { getLawyerReviewsAction, addReviewReplyAction } from '@/app/actions/reviewActions';
+import React, { useState } from 'react';
+import { addReviewReplyAction } from '@/app/actions/reviewActions';
+import { useLawyerReviews } from '@/components/client/useLawyerReviews';
 
 interface LawyerReviewItem {
   id: string;
@@ -14,127 +15,16 @@ interface LawyerReviewItem {
   flagged?: boolean;
 }
 
-const INITIAL_LAWYER_REVIEWS: LawyerReviewItem[] = [
-  {
-    id: 'rev-l1',
-    clientName: 'Atty. Mark Ramirez (General Counsel, Apex Corp)',
-    category: 'Corporate & M&A',
-    stars: 5,
-    date: 'Oct 28, 2026',
-    feedback:
-      'Exceptional depth in Philippine corporate governance and cross-border commercial transactions. The advice provided on regulatory compliance with the SEC saved our board weeks of back-and-forth.',
-    reply:
-      'Thank you, Atty. Ramirez. It was a pleasure working with Apex Corp on this transaction.',
-  },
-  {
-    id: 'rev-l2',
-    clientName: 'Maria Victoria Garcia',
-    category: 'Labor & Employment',
-    stars: 5,
-    date: 'Oct 24, 2026',
-    feedback:
-      'Atty. Maria Santos is very thorough, patient, and knowledgeable about DOLE labor procedures. Provided actionable advice right during our very first video consultation. Very reassuring presence.',
-    reply:
-      'Maraming salamat po, Ms. Garcia! Glad we could establish a clear path forward for your case.',
-  },
-  {
-    id: 'rev-l3',
-    clientName: 'Dennis Tan',
-    category: 'Real Estate & Property',
-    stars: 4,
-    date: 'Oct 19, 2026',
-    feedback:
-      'Thorough due diligence on a contested property title in Cavite. Clear risk assessment and honest appraisal of litigation timelines.',
-  },
-  {
-    id: 'rev-l4',
-    clientName: 'Ramon De Jesus',
-    category: 'Civil Litigation',
-    stars: 5,
-    date: 'Oct 12, 2026',
-    feedback:
-      'Highly recommended counsel. Handled our dispute settlement with utmost professionalism and attention to detail. Very fair professional fee.',
-    reply: 'Thank you Mr. De Jesus. Always a pleasure helping protect your rights.',
-  },
-  {
-    id: 'rev-l5',
-    clientName: 'Elena Santos',
-    category: 'Family & Estate',
-    stars: 4,
-    date: 'Sep 29, 2026',
-    feedback:
-      'Very helpful legal guidance regarding extrajudicial settlement of estate. Explained the technical steps clearly without overwhelming us.',
-  },
-];
-
 export function LawyerReviewsView() {
-  const [reviews, setReviews] = useState<LawyerReviewItem[]>(INITIAL_LAWYER_REVIEWS);
+  const { reviews: savedReviews, setReviews: setSavedReviews, loading, error } = useLawyerReviews();
+  const reviews: LawyerReviewItem[] = savedReviews.map(r => ({
+    id: r.id, clientName: r.name, category: 'Legal Consultation', stars: r.stars,
+    date: r.date, feedback: r.content, reply: r.reply,
+  }));
   const [selectedFilter, setSelectedFilter] = useState<'all' | '5' | '4' | 'needs_reply'>('all');
   const [replyingId, setReplyingId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState('');
   const [flagToast, setFlagToast] = useState<string | null>(null);
-
-  // Sync with localStorage and Supabase on mount
-  useEffect(() => {
-    const lawyerId = '22222222-2222-4222-8222-000000000001';
-
-    // 1. Check localStorage
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem(`justicia_reviews_${lawyerId}`);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const localItems: LawyerReviewItem[] = parsed.map((p: any) => ({
-              id: String(p.id),
-              clientName: p.name || 'Verified Client',
-              category: 'General Practice',
-              stars: p.stars || 5,
-              date: p.date || 'Recent',
-              feedback: p.content || '',
-              reply: p.reply,
-            }));
-            setReviews((prev) => {
-              const existingIds = new Set(prev.map((r) => r.id));
-              const missing = localItems.filter((m) => !existingIds.has(m.id));
-              return [...missing, ...prev];
-            });
-          }
-        }
-      } catch {}
-    }
-
-    // 2. Fetch live reviews from Supabase
-    async function fetchCounselReviews() {
-      try {
-        const res = await getLawyerReviewsAction(lawyerId);
-        if (res.success && res.reviews && res.reviews.length > 0) {
-          const dbItems: LawyerReviewItem[] = res.reviews.map((r) => ({
-            id: r.id,
-            clientName: r.name,
-            category: 'Legal Consultation',
-            stars: r.stars,
-            date: r.date,
-            feedback: r.content,
-            reply: r.reply,
-          }));
-
-          setReviews((prev) => {
-            const dbIds = new Set(dbItems.map((r) => r.id));
-            const pendingLocal = prev.filter(
-              (r) => !dbIds.has(r.id) && String(r.id).startsWith('rev-')
-            );
-            const rest = INITIAL_LAWYER_REVIEWS.filter((r) => !dbIds.has(r.id));
-            return [...dbItems, ...pendingLocal, ...rest];
-          });
-        }
-      } catch (err) {
-        console.warn('fetchCounselReviews notice:', err);
-      }
-    }
-
-    fetchCounselReviews();
-  }, []);
 
   const filteredReviews = reviews.filter((r) => {
     if (selectedFilter === '5') return r.stars === 5;
@@ -146,52 +36,23 @@ export function LawyerReviewsView() {
   const handlePostReply = async (id: string) => {
     if (!replyDraft.trim()) return;
     const cleanReply = replyDraft.trim();
-    setReviews((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, reply: cleanReply } : r))
-    );
-
-    // Save reply to localStorage
-    const lawyerId = '22222222-2222-4222-8222-000000000001';
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem(`justicia_reviews_${lawyerId}`);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            const updated = parsed.map((p: any) =>
-              String(p.id) === id ? { ...p, reply: cleanReply } : p
-            );
-            localStorage.setItem(`justicia_reviews_${lawyerId}`, JSON.stringify(updated));
-          }
-        }
-      } catch {}
-    }
-
-    // Persist to Supabase if UUID
-    if (!id.startsWith('rev-')) {
-      try {
-        await addReviewReplyAction({
-          reviewId: id,
-          replyText: cleanReply,
-          lawyerId,
-        });
-      } catch {}
-    }
+    const result = await addReviewReplyAction({ reviewId: id, replyText: cleanReply });
+    if (!result.success) { setFlagToast(result.error || 'Unable to save reply.'); return; }
+    setSavedReviews(prev => prev.map(r => r.id === id ? { ...r, reply: cleanReply } : r));
 
     setReplyingId(null);
     setReplyDraft('');
   };
 
-  const handleFlagReview = (id: string) => {
-    setReviews((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, flagged: true } : r))
-    );
-    setFlagToast('Review flagged for admin moderation review.');
+  const handleFlagReview = () => {
+    setFlagToast('Please contact support to report a review.');
     setTimeout(() => setFlagToast(null), 4000);
   };
 
   return (
     <div className="p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-7">
+      {loading && <p role="status">Loading reviews…</p>}
+      {error && <p role="alert" className="text-red-700">{error}</p>}
       {/* ── Top Header Title ────────────────────────────────────────────────── */}
       <div className="space-y-1">
         <h1 className="font-cormorant text-3xl sm:text-4xl font-bold text-[#34150F]">
@@ -212,11 +73,11 @@ export function LawyerReviewsView() {
             <div className="flex items-center gap-3">
               <span className="text-2xl text-[#C58B3C]">★</span>
               <span className="font-cormorant text-3xl sm:text-4xl font-bold text-[#34150F] leading-none">
-                4.92
+                {reviews.length ? (reviews.reduce((sum, r) => sum + r.stars, 0) / reviews.length).toFixed(2) : '0.00'}
               </span>
             </div>
             <p className="text-[10px] sm:text-[11px] text-[#5C4535] mt-2 font-medium leading-tight">
-              Based on 124 verified client reviews
+              Based on {reviews.length} verified client reviews
             </p>
           </div>
         </div>
@@ -229,11 +90,11 @@ export function LawyerReviewsView() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">🏆</span>
               <span className="font-cormorant text-3xl sm:text-4xl font-bold text-[#34150F] leading-none">
-                96%
+                {reviews.length ? Math.round(reviews.filter(r => r.stars === 5).length / reviews.length * 100) : 0}%
               </span>
             </div>
             <p className="text-[10px] sm:text-[11px] text-[#5C4535] mt-2 font-medium leading-tight">
-              119 of 124 clients gave top marks
+              {reviews.filter(r => r.stars === 5).length} of {reviews.length} clients gave top marks
             </p>
           </div>
         </div>
@@ -246,11 +107,11 @@ export function LawyerReviewsView() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">💬</span>
               <span className="font-cormorant text-3xl sm:text-4xl font-bold text-[#34150F] leading-none">
-                99%
+                {reviews.length ? Math.round(reviews.filter(r => r.reply).length / reviews.length * 100) : 0}%
               </span>
             </div>
             <p className="text-[10px] sm:text-[11px] text-[#5C4535] mt-2 font-medium leading-tight">
-              Average reply time: under 2 hours
+              Reviews with a counsel reply
             </p>
           </div>
         </div>
@@ -386,7 +247,7 @@ export function LawyerReviewsView() {
                 )}
                 <button
                   type="button"
-                  onClick={() => handleFlagReview(rev.id)}
+                  onClick={() => handleFlagReview()}
                   disabled={rev.flagged}
                   className="px-3 py-1.5 rounded-full text-xs text-[#7D6855] hover:text-red-700 disabled:opacity-40 transition-colors"
                   title="Flag inappropriate review"
@@ -450,7 +311,7 @@ export function LawyerReviewsView() {
 
         {filteredReviews.length === 0 && (
           <div className="py-12 text-center text-xs text-[#7D6855]">
-            No reviews found under this filter.
+            {loading ? 'Loading reviews…' : error ? 'Reviews are currently unavailable.' : reviews.length === 0 ? 'No consultation reviews yet.' : 'No reviews match this filter.'}
           </div>
         )}
       </div>
