@@ -21,6 +21,7 @@ import {
 
 import { LawyerDashboardView } from './views/LawyerDashboardView';
 import { LawyerConsultationsView } from './views/LawyerConsultationsView';
+import { LawyerEarningsView } from './views/LawyerEarningsView';
 import { DocumentsView } from '@/components/documents/DocumentsView';
 import { getUserNotificationsAction } from '@/app/actions/consultationActions';
 import { MessagesView } from '@/components/client/views/MessagesView';
@@ -31,6 +32,7 @@ export type LawyerViewKey =
   | 'messages'
   | 'calendar'
   | 'documents'
+  | 'earnings'
   | 'profile'
   | 'settings'
   | 'other';
@@ -62,7 +64,7 @@ interface LawyerShellProps {
  * 4. Calendar
  * 5. Client Documents
  * 6. Lawyer Profile
- * 7. Earnings & Payouts (navigation placeholder until linked)
+ * 7. Earnings & Payouts
  * ── Divider ──
  * 8. Settings
  * 9. Logout
@@ -74,6 +76,7 @@ const LAWYER_NAV_ITEMS: LawyerNavItem[] = [
   { key: 'calendar',       name: 'Calendar',          href: '/lawyer/calendar',       icon: CalendarGridIcon },
   { key: 'documents',      name: 'Client Documents',  href: '/lawyer/documents',      icon: ClientDocumentsIcon },
   { key: 'profile',        name: 'Lawyer Profile',    href: '/lawyer/profile',        icon: UserPersonIcon },
+  { key: 'earnings',       name: 'Earnings & Payouts', href: '/lawyer/earnings',      icon: EarningsPayoutsIcon },
 ];
 
 /** Derive LawyerViewKey from the current pathname */
@@ -83,6 +86,7 @@ function pathnameToView(pathname: string): LawyerViewKey {
   if (pathname === '/lawyer/messages' || pathname.startsWith('/lawyer/messages/')) return 'messages';
   if (pathname === '/lawyer/calendar' || pathname.startsWith('/lawyer/calendar/') || pathname.startsWith('/lawyer/availability')) return 'calendar';
   if (pathname === '/lawyer/documents' || pathname.startsWith('/lawyer/documents/')) return 'documents';
+  if (pathname === '/lawyer/earnings' || pathname.startsWith('/lawyer/earnings/')) return 'earnings';
   if (pathname === '/lawyer/profile' || pathname.startsWith('/lawyer/profile/')) return 'profile';
   if (pathname === '/lawyer/settings' || pathname.startsWith('/lawyer/settings/')) return 'settings';
   return 'dashboard';
@@ -136,6 +140,8 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
         return <LawyerDashboardView />;
       case 'documents':
         return <DocumentsView role="lawyer" />;
+      case 'earnings':
+        return <LawyerEarningsView isDemo={user.id.startsWith('demo-')} />;
       default:
         return children ?? <LawyerDashboardView />;
     }
@@ -366,10 +372,6 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
                   </button>
                 );
               })}
-              <button type="button" disabled title="Coming soon" className="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs sm:text-sm font-medium text-left">
-                <EarningsPayoutsIcon className="w-5 h-5 shrink-0" />
-                <span>Earnings &amp; Payouts</span>
-              </button>
             </nav>
           </div>
 
@@ -448,10 +450,6 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
                       </button>
                     );
                   })}
-                  <button type="button" disabled title="Coming soon" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-left opacity-60">
-                    <EarningsPayoutsIcon className="w-5 h-5 shrink-0" />
-                    <span>Earnings &amp; Payouts</span>
-                  </button>
                 </nav>
               </div>
 
@@ -479,7 +477,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
         )}
 
         {/* Main Content Viewport */}
-        <main className={`flex-1 overflow-y-auto bg-[#E5D8CB] ${['dashboard', 'consultations', 'documents'].includes(activeView) ? 'lawyer-designed-view' : ''}`} id="lawyer-main-content">
+        <main className={`flex-1 overflow-y-auto bg-[#E5D8CB] ${['dashboard', 'consultations', 'documents', 'earnings'].includes(activeView) ? 'lawyer-designed-view' : ''}`} id="lawyer-main-content">
           <div key={activeView} className="client-view-enter">
             {renderView()}
           </div>
