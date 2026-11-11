@@ -1,190 +1,335 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   getClientConsultationsAction,
-  completeConsultationAction,
+  cancelConsultationAction,
 } from '@/app/actions/consultationActions';
-import { addLawyerReviewAction, getMyConsultationRatingsAction } from '@/app/actions/reviewActions';
+import {
+  getPaymentChannelAction,
+  submitPaymentProofAction,
+  getDocumentAccessUrlAction,
+} from '@/app/actions/consultationActions';
+import type { ClientConsultation, PaymentChannel } from '@/app/actions/consultationActions';
+import { ConsultationDetailsModal } from '@/components/shared/ConsultationDetailsModal';
+import type {
+  ConsultationDetailsModalProps,
+  DetailsSummary,
+} from '@/components/shared/ConsultationDetailsModal';
 import type { ViewKey } from '@/components/client/ClientShell';
+import { ConsultationsSkeleton } from '@/components/skeletons';
 
 interface ConsultationsViewProps {
   onNavigate?: (view: ViewKey) => void;
 }
 
-interface Appointment {
-  id: string;
-  lawyerId?: string;
-  dateStr: string;
-  day: number;
-  timeSlot: string;
-  status: 'CONFIRMED APPOINTMENT' | 'COMPLETED' | 'PENDING CONFIRMATION';
-  lawyerName: string;
-  rollNumber: string;
-  ibpChapter: string;
-  practiceAreas: string[];
-  rating: string;
-  experienceYrs: number;
-  ratePerHour: number;
-  docket: string;
-  caseTitle: string;
-  caseDescription: string;
-  meetingLink?: string;
-}
+type Appointment = ClientConsultation;
+
+const MONTH_LABELS = [
+  'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+  'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
+];
+
+/** Statuses a client may still cancel. */
+const CANCELLABLE_STATUSES = ['pending', 'confirmed', 'awaiting_client_confirmation'];
 
 export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const router = useRouter();
   const [dbAppointments, setDbAppointments] = useState<Appointment[]>([]);
+  const [loadingAppointments, setLoadingAppointments] = useState<boolean>(true);
+  const [selectedDay, setSelectedDay] = useState<number>(1);
 
   useEffect(() => {
-    getClientConsultationsAction().then((data) => {
-      if (data && data.length > 0) {
-        setDbAppointments(data);
-      }
-    });
+    let active = true;
+    getClientConsultationsAction()
+      .then((data) => {
+        if (!active) return;
+        const list = Array.isArray(data) ? data : [];
+        setDbAppointments(list);
+        if (list[0]) setSelectedDay(list[0].day);
+      })
+      .finally(() => {
+        if (active) setLoadingAppointments(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
-
-  const [selectedDay, setSelectedDay] = useState<number>(23);
   const [activeAppointmentIndex, setActiveAppointmentIndex] = useState<number>(0);
   const [showCancelModal, setShowCancelModal] = useState<boolean>(false);
   const [showDetailsModal, setShowDetailsModal] = useState<boolean>(false);
   const [showMeetModal, setShowMeetModal] = useState<boolean>(false);
-  const [isCancelled, setIsCancelled] = useState<boolean>(false);
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState<boolean>(false);
-
-  // Locally completed appointments tracking (e.g. after video call finishes)
-  const [completedStatusMap, setCompletedStatusMap] = useState<Record<string, boolean>>({});
-
-  // Rated consultations tracking: { [appointmentId]: { rating: number, comment?: string } }
-  const [ratedMap, setRatedMap] = useState<Record<string, { rating: number; comment?: string }>>({});
-
-  // Rate Modal state
-  const [showRateModal, setShowRateModal] = useState<boolean>(false);
-  const [rateAppointment, setRateAppointment] = useState<Appointment | null>(null);
-  const [ratingStars, setRatingStars] = useState<number>(5);
-  const [hoverStars, setHoverStars] = useState<number | null>(null);
-  const [feedbackText, setFeedbackText] = useState<string>('');
-  const [submittingRate, setSubmittingRate] = useState<boolean>(false);
-  const [rateToast, setRateToast] = useState<{ show: boolean; message: string }>({
-    show: false,
-    message: '',
-  });
-
-  const [ratingsReady, setRatingsReady] = useState(false);
-  const [rateError, setRateError] = useState('');
-  useEffect(() => {
-    getMyConsultationRatingsAction().then(result => {
-      if (result.success) { setRatedMap(result.ratings); setRatingsReady(true); }
-      else setRateError(result.error || 'Unable to load ratings.');
-    }).catch(() => setRateError('Unable to load ratings. Please refresh.'));
-  }, []);
 
   const allAppointments = dbAppointments;
   const hasAppointments = allAppointments.length > 0;
-  // An empty placeholder is never rendered; it keeps the existing empty-state layout safe.
-  const currentAppointment = allAppointments[activeAppointmentIndex] || allAppointments[0] || {
-    id: '', status: 'PENDING CONFIRMATION', lawyerName: '', practiceAreas: [],
-    dateStr: '', day: 0, timeSlot: '', rollNumber: '', ibpChapter: '', rating: '',
-    experienceYrs: 0, ratePerHour: 0, docket: '', caseTitle: '', caseDescription: '',
-  } satisfies Appointment;
+  const currentAppointment: Appointment | undefined =
+    allAppointments[activeAppointmentIndex] || allAppointments[0];
 
   const handleSelectAppointment = (idx: number) => {
     if (idx === activeAppointmentIndex) return;
     setIsSwitching(true);
     setActiveAppointmentIndex(idx);
-    setSelectedDay(allAppointments[idx]?.day || 23);
+    setSelectedDay(allAppointments[idx]?.day || 1);
     setTimeout(() => setIsSwitching(false), 200);
   };
 
-  // Determine dynamic appointment status
-  const effectiveStatus: 'CONFIRMED APPOINTMENT' | 'COMPLETED' | 'PENDING CONFIRMATION' | 'CANCELLED' =
-    isCancelled
-      ? 'CANCELLED'
-      : completedStatusMap[currentAppointment.id]
-      ? 'COMPLETED'
-      : currentAppointment.status;
+  const rawStatus = currentAppointment?.rawStatus ?? 'pending';
+  const isCancelled = rawStatus === 'cancelled';
+  // Caramel badge while waiting on the lawyer (pending) or on payment (awaiting_client_confirmation).
+  const isPending = rawStatus === 'pending' || rawStatus === 'awaiting_client_confirmation';
+  const canCancel = CANCELLABLE_STATUSES.includes(rawStatus);
+  const canJoinMeet = rawStatus === 'confirmed';
 
-  const isCompleted = effectiveStatus === 'COMPLETED';
-  const isAlreadyRated = Boolean(ratedMap[currentAppointment.id]);
-
-  // Calendar dates: September 2026 begins on Tuesday (2 blank spaces for Sunday & Monday)
-  const daysInMonth = [
-    { day: null },
-    { day: null },
-    { day: 1 },
-    { day: 2 },
-    { day: 3 },
-    { day: 4 },
-    { day: 5 },
-    { day: 6 },
-    { day: 7 },
-    { day: 8 },
-    { day: 9 },
-    { day: 10 },
-    { day: 11 },
-    { day: 12 },
-    { day: 13 },
-    { day: 14 },
-    { day: 15 },
-    { day: 16 },
-    { day: 17 },
-    { day: 18 },
-    { day: 19 },
-    { day: 20 },
-    { day: 21 },
-    { day: 22 },
-    { day: 23 },
-    { day: 24 },
-    { day: 25 },
-    { day: 26 },
-    { day: 27 },
-    { day: 28 },
-    { day: 29 },
-    { day: 30 },
-  ];
-
-  // Submit post-consultation rating handler
-  const handleSubmitRating = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!rateAppointment) return;
-    if (!feedbackText.trim()) {
-      alert('Please provide your review feedback before submitting.');
-      return;
-    }
-
-    if (submittingRate || !ratingsReady) return;
-    setSubmittingRate(true);
-    setRateError('');
+  const handleConfirmCancel = async () => {
+    if (!currentAppointment || isCancelling) return;
+    setIsCancelling(true);
+    setCancelError(null);
     try {
-      const result = await addLawyerReviewAction({
-        consultationId: rateAppointment.id, rating: ratingStars, comment: feedbackText.trim(),
-      });
-      if (!result.success) { setRateError(result.error || 'Unable to save your review.'); return; }
-      setRatedMap(prev => ({ ...prev, [rateAppointment.id]: { rating: ratingStars, comment: feedbackText.trim() } }));
-      setShowRateModal(false);
-      setRateToast({ show: true, message: 'Your consultation rating has been saved.' });
-      setTimeout(() => setRateToast({ show: false, message: '' }), 5000);
+      const res = await cancelConsultationAction(currentAppointment.id);
+      if (!('success' in res) || !res.success) {
+        setCancelError(('error' in res && res.error) || 'We could not cancel this consultation.');
+        return;
+      }
+      const cancelledId = currentAppointment.id;
+      setDbAppointments((prev) =>
+        prev.map((a) => (a.id === cancelledId ? { ...a, rawStatus: 'cancelled', status: 'CANCELLED' } : a))
+      );
+      setShowCancelModal(false);
     } catch {
-      setRateError('Your review could not be saved. Please try again.');
+      setCancelError('We could not cancel this consultation. Please try again.');
     } finally {
-      setSubmittingRate(false);
+      setIsCancelling(false);
     }
   };
 
+  // Calendar follows the month of the selected consultation.
+  const calendarYear = currentAppointment?.year ?? new Date().getFullYear();
+  const calendarMonth = currentAppointment?.month ?? new Date().getMonth();
+  const daysInMonth = useMemo(() => {
+    const slots: Array<{ day: number | null }> = [];
+    const firstWeekday = new Date(calendarYear, calendarMonth, 1).getDay();
+    const totalDays = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+    for (let i = 0; i < firstWeekday; i++) slots.push({ day: null });
+    for (let d = 1; d <= totalDays; d++) slots.push({ day: d });
+    return slots;
+  }, [calendarYear, calendarMonth]);
+  const findAppointmentIndexOnDay = (day: number) =>
+    allAppointments.findIndex((a) => a.year === calendarYear && a.month === calendarMonth && a.day === day);
+
+  // Reminders only for bookings on the date chosen in the calendar (de-duplicated).
+  const remindersForSelectedDay = Array.from(
+    new Set(
+      allAppointments
+        .filter(
+          (a) =>
+            a.year === calendarYear &&
+            a.month === calendarMonth &&
+            a.day === selectedDay &&
+            a.rawStatus !== 'cancelled'
+        )
+        .flatMap((a) => a.reminders)
+    )
+  );
+
+
+  // ─── View Details / Payment modal ─────────────────────────────────────────
+  const [paymentFile, setPaymentFile] = useState<File | null>(null);
+  const [submittingPayment, setSubmittingPayment] = useState<boolean>(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [paymentChannel, setPaymentChannel] = useState<PaymentChannel | null>(null);
+
+  const openDetails = () => {
+    setDetailsError(null);
+    setPaymentFile(null);
+    setShowDetailsModal(true);
+    if (!paymentChannel) {
+      getPaymentChannelAction().then(setPaymentChannel);
+    }
+  };
+
+  const closeDetails = () => {
+    if (submittingPayment) return;
+    setShowDetailsModal(false);
+    setPaymentFile(null);
+    setDetailsError(null);
+  };
+
+  const openProof = async (documentId: string) => {
+    const res = await getDocumentAccessUrlAction(documentId);
+    if ('url' in res && res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
+    else setDetailsError(('error' in res && res.error) || 'This file could not be opened.');
+  };
+
+  const openMessagesFor = (consultationId: string) => {
+    router.push(`/client/messages?thread=${consultationId}`);
+  };
+
+  const handleSubmitPayment = async (appointment: Appointment) => {
+    if (!paymentFile || submittingPayment) return;
+    setSubmittingPayment(true);
+    setDetailsError(null);
+    try {
+      const fd = new FormData();
+      fd.append('consultationId', appointment.id);
+      fd.append('file', paymentFile);
+      const res = await submitPaymentProofAction(fd);
+      if (!('consultation' in res) || !res.consultation) {
+        setDetailsError(('error' in res && res.error) || 'We could not submit your payment.');
+        return;
+      }
+      const updated = res.consultation;
+      setDbAppointments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+      setPaymentFile(null);
+    } catch {
+      setDetailsError('We could not submit your payment. Please try again.');
+    } finally {
+      setSubmittingPayment(false);
+    }
+  };
+
+  const buildDetailsProps = (a: Appointment): ConsultationDetailsModalProps => {
+    const isPaymentStage = a.rawStatus === 'awaiting_client_confirmation';
+    const isPaid = a.rawStatus === 'confirmed' || a.rawStatus === 'completed';
+    const needsPayment = isPaymentStage && (a.payment.state === 'none' || a.payment.state === 'rejected');
+    const underReview = isPaymentStage && a.payment.state === 'submitted';
+
+    const summary: DetailsSummary = {
+      title: isPaid || underReview ? 'Payment Summary' : 'Booking Summary',
+      lawyerName: a.lawyerName,
+      lawyerMeta: `Roll No. ${a.rollNumber}  |  IBP ${a.ibpChapter}`,
+      modeLabel: a.communicationMode === 'video' ? 'Video Conference' : 'Audio Call',
+      modeMeta: `Platform: Google Meet  |  Duration: ${a.durationLabel}`,
+      dateLong: a.dateLong,
+      timeRange: a.timeRange,
+      sessionFee: a.payment.sessionFee,
+      platformFee: a.payment.platformFee,
+      total: a.payment.total,
+    };
+
+    let notice: ConsultationDetailsModalProps['notice'] = null;
+    if (a.declineReason) notice = { tone: 'red', title: 'Reason for Declining', text: a.declineReason };
+    else if (a.cancellationReason) notice = { tone: 'red', title: 'Reason for Cancellation', text: a.cancellationReason };
+    else if (needsPayment && a.payment.state === 'rejected' && a.payment.rejectionReason) {
+      notice = {
+        tone: 'red',
+        title: 'Your previous proof of payment was declined',
+        text: `${a.payment.rejectionReason}\nPlease pay using the QR code and upload a new proof of payment.`,
+      };
+    } else if (underReview) {
+      notice = {
+        tone: 'amber',
+        title: 'Payment under review',
+        text: 'Your attorney is verifying your proof of payment. The Google Meet link will be shared once confirmed.',
+      };
+    }
+
+    const close = { label: 'Close', variant: 'caramel' as const, onClick: closeDetails };
+    let actions: ConsultationDetailsModalProps['actions'] = [close];
+    if (needsPayment) {
+      actions = [
+        { label: 'Cancel', variant: 'outline', onClick: closeDetails, disabled: submittingPayment },
+        {
+          label: submittingPayment ? 'Submitting...' : 'Submit Payment',
+          variant: 'caramel',
+          onClick: () => handleSubmitPayment(a),
+          disabled: !paymentFile || submittingPayment,
+        },
+      ];
+    } else if (isPaid && a.rawStatus === 'confirmed') {
+      actions = [
+        {
+          label: 'Cancel',
+          variant: 'outline',
+          onClick: () => {
+            setShowDetailsModal(false);
+            setCancelError(null);
+            setShowCancelModal(true);
+          },
+        },
+        { label: 'Reschedule', variant: 'espresso', onClick: () => openMessagesFor(a.id) },
+        {
+          label: 'Join Meet',
+          variant: 'caramel',
+          icon: 'video',
+          disabled: !a.meetingLink,
+          onClick: () => a.meetingLink && window.open(a.meetingLink, '_blank', 'noopener,noreferrer'),
+        },
+      ];
+    }
+
+    const proofId = a.payment.proofDocumentId;
+    return {
+      dateStr: a.dateStr,
+      timeSlot: a.timeSlot,
+      statusLabel: a.status,
+      statusTone:
+        a.rawStatus === 'declined' || a.rawStatus === 'cancelled'
+          ? 'grey'
+          : needsPayment
+            ? 'red'
+            : underReview
+              ? 'amber'
+              : isPaid
+                ? 'green'
+                : 'caramel',
+      person: {
+        name: a.lawyerName,
+        lines: [
+          `Roll No. ${a.rollNumber}  |  IBP ${a.ibpChapter}`,
+          a.practiceAreas.join(' • '),
+          `★ ${a.rating} • ${a.experienceYrs} yrs practice`,
+        ],
+        rate: a.ratePerHour,
+        // pending-nvonfirmed / confirmed-and-paid show a Message button; payment.png shows the rate.
+        onMessage:
+          needsPayment || a.rawStatus === 'declined' || a.rawStatus === 'cancelled'
+            ? undefined
+            : () => openMessagesFor(a.id),
+      },
+      docket: a.docket,
+      caseTitle: a.caseTitle,
+      caseDescription: a.caseDescription,
+      notice,
+      summary: isPaymentStage || isPaid ? summary : null,
+      payment: needsPayment
+        ? {
+            qrImageUrl: paymentChannel?.qrImageUrl ?? null,
+            qrCaption: paymentChannel?.caption ?? null,
+            file: paymentFile,
+            onFileChange: (file) => {
+              setDetailsError(null);
+              setPaymentFile(file);
+            },
+            disabled: submittingPayment,
+          }
+        : null,
+      proof:
+        (underReview || isPaid) && a.payment.proofFileName
+          ? { fileName: a.payment.proofFileName, onOpen: proofId ? () => openProof(proofId) : undefined }
+          : null,
+      error: detailsError,
+      actions,
+      onClose: closeDetails,
+    };
+  };
+
+  if (loadingAppointments) {
+    return <ConsultationsSkeleton />;
+  }
+
   return (
     <div className="max-w-[1240px] mx-auto px-2 sm:px-6 py-6 space-y-6">
-      {rateError && !showRateModal && <p role="alert" className="text-sm text-red-700">{rateError}</p>}
       {/* ─── Main 2-Column Grid (Exact Figma Layout) ───────────────────────── */}
-      {!hasAppointments ? (
+      {!hasAppointments || !currentAppointment ? (
         <div className="rounded-[28px] p-12 bg-[#ECE1D2] text-center space-y-4 max-w-xl mx-auto shadow-md">
           <div className="text-4xl">📅</div>
-          <h2 className="font-cormorant text-2xl font-bold text-[#34150F]">
-            No Consultations Scheduled Yet
-          </h2>
+          <h2 className="font-cormorant text-2xl font-bold text-[#34150F]">No Consultations Scheduled Yet</h2>
           <p className="text-xs text-[#7D6855] leading-relaxed">
-            You do not have any active or pending consultations in the system. Explore verified
-            Philippine legal practitioners to schedule your confidential consultation session.
+            You do not have any active or pending consultations in the system. Explore verified Philippine legal practitioners to schedule your confidential consultation session.
           </p>
           <div className="pt-2">
             <button
@@ -200,462 +345,365 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-7 items-start">
-          {/* ─── Left Column: Calendar & Reminders (5 cols) ───────────────────── */}
-          <div className="lg:col-span-5 space-y-6">
-            {/* 1. Calendar Card */}
-            <div
-              className="rounded-[28px] p-6 sm:p-7 bg-[#ECE1D2] space-y-5"
-              style={{
-                boxShadow:
-                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
-              }}
-            >
-              {/* Top Month Badge (Inset Pill) */}
-              <div className="flex justify-center">
-                <div
-                  className="px-8 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest text-[#C58B3C]"
-                  style={{
-                    backgroundColor: '#E6D7C3',
-                    boxShadow:
-                      'inset 2px 2px 5px rgba(165, 140, 115, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.95)',
-                  }}
-                >
-                  SEPTEMBER 2026
-                </div>
-              </div>
-
-              {/* Days of week */}
-              <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-[#362519] uppercase tracking-wider pb-1">
-                <span>SUN</span>
-                <span>MON</span>
-                <span>TUE</span>
-                <span>WED</span>
-                <span>THU</span>
-                <span>FRI</span>
-                <span>SAT</span>
-              </div>
-
-              {/* Dates Grid */}
-              <div className="grid grid-cols-7 gap-1 sm:gap-1.5 text-center text-xs">
-                {daysInMonth.map((item, idx) => {
-                  if (!item.day) {
-                    return <div key={`empty-${idx}`} className="h-8 w-8" />;
-                  }
-                  const isSelected = item.day === selectedDay;
-                  const hasAppointment = allAppointments.some((a) => a.day === item.day);
-                  return (
-                    <button
-                      key={`day-${item.day}`}
-                      type="button"
-                      onClick={() => {
-                        const aptIdx = allAppointments.findIndex((a) => a.day === item.day);
-                        if (aptIdx !== -1) {
-                          handleSelectAppointment(aptIdx);
-                        } else {
-                          setSelectedDay(item.day!);
-                        }
-                      }}
-                      className={`h-8 w-8 mx-auto rounded-full flex items-center justify-center font-medium text-xs transition-all relative ${
-                        isSelected
-                          ? 'bg-[#DFC5A4] text-[#C58B3C] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.18)] scale-105'
-                          : 'text-[#3E2A1E] hover:bg-[#DECEB8] hover:text-[#23150F]'
-                      }`}
-                    >
-                      <span>{String(item.day).padStart(2, '0')}</span>
-                      {hasAppointment && !isSelected && (
-                        <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-[#C58B3C]" />
-                      )}
-                    </button>
-                  );
-                })}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-7 items-start">
+        {/* ─── Left Column: Calendar & Reminders (5 cols) ───────────────────── */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* 1. Calendar Card */}
+          <div
+            className="rounded-[28px] p-6 sm:p-7 bg-[#ECE1D2] space-y-5"
+            style={{
+              boxShadow:
+                '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
+            }}
+          >
+            {/* Top Month Badge (Inset Pill) */}
+            <div className="flex justify-center">
+              <div
+                className="px-8 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest text-[#C58B3C]"
+                style={{
+                  backgroundColor: '#E6D7C3',
+                  boxShadow:
+                    'inset 2px 2px 5px rgba(165, 140, 115, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.95)',
+                }}
+              >
+                {MONTH_LABELS[calendarMonth]} {calendarYear}
               </div>
             </div>
 
-            {/* 2. REMINDERS: Card (Warm peach plate) */}
+            {/* Days of week */}
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-[#362519] uppercase tracking-wider pb-1">
+              <span>SUN</span>
+              <span>MON</span>
+              <span>TUE</span>
+              <span>WED</span>
+              <span>THU</span>
+              <span>FRI</span>
+              <span>SAT</span>
+            </div>
+
+            {/* Dates Grid */}
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5 text-center text-xs">
+              {daysInMonth.map((item, idx) => {
+                if (!item.day) {
+                  return <div key={`empty-${idx}`} className="h-8 w-8" />;
+                }
+                const isSelected = item.day === selectedDay;
+                const hasAppointment = findAppointmentIndexOnDay(item.day) !== -1;
+                return (
+                  <button
+                    key={`day-${item.day}`}
+                    type="button"
+                    onClick={() => {
+                      const aptIdx = findAppointmentIndexOnDay(item.day!);
+                      if (aptIdx !== -1) {
+                        handleSelectAppointment(aptIdx);
+                      } else {
+                        setSelectedDay(item.day!);
+                      }
+                    }}
+                    className={`h-8 w-8 mx-auto rounded-full flex items-center justify-center font-medium text-xs transition-all relative ${
+                      isSelected
+                        ? 'bg-[#DFC5A4] text-[#C58B3C] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.18)] scale-105'
+                        : 'text-[#3E2A1E] hover:bg-[#DECEB8] hover:text-[#23150F]'
+                    }`}
+                  >
+                    <span>{String(item.day).padStart(2, '0')}</span>
+                    {hasAppointment && !isSelected && (
+                      <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-[#C58B3C]" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 2. REMINDERS: Card (Warm peach plate) — only when the chosen date has a booking */}
+          {remindersForSelectedDay.length > 0 && (
+          <div
+            className="rounded-[28px] p-6 sm:p-7 space-y-3.5"
+            style={{
+              backgroundColor: '#DFC5A4',
+              boxShadow:
+                '10px 12px 28px rgba(165, 135, 105, 0.45), 3px 4px 8px rgba(165, 135, 105, 0.25), -10px -10px 24px rgba(255, 255, 255, 0.95), -3px -3px 6px #FFFFFF',
+            }}
+          >
+            <h3 className="font-cormorant text-base sm:text-lg font-bold text-[#23150F] tracking-wide">
+              REMINDERS:
+            </h3>
+
+            <ul className="space-y-2 text-xs sm:text-[12.5px] text-[#3E2A1E] leading-relaxed">
+              {remindersForSelectedDay.map((reminder, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                  <span>{reminder}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          )}
+        </div>
+
+        {/* ─── Right Column: Large Appointment Card (7 cols) ────────────────── */}
+        <div className="lg:col-span-7 space-y-5">
+          <div
+            className="rounded-[28px] p-6 sm:p-8 bg-[#ECE1D2] space-y-5"
+            style={{
+              boxShadow:
+                '14px 14px 32px rgba(182, 155, 130, 0.4), -14px -14px 32px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
+            }}
+          >
+            {isSwitching ? (
+              <div className="space-y-5 animate-in fade-in duration-150 py-1">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="h-7 w-48 rounded-full neu-skeleton-inset" />
+                  <div className="h-7 w-40 rounded-full neu-skeleton-inset" />
+                  <div className="h-7 w-36 rounded-full neu-skeleton" />
+                </div>
+                <div className="h-28 rounded-[22px] neu-skeleton-plate" />
+                <div className="space-y-2.5 pt-1">
+                  <div className="h-3 w-40 neu-skeleton-text" />
+                  <div className="h-5 w-80 neu-skeleton-text" />
+                  <div className="space-y-2 pt-1">
+                    <div className="h-2.5 w-full neu-skeleton-text" />
+                    <div className="h-2.5 w-11/12 neu-skeleton-text" />
+                    <div className="h-2.5 w-4/5 neu-skeleton-text" />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 pt-4 border-t border-[#D1BEA8]/60">
+                  <div className="h-9 w-20 rounded-xl neu-skeleton" />
+                  <div className="h-9 w-28 rounded-xl neu-skeleton" />
+                  <div className="h-9 w-28 rounded-xl neu-skeleton-plate" />
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Top Pill Header Row */}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+              {/* Date Pill (Debossed) */}
+              <div
+                className="px-4 py-1.5 rounded-full text-[10px] sm:text-[11px] font-bold text-[#5C4535] uppercase tracking-wider"
+                style={{
+                  backgroundColor: '#E6D7C3',
+                  boxShadow:
+                    'inset 2px 2px 4px rgba(165, 140, 115, 0.5), inset -2px -2px 4px rgba(255, 255, 255, 0.95)',
+                }}
+              >
+                {currentAppointment.dateStr}
+              </div>
+
+              {/* Time Pill (Debossed) */}
+              <div
+                className="px-4 py-1.5 rounded-full text-[10px] sm:text-[11px] font-bold text-[#5C4535]"
+                style={{
+                  backgroundColor: '#E6D7C3',
+                  boxShadow:
+                    'inset 2px 2px 4px rgba(165, 140, 115, 0.5), inset -2px -2px 4px rgba(255, 255, 255, 0.95)',
+                }}
+              >
+                {currentAppointment.timeSlot}
+              </div>
+
+              {/* Status Badge (Emerald = confirmed, Caramel = pending, Red = cancelled / declined) */}
+              <div
+                className={`px-4 py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold tracking-wider uppercase text-white shadow-md ${
+                  isCancelled || rawStatus === 'declined'
+                    ? 'bg-red-700'
+                    : isPending
+                      ? 'bg-[#D49E56]'
+                      : 'bg-[#27AE60]'
+                }`}
+                style={{
+                  boxShadow:
+                    isCancelled || rawStatus === 'declined'
+                      ? '0 4px 12px rgba(185, 28, 28, 0.4)'
+                      : isPending
+                        ? '4px 6px 14px rgba(212, 158, 86, 0.4), -2px -2px 6px rgba(255, 255, 255, 0.25)'
+                        : '4px 6px 16px rgba(39, 174, 96, 0.4), -2px -2px 6px rgba(255, 255, 255, 0.25)',
+                }}
+              >
+                {currentAppointment.status}
+              </div>
+            </div>
+
+            {/* Inner Lawyer Banner Plate */}
             <div
-              className="rounded-[28px] p-6 sm:p-7 space-y-3.5"
+              className="rounded-[22px] p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
               style={{
                 backgroundColor: '#DFC5A4',
                 boxShadow:
-                  '10px 12px 28px rgba(165, 135, 105, 0.45), 3px 4px 8px rgba(165, 135, 105, 0.25), -10px -10px 24px rgba(255, 255, 255, 0.95), -3px -3px 6px #FFFFFF',
+                  '6px 8px 18px rgba(165, 135, 105, 0.4), 2px 2px 5px rgba(165, 135, 105, 0.2), -6px -6px 16px rgba(255, 255, 255, 0.9), -2px -2px 4px #FFFFFF',
               }}
             >
-              <h3 className="font-cormorant text-base sm:text-lg font-bold text-[#23150F] tracking-wide">
-                REMINDERS:
-              </h3>
-
-              <ul className="space-y-2 text-xs sm:text-[12.5px] text-[#3E2A1E] leading-relaxed">
-                <li className="flex items-start gap-2">
-                  <span className="text-[8px] mt-1.5 shrink-0">●</span>
-                  <span>
-                    Consultations are strictly confidential under Rule 21.01 of the Code of
-                    Professional Responsibility.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-[8px] mt-1.5 shrink-0">●</span>
-                  <span>
-                    Please join the secure meeting room 5 minutes prior to your scheduled time.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-[8px] mt-1.5 shrink-0">●</span>
-                  <span>
-                    Ratings and reviews can be submitted immediately following the conclusion of
-                    your legal consultation.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-[8px] mt-1.5 shrink-0">●</span>
-                  <span>
-                    Need to reschedule? Kindly provide at least 24 hours advance notice to counsel.
-                  </span>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          {/* ─── Right Column: Large Appointment Card (7 cols) ────────────────── */}
-          <div className="lg:col-span-7 space-y-5">
-            <div
-              className="rounded-[28px] p-6 sm:p-8 bg-[#ECE1D2] space-y-5"
-              style={{
-                boxShadow:
-                  '14px 14px 32px rgba(182, 155, 130, 0.4), -14px -14px 32px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
-              }}
-            >
-              {isSwitching ? (
-                <div className="space-y-5 animate-in fade-in duration-150 py-1">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="h-7 w-48 rounded-full neu-skeleton-inset" />
-                    <div className="h-7 w-40 rounded-full neu-skeleton-inset" />
-                    <div className="h-7 w-36 rounded-full neu-skeleton" />
-                  </div>
-                  <div className="h-28 rounded-[22px] neu-skeleton-plate" />
-                  <div className="space-y-2.5 pt-1">
-                    <div className="h-3 w-40 neu-skeleton-text" />
-                    <div className="h-5 w-80 neu-skeleton-text" />
-                    <div className="space-y-2 pt-1">
-                      <div className="h-2.5 w-full neu-skeleton-text" />
-                      <div className="h-2.5 w-11/12 neu-skeleton-text" />
-                      <div className="h-2.5 w-4/5 neu-skeleton-text" />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-3 pt-4 border-t border-[#D1BEA8]/60">
-                    <div className="h-9 w-20 rounded-xl neu-skeleton" />
-                    <div className="h-9 w-28 rounded-xl neu-skeleton" />
-                    <div className="h-9 w-28 rounded-xl neu-skeleton-plate" />
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Top Pill Header Row */}
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    {/* Date Pill (Debossed) */}
-                    <div
-                      className="px-4 py-1.5 rounded-full text-[10px] sm:text-[11px] font-bold text-[#5C4535] uppercase tracking-wider"
-                      style={{
-                        backgroundColor: '#E6D7C3',
-                        boxShadow:
-                          'inset 2px 2px 4px rgba(165, 140, 115, 0.5), inset -2px -2px 4px rgba(255, 255, 255, 0.95)',
-                      }}
-                    >
-                      {currentAppointment.dateStr}
-                    </div>
-
-                    {/* Time Pill (Debossed) */}
-                    <div
-                      className="px-4 py-1.5 rounded-full text-[10px] sm:text-[11px] font-bold text-[#5C4535]"
-                      style={{
-                        backgroundColor: '#E6D7C3',
-                        boxShadow:
-                          'inset 2px 2px 4px rgba(165, 140, 115, 0.5), inset -2px -2px 4px rgba(255, 255, 255, 0.95)',
-                      }}
-                    >
-                      {currentAppointment.timeSlot}
-                    </div>
-
-                    {/* Status Badge */}
-                    <div
-                      className={`px-4 py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold tracking-wider uppercase text-white shadow-md ${
-                        effectiveStatus === 'CANCELLED'
-                          ? 'bg-red-700'
-                          : effectiveStatus === 'COMPLETED'
-                          ? 'bg-[#3E2A1E]'
-                          : 'bg-[#27AE60]'
-                      }`}
-                      style={{
-                        boxShadow:
-                          effectiveStatus === 'CANCELLED'
-                            ? '0 4px 12px rgba(185, 28, 28, 0.4)'
-                            : effectiveStatus === 'COMPLETED'
-                            ? '0 4px 12px rgba(62, 42, 30, 0.4)'
-                            : '4px 6px 16px rgba(39, 174, 96, 0.4), -2px -2px 6px rgba(255, 255, 255, 0.25)',
-                      }}
-                    >
-                      {effectiveStatus}
-                    </div>
-                  </div>
-
-                  {/* Inner Lawyer Banner Plate */}
-                  <div
-                    className="rounded-[22px] p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-                    style={{
-                      backgroundColor: '#DFC5A4',
-                      boxShadow:
-                        '6px 8px 18px rgba(165, 135, 105, 0.4), 2px 2px 5px rgba(165, 135, 105, 0.2), -6px -6px 16px rgba(255, 255, 255, 0.9), -2px -2px 4px #FFFFFF',
-                    }}
+              <div className="flex items-center gap-4 sm:gap-5">
+                {/* Circular Avatar */}
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 border-[#362519] flex items-center justify-center shrink-0">
+                  <svg
+                    className="w-9 h-9 sm:w-11 sm:h-11 text-[#362519]"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   >
-                    <div className="flex items-center gap-4 sm:gap-5">
-                      {/* Circular Avatar */}
-                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 border-[#362519] flex items-center justify-center shrink-0">
-                        <svg
-                          className="w-9 h-9 sm:w-11 sm:h-11 text-[#362519]"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <circle cx="12" cy="8" r="4" />
-                          <path d="M5.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6" />
-                        </svg>
-                      </div>
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M5.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6" />
+                  </svg>
+                </div>
 
-                      <div className="space-y-0.5">
-                        <h4 className="font-cormorant text-xl sm:text-2xl font-bold text-[#23150F] leading-tight">
-                          {currentAppointment.lawyerName}
-                        </h4>
-                        <p className="text-[11px] sm:text-xs text-[#5C4535] font-medium leading-tight">
-                          Roll No. {currentAppointment.rollNumber} | IBP {currentAppointment.ibpChapter}
-                        </p>
-                        <p className="text-[11px] sm:text-xs text-[#5C4535] font-medium">
-                          {currentAppointment.practiceAreas.join(' • ')}
-                        </p>
-                        <p className="text-[11px] sm:text-xs text-[#5C4535] font-medium">
-                          {currentAppointment.experienceYrs} yrs practice
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Rate */}
-                    <div className="sm:text-right shrink-0">
-                      <span className="font-cormorant text-2xl sm:text-3xl font-bold text-[#23150F]">
-                        ₱{currentAppointment.ratePerHour.toLocaleString()}
-                      </span>
-                      <span className="text-xs sm:text-sm text-[#23150F] font-normal ml-1">
-                        /per hour
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Subject Matter & Case Docket */}
-                  <div className="space-y-2 pt-1">
-                    <div className="font-bold text-[10px] sm:text-[11px] text-[#C58B3C] uppercase tracking-wider">
-                      {currentAppointment.docket}
-                    </div>
-                    <h3 className="font-cormorant text-lg sm:text-xl font-bold text-[#23150F] leading-tight">
-                      {currentAppointment.caseTitle}
-                    </h3>
-                    <p className="text-xs sm:text-[13px] text-[#3E2A1E] leading-relaxed text-justify">
-                      {currentAppointment.caseDescription}
-                    </p>
-                  </div>
-
-                  {/* Action Buttons Row */}
-                  {isCompleted ? (
-                    <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-[#D1BEA8]/60">
-                      {/* View Details */}
-                      <button
-                        type="button"
-                        onClick={() => setShowDetailsModal(true)}
-                        className="px-6 py-2.5 rounded-xl text-xs font-semibold text-white transition-all hover:brightness-110"
-                        style={{
-                          backgroundColor: '#4A2E25',
-                          boxShadow:
-                            '0 6px 16px rgba(74, 46, 37, 0.38), inset 0 1px 1px rgba(255, 255, 255, 0.15)',
-                        }}
-                      >
-                        View Details
-                      </button>
-
-                      {/* Post-Consultation Rating Action */}
-                      {isAlreadyRated ? (
-                        <div
-                          className="px-5 py-2.5 rounded-xl text-xs font-bold text-[#34150F] flex items-center gap-1.5"
-                          style={{
-                            backgroundColor: '#DFC5A4',
-                            boxShadow:
-                              'inset 2px 2px 5px rgba(165, 140, 115, 0.4), inset -2px -2px 5px rgba(255, 255, 255, 0.95)',
-                          }}
-                        >
-                          <span className="text-[#C58B3C] text-sm">★</span>
-                          <span>Rated {ratedMap[currentAppointment.id]?.rating} / 5</span>
-                          <span className="text-[10px] text-[#7D6855] font-normal ml-1">
-                            ✓ Submitted
-                          </span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!ratingsReady) return;
-                            setRateAppointment(currentAppointment);
-                            setRatingStars(5);
-                            setHoverStars(null);
-                            setFeedbackText('');
-                            setRateError('');
-                            setShowRateModal(true);
-                          }}
-                          className="px-6 py-2.5 rounded-xl text-xs font-bold text-[#23150F] flex items-center gap-2 transition-all hover:brightness-105 active:scale-95"
-                          style={{
-                            backgroundColor: '#D49E56',
-                            boxShadow:
-                              '0 6px 16px rgba(212, 158, 86, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4)',
-                          }}
-                        >
-                          <span className="text-sm leading-none text-[#23150F]">★</span>
-                          <span>{ratingsReady ? 'Rate Consultation' : 'Loading ratings…'}</span>
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-[#D1BEA8]/60">
-                      {/* Cancel Button */}
-                      <button
-                        type="button"
-                        onClick={() => setShowCancelModal(true)}
-                        className="px-6 py-2.5 rounded-xl text-xs font-semibold text-[#5C4535] hover:text-[#23150F] transition-all"
-                        style={{
-                          backgroundColor: '#ECE1D2',
-                          boxShadow:
-                            '4px 4px 10px rgba(182, 155, 130, 0.4), -4px -4px 10px #FFFFFF',
-                        }}
-                      >
-                        Cancel
-                      </button>
-
-                      {/* View Details Button (Espresso) */}
-                      <button
-                        type="button"
-                        onClick={() => setShowDetailsModal(true)}
-                        className="px-6 py-2.5 rounded-xl text-xs font-semibold text-white transition-all hover:brightness-110"
-                        style={{
-                          backgroundColor: '#4A2E25',
-                          boxShadow:
-                            '0 6px 16px rgba(74, 46, 37, 0.38), inset 0 1px 1px rgba(255, 255, 255, 0.15)',
-                        }}
-                      >
-                        View Details
-                      </button>
-
-                      {/* Join Meet Button (Caramel Primary) */}
-                      <button
-                        type="button"
-                        onClick={() => setShowMeetModal(true)}
-                        className="px-6 py-2.5 rounded-xl text-xs font-bold text-[#23150F] flex items-center gap-2 transition-all hover:brightness-105"
-                        style={{
-                          backgroundColor: '#D49E56',
-                          boxShadow:
-                            '0 6px 16px rgba(212, 158, 86, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4)',
-                        }}
-                      >
-                        <svg
-                          className="w-4 h-4 text-[#23150F]"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                          />
-                        </svg>
-                        <span>Join Meet</span>
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Pagination Controls below appointment card */}
-            <div className="flex items-center justify-center gap-4 pt-2">
-              <button
-                type="button"
-                onClick={() => handleSelectAppointment(Math.max(0, activeAppointmentIndex - 1))}
-                disabled={activeAppointmentIndex <= 0}
-                className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
-                style={{
-                  boxShadow:
-                    '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
-                }}
-                aria-label="Previous consultation"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-
-              <div className="flex items-center gap-2">
-                {allAppointments.map((_, idx) => {
-                  const isActive = idx === activeAppointmentIndex;
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleSelectAppointment(idx)}
-                      className={`w-2.5 h-2.5 rounded-full transition-all ${
-                        isActive ? 'bg-[#C58B3C] scale-125' : 'bg-[#362519] hover:bg-[#C58B3C]'
-                      }`}
-                      aria-label={`Go to consultation ${idx + 1}`}
-                    />
-                  );
-                })}
+                <div className="space-y-0.5">
+                  <h4 className="font-cormorant text-xl sm:text-2xl font-bold text-[#23150F] leading-tight">
+                    {currentAppointment.lawyerName}
+                  </h4>
+                  <p className="text-[11px] sm:text-xs text-[#5C4535] font-medium leading-tight">
+                    Roll No. {currentAppointment.rollNumber} | IBP {currentAppointment.ibpChapter}
+                  </p>
+                  <p className="text-[11px] sm:text-xs text-[#5C4535] font-medium">
+                    {currentAppointment.practiceAreas.join(' • ')}
+                  </p>
+                  <p className="text-[11px] sm:text-xs text-[#5C4535] font-medium">
+                    ★ {currentAppointment.rating} • {currentAppointment.experienceYrs} yrs practice
+                  </p>
+                </div>
               </div>
 
+              {/* Rate */}
+              <div className="sm:text-right shrink-0">
+                <span className="font-cormorant text-2xl sm:text-3xl font-bold text-[#23150F]">
+                  ₱{currentAppointment.ratePerHour.toLocaleString()}
+                </span>
+                <span className="text-xs sm:text-sm text-[#23150F] font-normal ml-1">/per hour</span>
+              </div>
+            </div>
+
+            {/* Subject Matter & Case Docket */}
+            <div className="space-y-2 pt-1">
+              <div className="font-bold text-[10px] sm:text-[11px] text-[#C58B3C] uppercase tracking-wider">
+                {currentAppointment.docket}
+              </div>
+              <h3 className="font-cormorant text-lg sm:text-xl font-bold text-[#23150F] leading-tight">
+                {currentAppointment.caseTitle}
+              </h3>
+              <p className="text-xs sm:text-[13px] text-[#3E2A1E] leading-relaxed text-justify">
+                {currentAppointment.caseDescription}
+              </p>
+            </div>
+
+            {/* Action Buttons Row */}
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-[#D1BEA8]/60">
+              {/* Cancel Button (only while the booking is still active) */}
+              {canCancel && (
               <button
                 type="button"
-                onClick={() =>
-                  handleSelectAppointment(
-                    Math.min(allAppointments.length - 1, activeAppointmentIndex + 1)
-                  )
-                }
-                disabled={activeAppointmentIndex >= allAppointments.length - 1}
-                className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
-                style={{
-                  boxShadow:
-                    '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
+                onClick={() => {
+                  setCancelError(null);
+                  setShowCancelModal(true);
                 }}
-                aria-label="Next consultation"
+                className="px-6 py-2.5 rounded-xl text-xs font-semibold text-[#5C4535] hover:text-[#23150F] transition-all"
+                style={{
+                  backgroundColor: '#ECE1D2',
+                  boxShadow:
+                    '4px 4px 10px rgba(182, 155, 130, 0.4), -4px -4px 10px #FFFFFF',
+                }}
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
+                Cancel
               </button>
+              )}
+
+              {/* View Details Button (Espresso) */}
+              <button
+                type="button"
+                onClick={openDetails}
+                className="px-6 py-2.5 rounded-xl text-xs font-semibold text-white transition-all hover:brightness-110"
+                style={{
+                  backgroundColor: '#4A2E25',
+                  boxShadow:
+                    '0 6px 16px rgba(74, 46, 37, 0.38), inset 0 1px 1px rgba(255, 255, 255, 0.15)',
+                }}
+              >
+                View Details
+              </button>
+
+              {/* Join Meet Button (Caramel Primary) — only once the lawyer has confirmed */}
+              {canJoinMeet && (
+              <button
+                type="button"
+                onClick={() => setShowMeetModal(true)}
+                className="px-6 py-2.5 rounded-xl text-xs font-bold text-[#23150F] flex items-center gap-2 transition-all hover:brightness-105"
+                style={{
+                  backgroundColor: '#D49E56',
+                  boxShadow:
+                    '0 6px 16px rgba(212, 158, 86, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4)',
+                }}
+              >
+                <svg className="w-4 h-4 text-[#23150F]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>Join Meet</span>
+              </button>
+              )}
             </div>
+          </>
+        )}
+      </div>
+
+          {/* Pagination Controls below appointment card */}
+          <div className="flex items-center justify-center gap-4 pt-2">
+            <button
+              type="button"
+              onClick={() => handleSelectAppointment(Math.max(0, activeAppointmentIndex - 1))}
+              disabled={activeAppointmentIndex <= 0}
+              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
+              style={{
+                boxShadow:
+                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
+              }}
+              aria-label="Previous consultation"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            <div className="flex items-center gap-2">
+              {allAppointments.map((_, idx) => {
+                const isActive = idx === activeAppointmentIndex;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSelectAppointment(idx)}
+                    className={`w-2.5 h-2.5 rounded-full transition-all ${
+                      isActive ? 'bg-[#C58B3C] scale-125' : 'bg-[#362519] hover:bg-[#C58B3C]'
+                    }`}
+                    aria-label={`Go to consultation ${idx + 1}`}
+                  />
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleSelectAppointment(Math.min(allAppointments.length - 1, activeAppointmentIndex + 1))}
+              disabled={activeAppointmentIndex >= allAppointments.length - 1}
+              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
+              style={{
+                boxShadow:
+                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
+              }}
+              aria-label="Next consultation"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </div>
+      </div>
       )}
 
       {/* ─── Cancel Consultation Modal ─────────────────────────────────────── */}
-      {showCancelModal && (
+      {showCancelModal && currentAppointment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
           <div
             className="w-full max-w-md rounded-[28px] p-7 bg-[#ECE1D2] space-y-4 text-center"
@@ -674,100 +722,40 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
               <strong>{currentAppointment.lawyerName}</strong> scheduled for{' '}
               <strong>{currentAppointment.dateStr}</strong>? Notice will be sent to counsel.
             </p>
+            {cancelError && (
+              <p className="text-xs font-semibold text-red-800 bg-red-100 border border-red-300 rounded-xl px-3 py-2">
+                {cancelError}
+              </p>
+            )}
             <div className="flex items-center justify-center gap-3 pt-3">
               <button
                 type="button"
                 onClick={() => setShowCancelModal(false)}
-                className="px-5 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-semibold text-[#5C4535]"
+                disabled={isCancelling}
+                className="px-5 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-semibold text-[#5C4535] disabled:opacity-50"
               >
                 Keep Consultation
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setIsCancelled(true);
-                  setShowCancelModal(false);
-                }}
-                className="px-5 py-2.5 rounded-xl bg-red-700 text-white text-xs font-semibold shadow-md"
+                onClick={handleConfirmCancel}
+                disabled={isCancelling}
+                className="px-5 py-2.5 rounded-xl bg-red-700 text-white text-xs font-semibold shadow-md disabled:opacity-60"
               >
-                Confirm Cancellation
+                {isCancelling ? 'Cancelling...' : 'Confirm Cancellation'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── View Details Modal ────────────────────────────────────────────── */}
-      {showDetailsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
-          <div
-            className="w-full max-w-lg rounded-[28px] p-7 bg-[#ECE1D2] space-y-4"
-            style={{
-              boxShadow: '16px 16px 40px rgba(0,0,0,0.25), -8px -8px 24px #FFFFFF',
-            }}
-          >
-            <div className="flex items-center justify-between border-b border-[#D1BEA8]/80 pb-3">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#C58B3C]">
-                  Booking Reference #{currentAppointment.id.toUpperCase()}
-                </span>
-                <h3 className="font-cormorant text-xl font-bold text-[#23150F]">
-                  Consultation Docket Details
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowDetailsModal(false)}
-                className="text-[#5C4535] hover:text-[#23150F] font-bold p-1"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-[#3E2A1E]">
-              <div className="p-3.5 rounded-xl bg-[#DFC5A4]/50 space-y-1">
-                <p className="font-bold text-[#23150F]">Assigned Counsel:</p>
-                <p>
-                  {currentAppointment.lawyerName} (IBP {currentAppointment.ibpChapter})
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-[#DFC5A4]/50 space-y-1">
-                <p className="font-bold text-[#23150F]">Scheduled Timing:</p>
-                <p>
-                  {currentAppointment.dateStr} • {currentAppointment.timeSlot}
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-[#DFC5A4]/50 space-y-1">
-                <p className="font-bold text-[#23150F]">Subject &amp; Intake Facts:</p>
-                <p>{currentAppointment.caseTitle}</p>
-                <p className="text-[11px] text-[#5C4535] mt-1">
-                  {currentAppointment.caseDescription}
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-[#DFC5A4]/50 space-y-1">
-                <p className="font-bold text-[#23150F]">Attached Privilege Files:</p>
-                <p className="text-[11px] text-[#7D6855]">No extra files attached to this session.</p>
-              </div>
-            </div>
-
-            <div className="pt-2 text-right">
-              <button
-                type="button"
-                onClick={() => setShowDetailsModal(false)}
-                className="px-6 py-2.5 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-semibold"
-              >
-                Close Details
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* ─── View Details Modal (pending-nvonfirmed / payment / confirmed-and-paid designs) ─── */}
+      {showDetailsModal && currentAppointment && (
+        <ConsultationDetailsModal {...buildDetailsProps(currentAppointment)} />
       )}
 
       {/* ─── Join Meet Preview Modal ────────────────────────────────────────── */}
-      {showMeetModal && (
+      {showMeetModal && currentAppointment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
           <div
             className="w-full max-w-lg rounded-[28px] p-7 bg-[#23150F] text-[#ded7cb] space-y-5"
@@ -796,192 +784,40 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                 📹
               </div>
               <div>
-                <p className="font-medium text-sm text-white">Camera &amp; Microphone Encrypted</p>
+                <p className="font-medium text-sm text-white">Camera & Microphone Encrypted</p>
                 <p className="text-xs text-[#A69584] mt-0.5">
                   End-to-end encrypted connection with {currentAppointment.lawyerName}
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="flex items-center justify-between pt-1">
               <span className="text-xs text-[#A69584]">Audio / Video: Ready</span>
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setShowMeetModal(false)}
-                  className="px-3.5 py-2 rounded-xl border border-[#3E271D] text-xs text-[#A69584] hover:text-white"
+                  className="px-4 py-2 rounded-xl border border-[#3E271D] text-xs text-[#A69584] hover:text-white"
                 >
                   Dismiss
                 </button>
                 <button
                   type="button"
-                  onClick={async () => {
-                    const result = await completeConsultationAction(currentAppointment.id);
-                    if (!result.success) {
-                      setRateError(result.error || 'Unable to complete consultation.');
-                      return;
-                    }
-                    setCompletedStatusMap(prev => ({ ...prev, [currentAppointment.id]: true }));
-                    setShowMeetModal(false);
-                    if (ratedMap[currentAppointment.id]) return;
-                    // Automatically trigger the Post-Consultation Rating Modal
-                    setRateAppointment(currentAppointment);
-                    setRatingStars(5);
-                    setHoverStars(null);
-                    setFeedbackText('');
-                    setRateError('');
-                    setShowRateModal(true);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-semibold shadow-md transition"
-                >
-                  ✓ End Call &amp; Complete
-                </button>
-                <button
-                  type="button"
                   onClick={() => {
-                    alert('Connecting to attorney video conference room...');
+                    if (currentAppointment.meetingLink) {
+                      window.open(currentAppointment.meetingLink, '_blank', 'noopener,noreferrer');
+                    } else {
+                      alert('Your attorney has not shared the Google Meet link yet. It will appear here once available.');
+                    }
                     setShowMeetModal(false);
                   }}
-                  className="px-5 py-2 rounded-xl bg-[#D49E56] hover:bg-[#C58B3C] text-[#23150F] text-xs font-bold shadow-lg"
+                  className="px-6 py-2.5 rounded-xl bg-[#D49E56] hover:bg-[#C58B3C] text-[#23150F] text-xs font-bold shadow-lg"
                 >
                   Enter Meeting
                 </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ─── Rate Consultation Modal (Post-Consultation) ────────────────────── */}
-      {showRateModal && rateAppointment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
-          <div
-            className="w-full max-w-lg rounded-[28px] p-6 sm:p-8 bg-[#ECE1D2] space-y-5"
-            style={{
-              boxShadow: '16px 16px 40px rgba(0,0,0,0.35), -8px -8px 24px #FFFFFF',
-            }}
-          >
-            {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-[#D1BEA8]/80 pb-3.5">
-              <div className="space-y-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#C58B3C]">
-                  Verified Client Evaluation
-                </span>
-                <h3 className="font-cormorant text-2xl font-bold text-[#23150F] leading-tight">
-                  How would you rate your consultation with {rateAppointment.lawyerName}?
-                </h3>
-                <p className="text-xs text-[#5C4535]">
-                  Your verified evaluation directly helps fellow citizens find dependable counsel.
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={submittingRate}
-                  onClick={() => setShowRateModal(false)}
-                className="text-[#5C4535] hover:text-[#23150F] font-bold p-1 rounded-full transition"
-                aria-label="Close rating modal"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Modal Form */}
-            <form onSubmit={handleSubmitRating} className="space-y-4">
-              {rateError && <p role="alert" className="text-sm text-red-700">{rateError}</p>}
-              {/* Star Rating Section */}
-              <div className="p-4 rounded-2xl bg-[#E5D8CB]/70 border border-[#D5C2AD] space-y-2 text-center">
-                <span className="text-xs font-semibold text-[#5C4535] uppercase tracking-wider block">
-                  Select Rating Score
-                </span>
-                <div className="flex items-center justify-center gap-2 text-3xl">
-                  {[1, 2, 3, 4, 5].map((star) => {
-                    const isFilled = star <= (hoverStars ?? ratingStars);
-                    return (
-                      <button
-                        key={star}
-                        type="button"
-                        onMouseEnter={() => setHoverStars(star)}
-                        onMouseLeave={() => setHoverStars(null)}
-                        onClick={() => setRatingStars(star)}
-                        className="transition-transform hover:scale-125 focus:outline-none p-1 text-[#C58B3C]"
-                        aria-label={`${star} star`}
-                      >
-                        {isFilled ? '★' : '☆'}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs font-medium text-[#7D6855]">
-                  {ratingStars === 5 && '★★★★★ (5 of 5) — Excellent Legal Advice'}
-                  {ratingStars === 4 && '★★★★☆ (4 of 5) — Very Good Consultation'}
-                  {ratingStars === 3 && '★★★☆☆ (3 of 5) — Satisfactory Session'}
-                  {ratingStars === 2 && '★★☆☆☆ (2 of 5) — Needs Improvement'}
-                  {ratingStars === 1 && '★☆☆☆☆ (1 of 5) — Unsatisfactory'}
-                </p>
-              </div>
-
-              {/* Feedback Content */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#5C4535] block">
-                  Consultation Feedback &amp; Experience:
-                </label>
-                <textarea
-                  rows={4}
-                  value={feedbackText}
-                  onChange={(e) => setFeedbackText(e.target.value)}
-                  placeholder="Describe your consultation experience: clarity of counsel, understanding of law, punctuality, and responsiveness..."
-                  required
-                  maxLength={5000}
-                  className="w-full p-4 rounded-2xl bg-[#E5D8CB] border border-[#D5C2AD] text-xs text-[#23150F] placeholder-[#8C7662] focus:outline-none focus:ring-1 focus:ring-[#C58B3C]"
-                  style={{
-                    boxShadow:
-                      'inset 2px 2px 5px rgba(165, 140, 115, 0.4), inset -2px -2px 5px #FFFFFF',
-                  }}
-                />
-              </div>
-
-              {/* Modal Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowRateModal(false)}
-                  className="px-5 py-2.5 rounded-xl text-xs font-semibold text-[#5C4535] hover:text-[#23150F] transition"
-                  style={{
-                    backgroundColor: '#ECE1D2',
-                    boxShadow: '3px 3px 8px rgba(182, 155, 130, 0.4), -3px -3px 8px #FFFFFF',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingRate || !ratingsReady}
-                  className="px-6 py-2.5 rounded-xl bg-[#D49E56] hover:bg-[#C58B3C] text-[#23150F] text-xs font-bold transition shadow-md disabled:opacity-50 flex items-center gap-2"
-                  style={{
-                    boxShadow:
-                      '0 6px 16px rgba(212, 158, 86, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4)',
-                  }}
-                >
-                  {submittingRate ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-[#23150F] border-t-transparent rounded-full animate-spin" />
-                      <span>Submitting Rating...</span>
-                    </>
-                  ) : (
-                    <span>Submit Rating</span>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Toast Notification ────────────────────────────────────────────── */}
-      {rateToast.show && (
-        <div className="fixed bottom-6 right-6 z-50 p-4 rounded-2xl bg-[#3E2A1E] text-[#ECE1D2] shadow-2xl flex items-center gap-3 border border-[#C58B3C]/40 animate-in slide-in-from-bottom duration-300">
-          <span className="text-[#C58B3C] text-lg">★</span>
-          <span className="text-xs font-medium">{rateToast.message}</span>
         </div>
       )}
     </div>

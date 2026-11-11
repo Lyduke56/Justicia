@@ -29,29 +29,51 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
   const [messages, setMessages] = useState<Record<string, MessageItem[]>>({});
   const [sending, setSending] = useState<boolean>(false);
 
+  // Load threads (and refresh them periodically so new conversations / last messages show up).
   useEffect(() => {
-    getMessageThreadsAction().then((dbThreads) => {
-      if (dbThreads && dbThreads.length > 0) {
-        setThreads(dbThreads);
-        if (!activeThreadId) setActiveThreadId(dbThreads[0].id);
-      } else {
-        setThreads([]);
-        setActiveThreadId(null);
-      }
-    });
+    let active = true;
+    // Deep link from "Message Client" / "Message Channel": /…/messages?thread=<consultationId>
+    const requestedThread =
+      typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('thread') : null;
+
+    const loadThreads = () =>
+      getMessageThreadsAction().then((dbThreads) => {
+        if (!active) return;
+        const list = Array.isArray(dbThreads) ? dbThreads : [];
+        setThreads(list);
+        setActiveThreadId((current) => {
+          if (current && list.some((t) => t.id === current)) return current;
+          if (requestedThread && list.some((t) => t.id === requestedThread)) return requestedThread;
+          return list[0]?.id ?? null;
+        });
+      });
+
+    loadThreads();
+    const timer = setInterval(loadThreads, 15000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [role]);
 
-  // Load real messages from database whenever activeThreadId changes
+  // Load messages for the active thread and poll for replies from the other party.
   useEffect(() => {
     if (!activeThreadId) return;
-    getMessagesForThreadAction(activeThreadId).then((loadedMsgs) => {
-      if (loadedMsgs && loadedMsgs.length > 0) {
+    let active = true;
+    const loadMessages = () =>
+      getMessagesForThreadAction(activeThreadId).then((loadedMsgs) => {
+        if (!active) return;
         setMessages((prev) => ({
           ...prev,
-          [activeThreadId]: loadedMsgs,
+          [activeThreadId]: Array.isArray(loadedMsgs) ? loadedMsgs : [],
         }));
-      }
-    });
+      });
+    loadMessages();
+    const timer = setInterval(loadMessages, 5000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [activeThreadId]);
 
   const activeThread = threads.find((t) => t.id === activeThreadId) || threads[0];
@@ -59,24 +81,45 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMessage.trim() || !activeThreadId) return;
+    const content = inputMessage.trim();
+    if (!content || !activeThreadId || sending) return;
 
+    const threadId = activeThreadId;
+    const tempId = `m-${Date.now()}`;
     const newMsg: MessageItem = {
-      id: `m-${Date.now()}`,
+      id: tempId,
       sender: 'me',
-      content: inputMessage.trim(),
+      content,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
     setMessages((prev) => ({
       ...prev,
-      [activeThreadId]: [...(prev[activeThreadId] || []), newMsg],
+      [threadId]: [...(prev[threadId] || []), newMsg],
     }));
     setInputMessage('');
 
-    if (activeThreadId !== 'default') {
-      setSending(true);
-      await sendDirectMessageAction(activeThreadId, newMsg.content);
+    setSending(true);
+    try {
+      const res = await sendDirectMessageAction(threadId, content);
+      if ('message' in res && res.message) {
+        const saved = res.message;
+        setMessages((prev) => ({
+          ...prev,
+          [threadId]: (prev[threadId] || []).map((m) => (m.id === tempId ? saved : m)),
+        }));
+        setThreads((prev) =>
+          prev.map((t) => (t.id === threadId ? { ...t, lastMessage: `You: ${content}`, time: saved.time } : t))
+        );
+      } else {
+        setMessages((prev) => ({
+          ...prev,
+          [threadId]: (prev[threadId] || []).filter((m) => m.id !== tempId),
+        }));
+        setInputMessage(content);
+        alert(('error' in res && res.error) || 'Your message could not be sent.');
+      }
+    } finally {
       setSending(false);
     }
   };

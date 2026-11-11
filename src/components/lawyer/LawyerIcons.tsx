@@ -130,6 +130,16 @@ export function DashboardGridIcon({ className = 'w-5 h-5' }: { className?: strin
   );
 }
 
+export function EarningsPayoutsIcon({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M3 20h18" />
+      <path d="M5 17v-4m4 4V9m4 8v-6m4 6V5" />
+      <path d="m4 10 5-4 4 2 6-5" />
+    </svg>
+  );
+}
+
 export function ConsultationChatIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={className}>

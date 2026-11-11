@@ -229,18 +229,18 @@ function FigmaConsultationCard({ consultation }: { consultation: ScheduledConsul
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
           {/* Debossed date pill */}
-          <div className="neu-inset-sm rounded-full px-5 py-2 text-[11px] font-bold tracking-wider text-[#4A3227] uppercase">
+          <div className="lawyer-dashboard-date-pill neu-inset-sm rounded-full px-5 py-2 text-[11px] font-bold tracking-wider text-[#4A3227] uppercase">
             {consultation.dateTag}
           </div>
 
           {/* Debossed time pill */}
-          <div className="neu-inset-sm rounded-full px-5 py-2 text-[11px] font-semibold text-[#4A3227]">
+          <div className="lawyer-dashboard-time-pill neu-inset-sm rounded-full px-5 py-2 text-[11px] font-semibold text-[#4A3227]">
             {consultation.timeTag}
           </div>
         </div>
 
         {/* Confirmed Appointment vibrant green badge */}
-        <div className="neu-badge-green rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider text-white shrink-0 self-start sm:self-auto">
+        <div className="lawyer-dashboard-status-pill neu-badge-green rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider text-white shrink-0 self-start sm:self-auto">
           CONFIRMED APPOINTMENT
         </div>
       </div>
@@ -272,7 +272,7 @@ function FigmaConsultationCard({ consultation }: { consultation: ScheduledConsul
         {/* Monolithic Extruded Message Button on Peach Plate */}
         <button
           type="button"
-          className="neu-btn-peach rounded-full px-8 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-[#4E3227] tracking-wide shrink-0 self-start md:self-center cursor-pointer"
+          className="lawyer-dashboard-message-pill neu-btn-peach rounded-full px-8 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-[#4E3227] tracking-wide shrink-0 self-start md:self-center cursor-pointer"
         >
           Message
         </button>
@@ -289,9 +289,6 @@ function FigmaConsultationCard({ consultation }: { consultation: ScheduledConsul
         <div className="space-y-3 pt-1">
           <p className="text-xs sm:text-[13px] text-[#665246] leading-relaxed">
             {consultation.caseDescription}
-          </p>
-          <p className="text-xs sm:text-[13px] text-[#665246] leading-relaxed">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
           </p>
         </div>
       </div>
@@ -310,21 +307,21 @@ function FigmaConsultationCard({ consultation }: { consultation: ScheduledConsul
         <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
-            className="neu-btn rounded-2xl border-[1.5px] border-[#55382D] bg-[#ECE1D2] px-7 py-2.5 text-xs sm:text-sm font-semibold text-[#381F17] shadow-[2px_2px_6px_rgba(180,155,130,0.25)] hover:bg-[#E4D7C5] transition-all cursor-pointer"
+            className="lawyer-dashboard-cancel-pill neu-btn rounded-2xl border-[1.5px] border-[#55382D] bg-[#ECE1D2] px-7 py-2.5 text-xs sm:text-sm font-semibold text-[#381F17] shadow-[2px_2px_6px_rgba(180,155,130,0.25)] hover:bg-[#E4D7C5] transition-all cursor-pointer"
           >
             Cancel
           </button>
 
           <button
             type="button"
-            className="neu-btn-espresso rounded-2xl px-7 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all cursor-pointer"
+            className="lawyer-dashboard-details-pill neu-btn-espresso rounded-2xl px-7 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all cursor-pointer"
           >
             View Details
           </button>
 
           <button
             type="button"
-            className="neu-btn-caramel rounded-2xl px-7 py-2.5 text-xs sm:text-sm font-bold text-[#381F17] flex items-center gap-2.5 transition-all cursor-pointer"
+            className="lawyer-dashboard-join-pill neu-btn-caramel rounded-2xl px-7 py-2.5 text-xs sm:text-sm font-bold text-[#381F17] flex items-center gap-2.5 transition-all cursor-pointer"
           >
             <VideoCamIcon className="w-4 h-4 text-[#381F17]" />
             <span>Join Meet</span>
@@ -365,9 +362,9 @@ export function LawyerDashboardView({
   };
 
   return (
-    <div className="p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-7">
+    <div className="lawyer-dashboard p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-7">
       {/* ── 4 Top KPI Cards (Matching Figma Layout) ─────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
         <FigmaKPICard
           label="Today's Consultations"
           value={String(todaysConsultations)}
@@ -401,20 +398,20 @@ export function LawyerDashboardView({
       {/* ── Carousel Header: Extruded Heading Pill + Filter Controls ────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Extruded warm heading pill */}
-        <div className="neu-plate rounded-full px-6 py-2.5 text-sm font-bold text-[#34150F] inline-flex items-center self-start">
+        <div className="lawyer-dashboard-heading-pill neu-plate rounded-full px-6 py-2.5 text-sm font-bold text-[#34150F] inline-flex items-center self-start">
           Today&apos;s Scheduled Consultations
         </div>
 
         {/* Right filter controls */}
         <div className="flex items-center gap-3">
           {/* Debossed Month Filter Pill */}
-          <div className="neu-inset-sm rounded-full px-4 py-2 flex items-center gap-2.5 text-xs font-semibold text-[#34150F] cursor-pointer">
+          <div className="lawyer-dashboard-filter-pill neu-inset-sm rounded-full px-4 py-2 flex items-center gap-2.5 text-xs font-semibold text-[#34150F] cursor-pointer">
             <span>Filter by month: October 2026</span>
             <MiniCalendarIcon className="w-3.5 h-3.5 text-[#5C4535]" />
           </div>
 
           {/* Extruded View Toggle Pill */}
-          <div className="neu-plate-sm rounded-xl p-1.5 flex items-center gap-1 cursor-pointer">
+          <div className="lawyer-dashboard-view-pill neu-plate-sm rounded-xl p-1.5 flex items-center gap-1 cursor-pointer">
             <svg className="w-4 h-4 text-[#34150F]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="8" x2="21" y1="6" y2="6" />
               <line x1="8" x2="21" y1="12" y2="12" />
@@ -453,7 +450,7 @@ export function LawyerDashboardView({
         <button
           type="button"
           onClick={goPrev}
-          className="neu-btn w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold text-[#34150F] hover:text-[#C58B3C] cursor-pointer"
+          className="lawyer-dashboard-prev-pill neu-btn w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold text-[#34150F] hover:text-[#C58B3C] cursor-pointer"
           aria-label="Previous consultation"
         >
           ‹
@@ -468,8 +465,8 @@ export function LawyerDashboardView({
               onClick={() => setCurrentIndex(i)}
               className={`rounded-full transition-all duration-300 ${
                 i === currentIndex
-                  ? 'w-3 h-3 bg-[#C58B3C]'
-                  : 'w-2.5 h-2.5 bg-[#4A2E25]/60 hover:bg-[#4A2E25]'
+                  ? 'w-[14px] h-[14px] bg-[#D39758]'
+                  : 'w-2.5 h-2.5 bg-[#341512] hover:bg-[#5C342A]'
               }`}
               aria-label={`Go to slide ${i + 1}`}
             />
@@ -480,7 +477,7 @@ export function LawyerDashboardView({
         <button
           type="button"
           onClick={goNext}
-          className="neu-btn w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold text-[#34150F] hover:text-[#C58B3C] cursor-pointer"
+          className="lawyer-dashboard-next-pill neu-btn w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold text-[#34150F] hover:text-[#C58B3C] cursor-pointer"
           aria-label="Next consultation"
         >
           ›
