@@ -271,7 +271,8 @@ export function LawyerConsultationsView({
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`rounded-2xl px-5 py-2.5 text-xs font-semibold transition-all cursor-pointer ${
+                aria-pressed={isActive}
+                className={`lawyer-consultations-tab rounded-2xl px-5 py-2.5 text-xs font-semibold transition-all cursor-pointer ${
                   isActive
                     ? 'neu-plate text-[#381F17] font-bold shadow-[inset_2px_2px_4px_rgba(165,135,105,0.45),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
                     : 'neu-btn text-[#5C4535] hover:text-[#381F17]'
@@ -292,14 +293,14 @@ export function LawyerConsultationsView({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search Client Name"
-              className="neu-inset rounded-2xl px-5 py-3 text-xs w-full text-[#381F17] placeholder-[#8C7A6B] focus:outline-none"
+              className="lawyer-consultations-search-input neu-inset rounded-2xl px-5 py-3 text-xs w-full text-[#381F17] placeholder-[#8C7A6B] focus:outline-none"
             />
           </div>
 
           {/* Raised Search Button */}
           <button
             type="button"
-            className="neu-plate-sm rounded-2xl px-7 py-3 text-xs font-semibold text-[#381F17] flex items-center justify-center gap-2 cursor-pointer hover:filter hover:brightness-105 transition-all"
+            className="lawyer-consultations-search-button neu-plate-sm rounded-2xl px-7 py-3 text-xs font-semibold text-[#381F17] flex items-center justify-center gap-2 cursor-pointer hover:filter hover:brightness-105 transition-all"
           >
             <SearchIcon className="w-3.5 h-3.5 text-[#381F17]" />
             <span>Search</span>
@@ -307,16 +308,16 @@ export function LawyerConsultationsView({
 
           {/* Specialization Filter Dropdown */}
           <div className="relative">
-            <select className="appearance-none neu-inset rounded-2xl pl-5 pr-10 py-3 text-xs font-semibold text-[#381F17] focus:outline-none cursor-pointer">
+            <select className="lawyer-consultations-area-filter appearance-none neu-inset rounded-2xl pl-5 pr-10 py-3 text-xs font-semibold text-[#381F17] focus:outline-none cursor-pointer">
               <option>Labor & Employment</option>
               <option>Corporate & Commercial</option>
               <option>Real Property & Land Titles</option>
               <option>Family & Civil Status</option>
               <option>Intellectual Property</option>
             </select>
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-xs text-[#5C4535]">
-              ▼
-            </span>
+            <svg className="lawyer-consultations-area-arrow" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m7 10 5 5 5-5z" fill="currentColor" />
+            </svg>
           </div>
         </div>
       </div>
@@ -326,14 +327,14 @@ export function LawyerConsultationsView({
         {/* ── Left Column: Calendar & Appointments List ─────────────────────── */}
         <div className="w-full xl:w-[330px] space-y-6 shrink-0">
           {/* Extruded "Upcoming Consultations" heading pill */}
-          <div className="neu-plate rounded-full px-7 py-2.5 text-xs sm:text-sm font-bold text-[#381F17] inline-flex items-center">
+          <div className="lawyer-consultations-heading-pill neu-plate rounded-full px-7 py-2.5 text-xs sm:text-sm font-bold text-[#381F17] inline-flex items-center">
             Upcoming Consultations
           </div>
 
           {/* Mini Calendar Widget */}
           <div className="neu-card-md rounded-[26px] p-5 space-y-4">
             {/* Month header pill */}
-            <div className="neu-inset-sm rounded-full py-1.5 px-6 text-xs font-bold uppercase tracking-wider text-[#C58B3C] text-center w-fit mx-auto">
+            <div className="lawyer-consultations-month-pill neu-inset-sm rounded-full py-1.5 px-6 text-xs font-bold uppercase tracking-wider text-[#C58B3C] text-center w-fit mx-auto">
               SEPTEMBER 2026
             </div>
 
@@ -407,38 +408,18 @@ export function LawyerConsultationsView({
               ) : (
                 appointmentsToDisplay.map((apt) => {
                   const isSelected = selectedAppointmentId === apt.id;
-                  const isPending = apt.status === 'pending';
-                  const isConfirmed = apt.status === 'confirmed';
                   return (
                     <button
                       key={apt.id}
                       type="button"
                       onClick={() => setSelectedAppointmentId(apt.id)}
-                      className={`w-full rounded-2xl px-4 py-3 flex flex-col gap-1 text-left transition-all cursor-pointer ${
-                        isSelected
-                          ? 'neu-inset text-[#381F17] font-semibold ring-2 ring-[#C58B3C]/50'
-                          : 'bg-[#DFC5A4]/40 hover:bg-[#DFC5A4]/80 text-[#381F17]'
-                      }`}
+                      aria-label={`${apt.client.name}, ${apt.timeTag}, ${apt.status}`}
+                      aria-pressed={isSelected}
+                      data-selected={isSelected}
+                      className="lawyer-consultations-appointment-pill w-full flex items-center justify-between rounded-xl text-left transition-all cursor-pointer"
                     >
-                      <div className="flex items-center justify-between w-full">
-                        <span className="text-xs font-semibold text-[#381F17] truncate">
-                          {apt.client.name}
-                        </span>
-                        <span
-                          className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
-                            isPending
-                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                              : isConfirmed
-                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                              : 'bg-stone-200 text-stone-700'
-                          }`}
-                        >
-                          {isPending ? 'Pending' : isConfirmed ? 'Confirmed' : apt.status}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-[#685042] font-medium truncate">
-                        {apt.timeTag}
-                      </span>
+                      <span className="truncate">{apt.client.name}</span>
+                      <span className="shrink-0">{apt.timeTag.split('•')[0].replace(/:00/g, '').trim()}</span>
                     </button>
                   );
                 })
@@ -455,24 +436,24 @@ export function LawyerConsultationsView({
             {/* Top Badges Row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-3">
-                <div className="neu-inset-sm rounded-full px-5 py-2 text-[11px] font-bold tracking-wider text-[#4A3227] uppercase">
+                <div className="lawyer-consultations-date-pill neu-inset-sm rounded-full px-5 py-2 text-[11px] font-bold tracking-wider text-[#4A3227] uppercase">
                   {selectedConsultation.dateTag}
                 </div>
-                <div className="neu-inset-sm rounded-full px-5 py-2 text-[11px] font-semibold text-[#4A3227]">
+                <div className="lawyer-consultations-time-pill neu-inset-sm rounded-full px-5 py-2 text-[11px] font-semibold text-[#4A3227]">
                   {selectedConsultation.timeTag}
                 </div>
               </div>
 
               {selectedConsultation.status === 'pending' ? (
-                <div className="rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider bg-amber-400 text-[#23150F] shadow-sm shrink-0 self-start sm:self-auto border border-amber-500">
+                <div className="lawyer-consultations-status-pill rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider bg-amber-400 text-[#23150F] shadow-sm shrink-0 self-start sm:self-auto border border-amber-500">
                   PENDING YOUR APPROVAL
                 </div>
               ) : selectedConsultation.status === 'confirmed' ? (
-                <div className="neu-badge-green rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider text-white shrink-0 self-start sm:self-auto">
+                <div className="lawyer-consultations-status-pill neu-badge-green rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider text-white shrink-0 self-start sm:self-auto">
                   CONFIRMED APPOINTMENT
                 </div>
               ) : (
-                <div className="rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider bg-stone-300 text-stone-800 shrink-0 self-start sm:self-auto">
+                <div className="lawyer-consultations-status-pill rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider bg-stone-300 text-stone-800 shrink-0 self-start sm:self-auto">
                   {selectedConsultation.status.toUpperCase()}
                 </div>
               )}
@@ -506,7 +487,7 @@ export function LawyerConsultationsView({
               <button
                 type="button"
                 onClick={() => router.push('/lawyer/messages')}
-                className="neu-btn-peach rounded-full px-8 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-[#4E3227] tracking-wide shrink-0 self-start md:self-center cursor-pointer hover:brightness-105 transition-all"
+                className="lawyer-consultations-message-pill neu-btn-peach rounded-full px-8 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-[#4E3227] tracking-wide shrink-0 self-start md:self-center cursor-pointer hover:brightness-105 transition-all"
               >
                 Message Client
               </button>
@@ -604,7 +585,7 @@ export function LawyerConsultationsView({
                       type="button"
                       disabled={updatingId === selectedConsultation.id}
                       onClick={() => handleDecline(selectedConsultation.id)}
-                      className="neu-btn rounded-2xl border-[1.5px] border-[#55382D] bg-[#ECE1D2] px-6 py-2.5 text-xs sm:text-sm font-semibold text-[#381F17] shadow-[2px_2px_6px_rgba(180,155,130,0.25)] hover:bg-red-50 hover:text-red-700 transition-all cursor-pointer disabled:opacity-50"
+                      className="lawyer-consultations-cancel-pill neu-btn rounded-2xl border-[1.5px] border-[#55382D] bg-[#ECE1D2] px-6 py-2.5 text-xs sm:text-sm font-semibold text-[#381F17] shadow-[2px_2px_6px_rgba(180,155,130,0.25)] hover:bg-red-50 hover:text-red-700 transition-all cursor-pointer disabled:opacity-50"
                     >
                       Decline
                     </button>
@@ -613,7 +594,7 @@ export function LawyerConsultationsView({
                       type="button"
                       disabled={updatingId === selectedConsultation.id}
                       onClick={() => handleApprove(selectedConsultation.id)}
-                      className="px-7 py-2.5 rounded-2xl bg-[#23150F] hover:bg-[#381F17] text-[#ded7cb] text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                      className="lawyer-consultations-approve-pill px-7 py-2.5 rounded-2xl bg-[#23150F] hover:bg-[#381F17] text-[#ded7cb] text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                     >
                       {updatingId === selectedConsultation.id ? (
                         <>
@@ -633,7 +614,7 @@ export function LawyerConsultationsView({
                     <button
                       type="button"
                       onClick={() => router.push('/lawyer/messages')}
-                      className="neu-btn-espresso rounded-2xl px-6 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all cursor-pointer hover:brightness-110 flex items-center gap-2"
+                      className="lawyer-consultations-details-pill neu-btn-espresso rounded-2xl px-6 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all cursor-pointer hover:brightness-110 flex items-center gap-2"
                     >
                       <span>💬</span>
                       <span>Message Channel</span>
@@ -642,7 +623,7 @@ export function LawyerConsultationsView({
                     <button
                       type="button"
                       onClick={() => window.open(selectedConsultation.meetingLink || 'https://meet.justicia.ph', '_blank')}
-                      className="neu-btn-caramel rounded-2xl px-7 py-2.5 text-xs sm:text-sm font-bold text-[#381F17] flex items-center gap-2.5 transition-all cursor-pointer hover:brightness-105"
+                      className="lawyer-consultations-join-pill neu-btn-caramel rounded-2xl px-7 py-2.5 text-xs sm:text-sm font-bold text-[#381F17] flex items-center gap-2.5 transition-all cursor-pointer hover:brightness-105"
                     >
                       <VideoCamIcon className="w-4 h-4 text-[#381F17]" />
                       <span>Join Meet</span>
@@ -654,11 +635,11 @@ export function LawyerConsultationsView({
           </div>
 
           {/* Carousel Controls (Matching Figma Mockup) */}
-          <div className="flex items-center justify-center gap-6 pt-2">
+          <div className="lawyer-consultations-carousel-controls flex items-center justify-center gap-6 pt-2">
             <button
               type="button"
               onClick={() => setCarouselIndex((prev) => (prev > 0 ? prev - 1 : 3))}
-              className="neu-btn w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold text-[#381F17] hover:text-[#C58B3C] cursor-pointer"
+              className="lawyer-consultations-prev-pill neu-btn w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold text-[#381F17] hover:text-[#C58B3C] cursor-pointer"
               aria-label="Previous"
             >
               ‹
@@ -670,8 +651,8 @@ export function LawyerConsultationsView({
                   key={i}
                   className={`rounded-full transition-all duration-300 ${
                     i === carouselIndex
-                      ? 'w-3 h-3 bg-[#C58B3C]'
-                      : 'w-2.5 h-2.5 bg-[#B8A28E]'
+                      ? 'w-[14px] h-[14px] bg-[#D39758]'
+                      : 'w-2.5 h-2.5 bg-[#341512]'
                   }`}
                 />
               ))}
@@ -680,7 +661,7 @@ export function LawyerConsultationsView({
             <button
               type="button"
               onClick={() => setCarouselIndex((prev) => (prev < 3 ? prev + 1 : 0))}
-              className="neu-btn w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold text-[#381F17] hover:text-[#C58B3C] cursor-pointer"
+              className="lawyer-consultations-next-pill neu-btn w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold text-[#381F17] hover:text-[#C58B3C] cursor-pointer"
               aria-label="Next"
             >
               ›
@@ -690,13 +671,16 @@ export function LawyerConsultationsView({
       </div>
 
       <div className="lawyer-consultations-pending-header flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
-        <button type="button" onClick={() => setActiveTab('pending')} className="neu-plate rounded-full text-[#381F17]">
+        <button type="button" onClick={() => setActiveTab('pending')} className="lawyer-consultations-pending-pill neu-plate rounded-full text-[#381F17]">
           Pending Approval for Consultations
         </button>
-        <select aria-label="Filter pending consultations by period" defaultValue="month" className="neu-inset-sm text-[#381F17]">
+        <select aria-label="Filter pending consultations by period" defaultValue="month" className="lawyer-consultations-period-pill neu-inset-sm text-[#381F17]">
           <option value="month">Filter By: Month</option>
           <option value="week">Filter By: Week</option>
         </select>
+        <svg className="lawyer-consultations-period-arrow" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m7 10 5 5 5-5z" fill="currentColor" />
+        </svg>
       </div>
 
       {/* Receipt Preview Modal */}

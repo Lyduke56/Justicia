@@ -1012,7 +1012,7 @@ body {
 
 .lawyer-consultations {
   max-width: 1196px;
-  padding: 44px 66px 60px;
+  padding: 44px 70px 60px 66px;
   font-family: var(--font-lora), Georgia, serif;
 }
 
@@ -1071,8 +1071,10 @@ body {
   }
 
   .lawyer-consultations > .grid > div:first-child > .neu-card-md {
-    margin-top: 14px;
-    margin-bottom: 52px !important;
+    height: 254px;
+    margin-top: 28px;
+    margin-bottom: 31px !important;
+    padding-top: 17px;
   }
 
   .lawyer-consultations
@@ -1080,7 +1082,7 @@ body {
     > div:first-child
     > .neu-plate:not(.rounded-full) {
     height: 251px;
-    padding: 16px;
+    padding: 16px 24px;
     display: flex;
     flex-direction: column;
   }
@@ -1104,6 +1106,8 @@ body {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    padding-top: 5px;
+    padding-right: 0;
   }
 
   .lawyer-consultations
@@ -1112,9 +1116,9 @@ body {
     > .neu-plate:not(.rounded-full)
     > div
     > button {
-    height: 44px;
+    height: 33px;
     flex-shrink: 0;
-    padding: 4px 10px;
+    padding: 0 17px 0 20px;
   }
 
   .lawyer-consultations
@@ -1123,12 +1127,12 @@ body {
     > .neu-plate:not(.rounded-full)
     > div
     > button:not(:last-child) {
-    margin-bottom: 6px !important;
+    margin-bottom: 17px !important;
   }
 
   .lawyer-designed-view .lawyer-consultations .neu-card {
     min-height: 546px;
-    padding: 22px 30px 28px;
+    padding: 25px 30px 28px;
     display: flex;
     flex-direction: column;
   }
@@ -1213,6 +1217,401 @@ body {
   border-radius: 10px;
 }
 
+/* Consultations pills use the same solid Figma materials as the dashboard. */
+.lawyer-consultations {
+  --consultation-pill-raised:
+    -5px 5px 10px rgba(206, 194, 183, 0.2),
+    5px -5px 10px rgba(206, 194, 183, 0.2),
+    -5px -5px 10px rgba(252, 238, 223, 0.9),
+    5px 5px 13px rgba(206, 194, 183, 0.9),
+    inset 1px 1px 2px rgba(252, 238, 223, 0.3),
+    inset -1px -1px 2px rgba(206, 194, 183, 0.5);
+  --consultation-pill-recessed:
+    1px 1px 2px rgba(252, 238, 223, 0.3),
+    -1px -1px 2px rgba(206, 194, 183, 0.5),
+    inset -5px 5px 10px rgba(206, 194, 183, 0.2),
+    inset 5px -5px 10px rgba(206, 194, 183, 0.2),
+    inset -5px -5px 10px rgba(252, 238, 223, 0.9),
+    inset 5px 5px 13px rgba(206, 194, 183, 0.9);
+  --consultation-warm-raised:
+    -5px 5px 10px rgba(203, 179, 154, 0.2),
+    5px -5px 10px rgba(203, 179, 154, 0.2),
+    -5px -5px 10px rgba(249, 219, 188, 0.9),
+    5px 5px 13px rgba(203, 179, 154, 0.9),
+    inset 1px 1px 2px rgba(249, 219, 188, 0.3),
+    inset -1px -1px 2px rgba(203, 179, 154, 0.5);
+  --consultation-warm-recessed:
+    1px 1px 2px rgba(249, 219, 188, 0.3),
+    -1px -1px 2px rgba(203, 179, 154, 0.5),
+    inset -5px 5px 10px rgba(203, 179, 154, 0.2),
+    inset 5px -5px 10px rgba(203, 179, 154, 0.2),
+    inset -5px -5px 10px rgba(249, 219, 188, 0.9),
+    inset 5px 5px 13px rgba(203, 179, 154, 0.9);
+}
+
+.lawyer-consultations > .space-y-4 .lawyer-consultations-tab {
+  height: 33px;
+  border-radius: 5px;
+  background: #e5d8cb;
+  box-shadow: var(--consultation-pill-raised);
+  color: rgba(52, 21, 18, 0.8);
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.26px;
+}
+
+.lawyer-consultations
+  > .space-y-4
+  .lawyer-consultations-tab[aria-pressed="true"] {
+  background: rgba(211, 151, 88, 0.3);
+}
+
+.lawyer-consultations > .space-y-4 .lawyer-consultations-search-input,
+.lawyer-consultations > .space-y-4 .lawyer-consultations-area-filter {
+  height: 40px;
+  border-radius: 5px;
+  background: #e5d8cb;
+  box-shadow: var(--consultation-pill-recessed);
+  color: rgba(52, 21, 18, 0.8);
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.28px;
+}
+
+.lawyer-consultations > .space-y-4 .lawyer-consultations-search-input {
+  padding: 0 13px;
+}
+
+.lawyer-consultations
+  > .space-y-4
+  .lawyer-consultations-search-input::placeholder {
+  color: rgba(52, 21, 18, 0.3);
+}
+
+.lawyer-consultations > .space-y-4 .lawyer-consultations-area-filter {
+  width: 100%;
+  padding-left: 22px;
+}
+
+.lawyer-consultations .lawyer-consultations-area-arrow {
+  position: absolute;
+  top: 7px;
+  right: 13px;
+  width: 26px;
+  height: 26px;
+  color: #341512;
+  pointer-events: none;
+}
+
+.lawyer-consultations > .space-y-4 .lawyer-consultations-search-button {
+  height: 33px;
+  border-radius: 20px;
+  background: rgba(211, 151, 88, 0.3);
+  box-shadow: var(--consultation-pill-raised);
+  color: #341512;
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.24px;
+  gap: 8px;
+}
+
+.lawyer-consultations .lawyer-consultations-search-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.lawyer-consultations .lawyer-consultations-search-button {
+  position: relative;
+  top: -1px;
+}
+
+.lawyer-consultations > .grid .neu-plate.lawyer-consultations-heading-pill,
+.lawyer-consultations-pending-header > .lawyer-consultations-pending-pill {
+  height: 44px;
+  border-radius: 20px;
+  background: rgba(211, 151, 88, 0.3);
+  box-shadow: var(--consultation-pill-raised);
+  color: rgba(52, 21, 18, 0.8);
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.32px;
+}
+
+.lawyer-consultations .neu-card-md .lawyer-consultations-month-pill {
+  width: 180px;
+  height: 33px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #e5d8cb;
+  box-shadow: var(--consultation-pill-recessed);
+  color: #d39758;
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.28px;
+}
+
+.lawyer-consultations .lawyer-consultations-appointment-pill {
+  width: 100%;
+  height: 33px;
+  gap: 8px;
+  border-radius: 10px;
+  background: #e2c7ab;
+  box-shadow: var(--consultation-warm-recessed);
+  color: rgba(52, 21, 18, 0.8);
+  white-space: nowrap;
+}
+
+.lawyer-consultations
+  .lawyer-consultations-appointment-pill[data-selected="true"] {
+  box-shadow: var(--consultation-warm-raised);
+}
+
+.lawyer-consultations .lawyer-consultations-appointment-pill span:first-child {
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.24px;
+  line-height: 15px;
+}
+
+.lawyer-consultations .lawyer-consultations-appointment-pill span:last-child {
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  line-height: 13px;
+}
+
+.lawyer-consultations .lawyer-consultations-carousel-controls {
+  gap: 52px;
+  padding-left: 31px;
+}
+
+.lawyer-consultations .lawyer-consultations-carousel-controls > div {
+  position: relative;
+  top: 7px;
+  gap: 4px;
+}
+
+.lawyer-consultations .lawyer-consultations-next-pill {
+  position: relative;
+  top: 4px;
+}
+
+.lawyer-consultations
+  .neu-card
+  > div:first-child
+  .lawyer-consultations-date-pill,
+.lawyer-consultations
+  .neu-card
+  > div:first-child
+  .lawyer-consultations-time-pill,
+.lawyer-consultations
+  .neu-card
+  > div:first-child
+  .lawyer-consultations-status-pill {
+  height: 27px;
+  padding: 0 12px;
+  flex: none;
+  border-radius: 20px;
+  box-shadow: var(--consultation-pill-raised);
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.16px;
+  white-space: nowrap;
+}
+
+.lawyer-consultations
+  .neu-card
+  > div:first-child
+  .lawyer-consultations-date-pill {
+  width: 143px;
+  background: #e5d8cb;
+  color: rgba(52, 21, 18, 0.8);
+}
+
+.lawyer-consultations
+  .neu-card
+  > div:first-child
+  .lawyer-consultations-time-pill {
+  width: 159px;
+  background: #e5d8cb;
+  color: rgba(52, 21, 18, 0.8);
+}
+
+.lawyer-consultations
+  .neu-card
+  > div:first-child
+  .lawyer-consultations-status-pill {
+  width: 140px;
+  height: 26px;
+  color: #e5d8cb;
+}
+
+.lawyer-consultations
+  .neu-card
+  > div:first-child
+  .lawyer-consultations-status-pill.neu-badge-green {
+  background: #33a94e;
+}
+
+.lawyer-consultations
+  .neu-card
+  > .neu-plate
+  .lawyer-consultations-message-pill {
+  width: 87px;
+  height: 25px;
+  padding: 0;
+  flex: none;
+  border-radius: 10px;
+  background: #e2c7ab;
+  box-shadow: var(--consultation-warm-raised);
+  color: rgba(52, 21, 18, 0.8);
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.24px;
+  position: relative;
+  top: 1px;
+}
+
+.lawyer-consultations .lawyer-consultations-cancel-pill,
+.lawyer-consultations .lawyer-consultations-details-pill,
+.lawyer-consultations .lawyer-consultations-join-pill,
+.lawyer-consultations .lawyer-consultations-approve-pill {
+  height: 35px;
+  border-radius: 10px;
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.24px;
+}
+
+.lawyer-consultations .lawyer-consultations-cancel-pill {
+  width: 97px;
+  padding: 0;
+  border: 1px solid rgba(52, 21, 18, 0.8);
+  background: #e5d8cb;
+  box-shadow: none;
+  color: #341512;
+}
+
+.lawyer-consultations .lawyer-consultations-details-pill {
+  min-width: 111px;
+  padding: 0 12px;
+  background: rgba(52, 21, 18, 0.8);
+  box-shadow: var(--consultation-pill-raised);
+  color: #e5d8cb;
+}
+
+.lawyer-consultations .lawyer-consultations-join-pill {
+  width: 110px;
+  padding: 0;
+  gap: 5px;
+  background: rgba(211, 151, 88, 0.7);
+  box-shadow: var(--consultation-pill-raised);
+  color: #341512;
+}
+
+.lawyer-consultations .lawyer-consultations-join-pill svg {
+  width: 22px;
+  height: 22px;
+}
+
+.lawyer-consultations .lawyer-consultations-approve-pill {
+  min-width: 111px;
+  background: rgba(52, 21, 18, 0.8);
+  box-shadow: var(--consultation-pill-raised);
+  color: #e5d8cb;
+}
+
+.lawyer-consultations .lawyer-consultations-prev-pill {
+  background: transparent;
+  box-shadow: none;
+  font-size: 30px;
+  font-weight: 400;
+}
+
+.lawyer-consultations .lawyer-consultations-next-pill {
+  background: #e5d8cb;
+  box-shadow: var(--consultation-pill-raised);
+  font-size: 30px;
+  font-weight: 400;
+}
+
+.lawyer-consultations-pending-header > .lawyer-consultations-pending-pill {
+  margin-left: 1px;
+}
+
+.lawyer-consultations-pending-header > .lawyer-consultations-period-pill {
+  margin-right: 0;
+  position: relative;
+  top: 2px;
+  background: #e5d8cb;
+  box-shadow: var(--consultation-pill-recessed);
+  color: rgba(52, 21, 18, 0.8);
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.28px;
+}
+
+.lawyer-consultations-pending-header > .lawyer-consultations-period-arrow {
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .lawyer-consultations-pending-header {
+    position: relative;
+  }
+
+  .lawyer-consultations-pending-header > .lawyer-consultations-period-pill {
+    appearance: none;
+    padding-left: 20px;
+    padding-right: 42px;
+  }
+
+  .lawyer-consultations-pending-header > .lawyer-consultations-period-arrow {
+    display: block;
+    position: absolute;
+    top: 11px;
+    right: 13px;
+    width: 26px;
+    height: 26px;
+    color: #341512;
+    pointer-events: none;
+  }
+
+  .lawyer-consultations .neu-card > div:first-child > div:first-child {
+    gap: 15px;
+  }
+  .lawyer-consultations
+    .neu-card
+    > div:first-child
+    .lawyer-consultations-status-pill {
+    margin-right: 2px;
+  }
+  .lawyer-consultations
+    .neu-card
+    > .neu-plate
+    .lawyer-consultations-message-pill {
+    margin-right: 17px;
+  }
+  .lawyer-consultations .neu-card > div:last-child > div {
+    gap: 18px;
+    margin-right: -1px;
+  }
+}
+
 @media (min-width: 640px) and (max-width: 1279px) {
   .lawyer-consultations > .space-y-4 {
     padding: 20px;
@@ -1277,12 +1676,16 @@ body {
   .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > button {
     width: 161px;
     height: 33px;
-    padding: 0;
+    padding: 0 0 0 47px;
+    justify-content: flex-start;
+    gap: 5px;
   }
 
   .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > div:last-child {
     width: 356px;
     margin-left: 27px;
+    position: relative;
+    top: 3px;
   }
 
   .lawyer-consultations
