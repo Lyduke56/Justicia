@@ -1,157 +1,330 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { getClientConsultationsAction } from '@/app/actions/consultationActions';
-import Link from 'next/link';
+import {
+  getClientConsultationsAction,
+  cancelConsultationAction,
+} from '@/app/actions/consultationActions';
+import {
+  getPaymentChannelAction,
+  submitPaymentProofAction,
+  getDocumentAccessUrlAction,
+} from '@/app/actions/consultationActions';
+import type { ClientConsultation, PaymentChannel } from '@/app/actions/consultationActions';
+import { ConsultationDetailsModal } from '@/components/shared/ConsultationDetailsModal';
+import type {
+  ConsultationDetailsModalProps,
+  DetailsSummary,
+} from '@/components/shared/ConsultationDetailsModal';
 import type { ViewKey } from '@/components/client/ClientShell';
+import { ConsultationsSkeleton } from '@/components/skeletons';
 
 interface ConsultationsViewProps {
   onNavigate?: (view: ViewKey) => void;
 }
 
-interface Appointment {
-  id: string;
-  dateStr: string;
-  day: number;
-  timeSlot: string;
-  status: 'CONFIRMED APPOINTMENT' | 'COMPLETED' | 'PENDING CONFIRMATION';
-  lawyerName: string;
-  rollNumber: string;
-  ibpChapter: string;
-  practiceAreas: string[];
-  rating: string;
-  experienceYrs: number;
-  ratePerHour: number;
-  docket: string;
-  caseTitle: string;
-  caseDescription: string;
-  meetingLink?: string;
-}
+type Appointment = ClientConsultation;
+
+const MONTH_LABELS = [
+  'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+  'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
+];
+
+/** Statuses a client may still cancel. */
+const CANCELLABLE_STATUSES = ['pending', 'confirmed', 'awaiting_client_confirmation'];
 
 export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const router = useRouter();
   const [dbAppointments, setDbAppointments] = useState<Appointment[]>([]);
+  const [loadingAppointments, setLoadingAppointments] = useState<boolean>(true);
+  const [selectedDay, setSelectedDay] = useState<number>(1);
 
   useEffect(() => {
-    getClientConsultationsAction().then((data: any) => {
-      if (data && data.length > 0) {
-        setDbAppointments(data);
-      }
-    });
+    let active = true;
+    getClientConsultationsAction()
+      .then((data) => {
+        if (!active) return;
+        const list = Array.isArray(data) ? data : [];
+        setDbAppointments(list);
+        if (list[0]) setSelectedDay(list[0].day);
+      })
+      .finally(() => {
+        if (active) setLoadingAppointments(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
-  const [selectedDay, setSelectedDay] = useState<number>(23);
   const [activeAppointmentIndex, setActiveAppointmentIndex] = useState<number>(0);
   const [showCancelModal, setShowCancelModal] = useState<boolean>(false);
   const [showDetailsModal, setShowDetailsModal] = useState<boolean>(false);
   const [showMeetModal, setShowMeetModal] = useState<boolean>(false);
-  const [isCancelled, setIsCancelled] = useState<boolean>(false);
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState<boolean>(false);
+
+  const allAppointments = dbAppointments;
+  const hasAppointments = allAppointments.length > 0;
+  const currentAppointment: Appointment | undefined =
+    allAppointments[activeAppointmentIndex] || allAppointments[0];
 
   const handleSelectAppointment = (idx: number) => {
     if (idx === activeAppointmentIndex) return;
     setIsSwitching(true);
     setActiveAppointmentIndex(idx);
-    setSelectedDay(allAppointments[idx]?.day || 23);
+    setSelectedDay(allAppointments[idx]?.day || 1);
     setTimeout(() => setIsSwitching(false), 200);
   };
 
-  const appointments: Appointment[] = [
-    {
-      id: 'apt-001',
-      dateStr: 'TODAY, SEPTEMBER 23, 2026',
-      day: 23,
-      timeSlot: '3:00 PM - 4:00 PM • PST, GMT+8',
-      status: 'CONFIRMED APPOINTMENT',
-      lawyerName: 'Atty. Maria Elena Santos, Ll.B.',
-      rollNumber: '58942',
-      ibpChapter: 'MAKATI',
-      practiceAreas: ['Labor & Employment', 'Corporate', 'Civil Law'],
-      rating: '4.9 (53 Reviews)',
-      experienceYrs: 9,
-      ratePerHour: 1500,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      caseTitle: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
-      caseDescription:
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
-      meetingLink: 'https://meet.justicia.ph/room/santos-clyde-20260923',
-    },
-    {
-      id: 'apt-002',
-      dateStr: 'SEPTEMBER 28, 2026',
-      day: 28,
-      timeSlot: '2:00 PM - 3:00 PM • PST, GMT+8',
-      status: 'CONFIRMED APPOINTMENT',
-      lawyerName: 'Atty. Joaquin Antonio Reyes, Ll.M.',
-      rollNumber: '61204',
-      ibpChapter: 'PASIG',
-      practiceAreas: ['Real Estate & Tenancy', 'Commercial Contracts'],
-      rating: '4.8 (41 Reviews)',
-      experienceYrs: 11,
-      ratePerHour: 1800,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      caseTitle: 'Commercial Tenancy Escrow Release & Final Turnover Notice',
-      caseDescription:
-        'Legal review of commercial tenancy contract addendum for retail space in Ortigas Center. Assisting in escrow account release following joint tenant-lessor clearance protocols and tax certificate turnover.',
-      meetingLink: 'https://meet.justicia.ph/room/reyes-clyde-20260928',
-    },
-    {
-      id: 'apt-003',
-      dateStr: 'OCTOBER 05, 2026',
-      day: 5,
-      timeSlot: '10:00 AM - 11:30 AM • PST, GMT+8',
-      status: 'CONFIRMED APPOINTMENT',
-      lawyerName: 'Atty. Beatrice Clara Tan, Ll.B.',
-      rollNumber: '59811',
-      ibpChapter: 'QUEZON CITY',
-      practiceAreas: ['Intellectual Property', 'Corporate Law'],
-      rating: '5.0 (29 Reviews)',
-      experienceYrs: 8,
-      ratePerHour: 1600,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      caseTitle: 'Trademark Filing Evaluation & Prior Art Search Assessment',
-      caseDescription:
-        'Pre-registration evaluation for proprietary software brand before the Intellectual Property Office of the Philippines (IPOPHL). Assessing trademark classification classes 9 and 42.',
-      meetingLink: 'https://meet.justicia.ph/room/tan-clyde-20261005',
-    },
-    {
-      id: 'apt-004',
-      dateStr: 'OCTOBER 14, 2026',
-      day: 14,
-      timeSlot: '4:00 PM - 5:00 PM • PST, GMT+8',
-      status: 'CONFIRMED APPOINTMENT',
-      lawyerName: 'Atty. Maria Elena Santos, Ll.B.',
-      rollNumber: '58942',
-      ibpChapter: 'MAKATI',
-      practiceAreas: ['Labor & Employment', 'Corporate', 'Civil Law'],
-      rating: '4.9 (53 Reviews)',
-      experienceYrs: 9,
-      ratePerHour: 1500,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      caseTitle: 'Post-Inspection Demand Settlement & Escrow Verification',
-      caseDescription:
-        'Follow-up review of demand compliance notice from landlord. Verification of bank transmittal clearance for security deposit restitution and full quitclaim execution.',
-      meetingLink: 'https://meet.justicia.ph/room/santos-clyde-20261014',
-    },
-  ];
+  const rawStatus = currentAppointment?.rawStatus ?? 'pending';
+  const isCancelled = rawStatus === 'cancelled';
+  // Caramel badge while waiting on the lawyer (pending) or on payment (awaiting_client_confirmation).
+  const isPending = rawStatus === 'pending' || rawStatus === 'awaiting_client_confirmation';
+  const canCancel = CANCELLABLE_STATUSES.includes(rawStatus);
+  const canJoinMeet = rawStatus === 'confirmed';
 
-  const allAppointments = dbAppointments;
-  const hasAppointments = allAppointments.length > 0;
-  const currentAppointment = allAppointments[activeAppointmentIndex] || allAppointments[0] || appointments[0];
+  const handleConfirmCancel = async () => {
+    if (!currentAppointment || isCancelling) return;
+    setIsCancelling(true);
+    setCancelError(null);
+    try {
+      const res = await cancelConsultationAction(currentAppointment.id);
+      if (!('success' in res) || !res.success) {
+        setCancelError(('error' in res && res.error) || 'We could not cancel this consultation.');
+        return;
+      }
+      const cancelledId = currentAppointment.id;
+      setDbAppointments((prev) =>
+        prev.map((a) => (a.id === cancelledId ? { ...a, rawStatus: 'cancelled', status: 'CANCELLED' } : a))
+      );
+      setShowCancelModal(false);
+    } catch {
+      setCancelError('We could not cancel this consultation. Please try again.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
-  // Calendar dates: September 2026 begins on Tuesday (2 blank spaces for Sunday & Monday)
-  const daysInMonth = [
-    { day: null }, { day: null }, { day: 1 }, { day: 2 }, { day: 3 }, { day: 4 }, { day: 5 },
-    { day: 6 }, { day: 7 }, { day: 8 }, { day: 9 }, { day: 10 }, { day: 11 }, { day: 12 },
-    { day: 13 }, { day: 14 }, { day: 15 }, { day: 16 }, { day: 17 }, { day: 18 }, { day: 19 },
-    { day: 20 }, { day: 21 }, { day: 22 }, { day: 23 }, { day: 24 }, { day: 25 }, { day: 26 },
-    { day: 27 }, { day: 28 }, { day: 29 }, { day: 30 }
-  ];
+  // Calendar follows the month of the selected consultation.
+  const calendarYear = currentAppointment?.year ?? new Date().getFullYear();
+  const calendarMonth = currentAppointment?.month ?? new Date().getMonth();
+  const daysInMonth = useMemo(() => {
+    const slots: Array<{ day: number | null }> = [];
+    const firstWeekday = new Date(calendarYear, calendarMonth, 1).getDay();
+    const totalDays = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+    for (let i = 0; i < firstWeekday; i++) slots.push({ day: null });
+    for (let d = 1; d <= totalDays; d++) slots.push({ day: d });
+    return slots;
+  }, [calendarYear, calendarMonth]);
+  const findAppointmentIndexOnDay = (day: number) =>
+    allAppointments.findIndex((a) => a.year === calendarYear && a.month === calendarMonth && a.day === day);
+
+  // Reminders only for bookings on the date chosen in the calendar (de-duplicated).
+  const remindersForSelectedDay = Array.from(
+    new Set(
+      allAppointments
+        .filter(
+          (a) =>
+            a.year === calendarYear &&
+            a.month === calendarMonth &&
+            a.day === selectedDay &&
+            a.rawStatus !== 'cancelled'
+        )
+        .flatMap((a) => a.reminders)
+    )
+  );
+
+
+  // ─── View Details / Payment modal ─────────────────────────────────────────
+  const [paymentFile, setPaymentFile] = useState<File | null>(null);
+  const [submittingPayment, setSubmittingPayment] = useState<boolean>(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [paymentChannel, setPaymentChannel] = useState<PaymentChannel | null>(null);
+
+  const openDetails = () => {
+    setDetailsError(null);
+    setPaymentFile(null);
+    setShowDetailsModal(true);
+    if (!paymentChannel) {
+      getPaymentChannelAction().then(setPaymentChannel);
+    }
+  };
+
+  const closeDetails = () => {
+    if (submittingPayment) return;
+    setShowDetailsModal(false);
+    setPaymentFile(null);
+    setDetailsError(null);
+  };
+
+  const openProof = async (documentId: string) => {
+    const res = await getDocumentAccessUrlAction(documentId);
+    if ('url' in res && res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
+    else setDetailsError(('error' in res && res.error) || 'This file could not be opened.');
+  };
+
+  const openMessagesFor = (consultationId: string) => {
+    router.push(`/client/messages?thread=${consultationId}`);
+  };
+
+  const handleSubmitPayment = async (appointment: Appointment) => {
+    if (!paymentFile || submittingPayment) return;
+    setSubmittingPayment(true);
+    setDetailsError(null);
+    try {
+      const fd = new FormData();
+      fd.append('consultationId', appointment.id);
+      fd.append('file', paymentFile);
+      const res = await submitPaymentProofAction(fd);
+      if (!('consultation' in res) || !res.consultation) {
+        setDetailsError(('error' in res && res.error) || 'We could not submit your payment.');
+        return;
+      }
+      const updated = res.consultation;
+      setDbAppointments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+      setPaymentFile(null);
+    } catch {
+      setDetailsError('We could not submit your payment. Please try again.');
+    } finally {
+      setSubmittingPayment(false);
+    }
+  };
+
+  const buildDetailsProps = (a: Appointment): ConsultationDetailsModalProps => {
+    const isPaymentStage = a.rawStatus === 'awaiting_client_confirmation';
+    const isPaid = a.rawStatus === 'confirmed' || a.rawStatus === 'completed';
+    const needsPayment = isPaymentStage && (a.payment.state === 'none' || a.payment.state === 'rejected');
+    const underReview = isPaymentStage && a.payment.state === 'submitted';
+
+    const summary: DetailsSummary = {
+      title: isPaid || underReview ? 'Payment Summary' : 'Booking Summary',
+      lawyerName: a.lawyerName,
+      lawyerMeta: `Roll No. ${a.rollNumber}  |  IBP ${a.ibpChapter}`,
+      modeLabel: a.communicationMode === 'video' ? 'Video Conference' : 'Audio Call',
+      modeMeta: `Platform: Google Meet  |  Duration: ${a.durationLabel}`,
+      dateLong: a.dateLong,
+      timeRange: a.timeRange,
+      sessionFee: a.payment.sessionFee,
+      platformFee: a.payment.platformFee,
+      total: a.payment.total,
+    };
+
+    let notice: ConsultationDetailsModalProps['notice'] = null;
+    if (a.declineReason) notice = { tone: 'red', title: 'Reason for Declining', text: a.declineReason };
+    else if (a.cancellationReason) notice = { tone: 'red', title: 'Reason for Cancellation', text: a.cancellationReason };
+    else if (needsPayment && a.payment.state === 'rejected' && a.payment.rejectionReason) {
+      notice = {
+        tone: 'red',
+        title: 'Your previous proof of payment was declined',
+        text: `${a.payment.rejectionReason}\nPlease pay using the QR code and upload a new proof of payment.`,
+      };
+    } else if (underReview) {
+      notice = {
+        tone: 'amber',
+        title: 'Payment under review',
+        text: 'Your attorney is verifying your proof of payment. The Google Meet link will be shared once confirmed.',
+      };
+    }
+
+    const close = { label: 'Close', variant: 'caramel' as const, onClick: closeDetails };
+    let actions: ConsultationDetailsModalProps['actions'] = [close];
+    if (needsPayment) {
+      actions = [
+        { label: 'Cancel', variant: 'outline', onClick: closeDetails, disabled: submittingPayment },
+        {
+          label: submittingPayment ? 'Submitting...' : 'Submit Payment',
+          variant: 'caramel',
+          onClick: () => handleSubmitPayment(a),
+          disabled: !paymentFile || submittingPayment,
+        },
+      ];
+    } else if (isPaid && a.rawStatus === 'confirmed') {
+      actions = [
+        {
+          label: 'Cancel',
+          variant: 'outline',
+          onClick: () => {
+            setShowDetailsModal(false);
+            setCancelError(null);
+            setShowCancelModal(true);
+          },
+        },
+        { label: 'Reschedule', variant: 'espresso', onClick: () => openMessagesFor(a.id) },
+        {
+          label: 'Join Meet',
+          variant: 'caramel',
+          icon: 'video',
+          disabled: !a.meetingLink,
+          onClick: () => a.meetingLink && window.open(a.meetingLink, '_blank', 'noopener,noreferrer'),
+        },
+      ];
+    }
+
+    const proofId = a.payment.proofDocumentId;
+    return {
+      dateStr: a.dateStr,
+      timeSlot: a.timeSlot,
+      statusLabel: a.status,
+      statusTone:
+        a.rawStatus === 'declined' || a.rawStatus === 'cancelled'
+          ? 'grey'
+          : needsPayment
+            ? 'red'
+            : underReview
+              ? 'amber'
+              : isPaid
+                ? 'green'
+                : 'caramel',
+      person: {
+        name: a.lawyerName,
+        lines: [
+          `Roll No. ${a.rollNumber}  |  IBP ${a.ibpChapter}`,
+          a.practiceAreas.join(' • '),
+          `★ ${a.rating} • ${a.experienceYrs} yrs practice`,
+        ],
+        rate: a.ratePerHour,
+        // pending-nvonfirmed / confirmed-and-paid show a Message button; payment.png shows the rate.
+        onMessage:
+          needsPayment || a.rawStatus === 'declined' || a.rawStatus === 'cancelled'
+            ? undefined
+            : () => openMessagesFor(a.id),
+      },
+      docket: a.docket,
+      caseTitle: a.caseTitle,
+      caseDescription: a.caseDescription,
+      notice,
+      summary: isPaymentStage || isPaid ? summary : null,
+      payment: needsPayment
+        ? {
+            qrImageUrl: paymentChannel?.qrImageUrl ?? null,
+            qrCaption: paymentChannel?.caption ?? null,
+            file: paymentFile,
+            onFileChange: (file) => {
+              setDetailsError(null);
+              setPaymentFile(file);
+            },
+            disabled: submittingPayment,
+          }
+        : null,
+      proof:
+        (underReview || isPaid) && a.payment.proofFileName
+          ? { fileName: a.payment.proofFileName, onOpen: proofId ? () => openProof(proofId) : undefined }
+          : null,
+      error: detailsError,
+      actions,
+      onClose: closeDetails,
+    };
+  };
+
+  if (loadingAppointments) {
+    return <ConsultationsSkeleton />;
+  }
 
   return (
     <div className="max-w-[1240px] mx-auto px-2 sm:px-6 py-6 space-y-6">
       {/* ─── Main 2-Column Grid (Exact Figma Layout) ───────────────────────── */}
-      {!hasAppointments ? (
+      {!hasAppointments || !currentAppointment ? (
         <div className="rounded-[28px] p-12 bg-[#ECE1D2] text-center space-y-4 max-w-xl mx-auto shadow-md">
           <div className="text-4xl">📅</div>
           <h2 className="font-cormorant text-2xl font-bold text-[#34150F]">No Consultations Scheduled Yet</h2>
@@ -193,7 +366,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                     'inset 2px 2px 5px rgba(165, 140, 115, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.95)',
                 }}
               >
-                SEPTEMBER 2026
+                {MONTH_LABELS[calendarMonth]} {calendarYear}
               </div>
             </div>
 
@@ -215,13 +388,13 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                   return <div key={`empty-${idx}`} className="h-8 w-8" />;
                 }
                 const isSelected = item.day === selectedDay;
-                const hasAppointment = appointments.some((a) => a.day === item.day);
+                const hasAppointment = findAppointmentIndexOnDay(item.day) !== -1;
                 return (
                   <button
                     key={`day-${item.day}`}
                     type="button"
                     onClick={() => {
-                      const aptIdx = appointments.findIndex((a) => a.day === item.day);
+                      const aptIdx = findAppointmentIndexOnDay(item.day!);
                       if (aptIdx !== -1) {
                         handleSelectAppointment(aptIdx);
                       } else {
@@ -244,7 +417,8 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
             </div>
           </div>
 
-          {/* 2. REMINDERS: Card (Warm peach plate) */}
+          {/* 2. REMINDERS: Card (Warm peach plate) — only when the chosen date has a booking */}
+          {remindersForSelectedDay.length > 0 && (
           <div
             className="rounded-[28px] p-6 sm:p-7 space-y-3.5"
             style={{
@@ -258,28 +432,15 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
             </h3>
 
             <ul className="space-y-2 text-xs sm:text-[12.5px] text-[#3E2A1E] leading-relaxed">
-              <li className="flex items-start gap-2">
-                <span className="text-[8px] mt-1.5 shrink-0">●</span>
-                <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-[8px] mt-1.5 shrink-0">●</span>
-                <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-[8px] mt-1.5 shrink-0">●</span>
-                <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-[8px] mt-1.5 shrink-0">●</span>
-                <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-[8px] mt-1.5 shrink-0">●</span>
-                <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
-              </li>
+              {remindersForSelectedDay.map((reminder, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <span className="text-[8px] mt-1.5 shrink-0">●</span>
+                  <span>{reminder}</span>
+                </li>
+              ))}
             </ul>
           </div>
+          )}
         </div>
 
         {/* ─── Right Column: Large Appointment Card (7 cols) ────────────────── */}
@@ -342,18 +503,25 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                 {currentAppointment.timeSlot}
               </div>
 
-              {/* Status Badge (Vibrant Emerald) */}
+              {/* Status Badge (Emerald = confirmed, Caramel = pending, Red = cancelled / declined) */}
               <div
                 className={`px-4 py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold tracking-wider uppercase text-white shadow-md ${
-                  isCancelled ? 'bg-red-700' : 'bg-[#27AE60]'
+                  isCancelled || rawStatus === 'declined'
+                    ? 'bg-red-700'
+                    : isPending
+                      ? 'bg-[#D49E56]'
+                      : 'bg-[#27AE60]'
                 }`}
                 style={{
-                  boxShadow: isCancelled
-                    ? '0 4px 12px rgba(185, 28, 28, 0.4)'
-                    : '4px 6px 16px rgba(39, 174, 96, 0.4), -2px -2px 6px rgba(255, 255, 255, 0.25)',
+                  boxShadow:
+                    isCancelled || rawStatus === 'declined'
+                      ? '0 4px 12px rgba(185, 28, 28, 0.4)'
+                      : isPending
+                        ? '4px 6px 14px rgba(212, 158, 86, 0.4), -2px -2px 6px rgba(255, 255, 255, 0.25)'
+                        : '4px 6px 16px rgba(39, 174, 96, 0.4), -2px -2px 6px rgba(255, 255, 255, 0.25)',
                 }}
               >
-                {isCancelled ? 'CANCELLED' : currentAppointment.status}
+                {currentAppointment.status}
               </div>
             </div>
 
@@ -423,10 +591,14 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
 
             {/* Action Buttons Row */}
             <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-[#D1BEA8]/60">
-              {/* Cancel Button */}
+              {/* Cancel Button (only while the booking is still active) */}
+              {canCancel && (
               <button
                 type="button"
-                onClick={() => setShowCancelModal(true)}
+                onClick={() => {
+                  setCancelError(null);
+                  setShowCancelModal(true);
+                }}
                 className="px-6 py-2.5 rounded-xl text-xs font-semibold text-[#5C4535] hover:text-[#23150F] transition-all"
                 style={{
                   backgroundColor: '#ECE1D2',
@@ -436,11 +608,12 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
               >
                 Cancel
               </button>
+              )}
 
               {/* View Details Button (Espresso) */}
               <button
                 type="button"
-                onClick={() => setShowDetailsModal(true)}
+                onClick={openDetails}
                 className="px-6 py-2.5 rounded-xl text-xs font-semibold text-white transition-all hover:brightness-110"
                 style={{
                   backgroundColor: '#4A2E25',
@@ -451,7 +624,8 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                 View Details
               </button>
 
-              {/* Join Meet Button (Caramel Primary) */}
+              {/* Join Meet Button (Caramel Primary) — only once the lawyer has confirmed */}
+              {canJoinMeet && (
               <button
                 type="button"
                 onClick={() => setShowMeetModal(true)}
@@ -467,6 +641,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                 </svg>
                 <span>Join Meet</span>
               </button>
+              )}
             </div>
           </>
         )}
@@ -491,7 +666,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
             </button>
 
             <div className="flex items-center gap-2">
-              {appointments.map((_, idx) => {
+              {allAppointments.map((_, idx) => {
                 const isActive = idx === activeAppointmentIndex;
                 return (
                   <button
@@ -509,8 +684,8 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
 
             <button
               type="button"
-              onClick={() => handleSelectAppointment(Math.min(appointments.length - 1, activeAppointmentIndex + 1))}
-              disabled={activeAppointmentIndex >= appointments.length - 1}
+              onClick={() => handleSelectAppointment(Math.min(allAppointments.length - 1, activeAppointmentIndex + 1))}
+              disabled={activeAppointmentIndex >= allAppointments.length - 1}
               className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
               style={{
                 boxShadow:
@@ -528,7 +703,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
       )}
 
       {/* ─── Cancel Consultation Modal ─────────────────────────────────────── */}
-      {showCancelModal && (
+      {showCancelModal && currentAppointment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
           <div
             className="w-full max-w-md rounded-[28px] p-7 bg-[#ECE1D2] space-y-4 text-center"
@@ -547,94 +722,40 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
               <strong>{currentAppointment.lawyerName}</strong> scheduled for{' '}
               <strong>{currentAppointment.dateStr}</strong>? Notice will be sent to counsel.
             </p>
+            {cancelError && (
+              <p className="text-xs font-semibold text-red-800 bg-red-100 border border-red-300 rounded-xl px-3 py-2">
+                {cancelError}
+              </p>
+            )}
             <div className="flex items-center justify-center gap-3 pt-3">
               <button
                 type="button"
                 onClick={() => setShowCancelModal(false)}
-                className="px-5 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-semibold text-[#5C4535]"
+                disabled={isCancelling}
+                className="px-5 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-semibold text-[#5C4535] disabled:opacity-50"
               >
                 Keep Consultation
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setIsCancelled(true);
-                  setShowCancelModal(false);
-                }}
-                className="px-5 py-2.5 rounded-xl bg-red-700 text-white text-xs font-semibold shadow-md"
+                onClick={handleConfirmCancel}
+                disabled={isCancelling}
+                className="px-5 py-2.5 rounded-xl bg-red-700 text-white text-xs font-semibold shadow-md disabled:opacity-60"
               >
-                Confirm Cancellation
+                {isCancelling ? 'Cancelling...' : 'Confirm Cancellation'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── View Details Modal ────────────────────────────────────────────── */}
-      {showDetailsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
-          <div
-            className="w-full max-w-lg rounded-[28px] p-7 bg-[#ECE1D2] space-y-4"
-            style={{
-              boxShadow: '16px 16px 40px rgba(0,0,0,0.25), -8px -8px 24px #FFFFFF',
-            }}
-          >
-            <div className="flex items-center justify-between border-b border-[#D1BEA8]/80 pb-3">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#C58B3C]">
-                  Booking Reference #{currentAppointment.id.toUpperCase()}
-                </span>
-                <h3 className="font-cormorant text-xl font-bold text-[#23150F]">
-                  Consultation Docket Details
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowDetailsModal(false)}
-                className="text-[#5C4535] hover:text-[#23150F] font-bold p-1"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-[#3E2A1E]">
-              <div className="p-3.5 rounded-xl bg-[#DFC5A4]/50 space-y-1">
-                <p className="font-bold text-[#23150F]">Assigned Counsel:</p>
-                <p>{currentAppointment.lawyerName} (IBP {currentAppointment.ibpChapter})</p>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-[#DFC5A4]/50 space-y-1">
-                <p className="font-bold text-[#23150F]">Scheduled Timing:</p>
-                <p>{currentAppointment.dateStr} • {currentAppointment.timeSlot}</p>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-[#DFC5A4]/50 space-y-1">
-                <p className="font-bold text-[#23150F]">Subject & Intake Facts:</p>
-                <p>{currentAppointment.caseTitle}</p>
-                <p className="text-[11px] text-[#5C4535] mt-1">{currentAppointment.caseDescription}</p>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-[#DFC5A4]/50 space-y-1">
-                <p className="font-bold text-[#23150F]">Attached Privilege Files:</p>
-                <p className="text-[11px] text-[#7D6855]">No extra files attached to this session.</p>
-              </div>
-            </div>
-
-            <div className="pt-2 text-right">
-              <button
-                type="button"
-                onClick={() => setShowDetailsModal(false)}
-                className="px-6 py-2.5 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-semibold"
-              >
-                Close Details
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* ─── View Details Modal (pending-nvonfirmed / payment / confirmed-and-paid designs) ─── */}
+      {showDetailsModal && currentAppointment && (
+        <ConsultationDetailsModal {...buildDetailsProps(currentAppointment)} />
       )}
 
       {/* ─── Join Meet Preview Modal ────────────────────────────────────────── */}
-      {showMeetModal && (
+      {showMeetModal && currentAppointment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
           <div
             className="w-full max-w-lg rounded-[28px] p-7 bg-[#23150F] text-[#ded7cb] space-y-5"
@@ -683,7 +804,11 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
                 <button
                   type="button"
                   onClick={() => {
-                    alert('Connecting to attorney video conference room...');
+                    if (currentAppointment.meetingLink) {
+                      window.open(currentAppointment.meetingLink, '_blank', 'noopener,noreferrer');
+                    } else {
+                      alert('Your attorney has not shared the Google Meet link yet. It will appear here once available.');
+                    }
                     setShowMeetModal(false);
                   }}
                   className="px-6 py-2.5 rounded-xl bg-[#D49E56] hover:bg-[#C58B3C] text-[#23150F] text-xs font-bold shadow-lg"
