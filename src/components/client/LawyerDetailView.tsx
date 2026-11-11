@@ -12,6 +12,56 @@ import {
   createDocumentFolderAction,
   uploadDocumentFileAction,
 } from '@/app/actions/consultationActions';
+import type {
+  ClientConsultation,
+  DocumentFileItem,
+  DocumentFolderItem,
+} from '@/app/actions/consultationActions';
+import { ConsultationSummaryModal, clientConsultationToSummary } from './ConsultationSummaryModal';
+
+/** A My Documents file attached to the booking (shared with the lawyer by document ID). */
+interface BookingAttachment {
+  id: string;
+  name: string;
+  size: string;
+}
+
+interface BookingDraft {
+  year: number;
+  month: number;
+  day: number;
+  timeSlot: string;
+  communicationMode: 'video' | 'audio';
+  subject: string;
+  description: string;
+  attachments: BookingAttachment[];
+  agreedToTerms: boolean;
+  savedAt: string;
+}
+
+const DEFAULT_TIME_SLOT = '2:00 PM - 3:00 PM • PST, GMT+8';
+const bookingDraftKey = (lawyerId: string) => `justicia_booking_draft_${lawyerId}`;
+
+/** Parses "2:00 PM - 3:00 PM • …" into minutes-from-midnight. */
+function parseSlotMinutes(slot: string): { start: number; end: number } | null {
+  const matches = [...slot.matchAll(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/gi)];
+  if (matches.length === 0) return null;
+  const toMin = (m: RegExpMatchArray) => {
+    let h = Number(m[1]) % 12;
+    if (m[3].toUpperCase() === 'PM') h += 12;
+    return h * 60 + (m[2] ? Number(m[2]) : 0);
+  };
+  const start = toMin(matches[0]);
+  const end = matches[1] ? toMin(matches[1]) : start + 60;
+  return { start, end: end > start ? end : start + 60 };
+}
+
+function slotsOverlap(a: string, b: string): boolean {
+  if (a === b) return true;
+  const ra = parseSlotMinutes(a);
+  const rb = parseSlotMinutes(b);
+  return !!ra && !!rb && ra.start < rb.end && rb.start < ra.end;
+}
 
 export interface ReviewItem {
   id: number | string;
@@ -63,14 +113,6 @@ function ScalesIcon({ className = "w-3.5 h-3.5 text-[#C58B3C] shrink-0" }: { cla
   );
 }
 
-function CheckCircleIcon({ className = "w-5 h-5 text-emerald-700 shrink-0" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
-      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-    </svg>
-  );
-}
-
 function PaperclipIcon({ className = "w-3.5 h-3.5 text-[#C58B3C] shrink-0" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -114,15 +156,7 @@ export function LawyerDetailView({
     setSelectedDay(t.day);
   }, []);
 
-  useEffect(() => {
-    if (activeTab === 'booking') {
-      const t = getTodayPH();
-      setCurrentYear(t.year);
-      setCurrentMonth(t.month);
-      setSelectedDay(t.day);
-    }
-  }, [activeTab]);
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('2:00 PM - 3:00 PM • PST, GMT+8');
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>(DEFAULT_TIME_SLOT);
   const [communicationMode, setCommunicationMode] = useState<'video' | 'audio'>('video');
   const [subject, setSubject] = useState<string>('');
   const [description, setDescription] = useState<string>('');
@@ -130,7 +164,7 @@ export function LawyerDetailView({
 
   // ─── Documents Vault Picker Modal State ───
   const [showDocPickerModal, setShowDocPickerModal] = useState<boolean>(false);
-  const [docPickerFolders, setDocPickerFolders] = useState<any[]>([]);
+  const [docPickerFolders, setDocPickerFolders] = useState<DocumentFolderItem[]>([]);
   const [loadingDocPicker, setLoadingDocPicker] = useState<boolean>(false);
   const [selectedDocPickerFiles, setSelectedDocPickerFiles] = useState<string[]>([]);
   const [activePickerFolderId, setActivePickerFolderId] = useState<string | null>(null);
@@ -139,16 +173,49 @@ export function LawyerDetailView({
   const [isUploadingPickerFile, setIsUploadingPickerFile] = useState<boolean>(false);
   const [pickerNotice, setPickerNotice] = useState<string | null>(null);
   const pickerFileInputRef = useRef<HTMLInputElement>(null);
-  const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
-  const [bookingStatus, setBookingStatus] = useState<'idle' | 'saved' | 'submitted'>('idle');
+  const [attachedFiles, setAttachedFiles] = useState<BookingAttachment[]>([]);
+  const [bookingStatus, setBookingStatus] = useState<'idle' | 'saved'>('idle');
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<'gcash' | 'maya' | 'bank_transfer'>('gcash');
-  const [paymentReference, setPaymentReference] = useState<string>('');
-  const [payerName, setPayerName] = useState<string>('');
-  const [paymentReceiptName, setPaymentReceiptName] = useState<string>('');
-  const [paymentReceiptBase64, setPaymentReceiptBase64] = useState<string>('');
   const [submittingBooking, setSubmittingBooking] = useState<boolean>(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [submittedConsultation, setSubmittedConsultation] = useState<ClientConsultation | null>(null);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState<boolean>(false);
+  const [isDraggingFiles, setIsDraggingFiles] = useState<boolean>(false);
+  const draftRestoredRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (activeTab === 'booking') {
+      const t = getTodayPH();
+      setCurrentYear(t.year);
+      setCurrentMonth(t.month);
+      setSelectedDay(t.day);
+
+      // Restore a previously saved draft for this lawyer (once per visit).
+      if (draftRestoredRef.current) return;
+      draftRestoredRef.current = true;
+      let draft: BookingDraft | null = null;
+      try {
+        const raw = localStorage.getItem(bookingDraftKey(lawyer.userId));
+        draft = raw ? (JSON.parse(raw) as BookingDraft) : null;
+      } catch {
+        draft = null;
+      }
+      if (!draft) return;
+
+      const draftDate = Date.UTC(draft.year, draft.month, draft.day);
+      if (draftDate >= Date.UTC(t.year, t.month, t.day)) {
+        setCurrentYear(draft.year);
+        setCurrentMonth(draft.month);
+        setSelectedDay(draft.day);
+        if (draft.timeSlot) setSelectedTimeSlot(draft.timeSlot);
+      }
+      setCommunicationMode(draft.communicationMode === 'audio' ? 'audio' : 'video');
+      setSubject(draft.subject ?? '');
+      setDescription(draft.description ?? '');
+      setAttachedFiles(Array.isArray(draft.attachments) ? draft.attachments : []);
+      setAgreedToTerms(!!draft.agreedToTerms);
+    }
+  }, [activeTab, lawyer.userId]);
 
   const bioRef = useRef<HTMLDivElement>(null);
   const [showBioFade, setShowBioFade] = useState(false);
@@ -173,39 +240,67 @@ export function LawyerDetailView({
     setShowDocPickerModal(true);
     setLoadingDocPicker(true);
     setPickerNotice(null);
+    // Pre-select files already attached to this booking.
+    setSelectedDocPickerFiles(attachedFiles.map((f) => f.id));
     try {
       const data = await getUserDocumentsDataAction('client');
-      let combined = Array.isArray(data) ? [...data] : [];
-
-      try {
-        const custom = localStorage.getItem('justicia_client_custom_folders');
-        if (custom) {
-          const parsed = JSON.parse(custom);
-          if (Array.isArray(parsed)) {
-            const existingIds = new Set(combined.map((f: any) => f.id));
-            const extra = parsed.filter((f: any) => !existingIds.has(f.id));
-            combined = [...extra, ...combined];
-          }
-        }
-      } catch {
-        // ignore
-      }
-
-      setDocPickerFolders(combined);
-      if (combined.length > 0) {
-        setActivePickerFolderId(combined[0].id);
+      const folders = Array.isArray(data) ? data : [];
+      setDocPickerFolders(folders);
+      if (folders.length > 0) {
+        setActivePickerFolderId(folders[0].id);
       }
     } catch (err) {
       console.error('Error fetching documents for picker:', err);
+      setPickerNotice('We could not load My Documents. Please try again.');
     } finally {
       setLoadingDocPicker(false);
     }
   };
 
-  const handleToggleSelectDoc = (fileName: string) => {
+  const handleToggleSelectDoc = (fileId: string) => {
     setSelectedDocPickerFiles((prev) =>
-      prev.includes(fileName) ? prev.filter((n) => n !== fileName) : [...prev, fileName]
+      prev.includes(fileId) ? prev.filter((id) => id !== fileId) : [...prev, fileId]
     );
+  };
+
+  /** Uploads files to My Documents and returns the stored document records. */
+  const uploadToMyDocuments = async (
+    files: File[],
+    folderId: string | null
+  ): Promise<{ uploaded: DocumentFileItem[]; errors: string[] }> => {
+    const uploaded: DocumentFileItem[] = [];
+    const errors: string[] = [];
+    for (const file of files) {
+      const fd = new FormData();
+      fd.append('file', file);
+      if (folderId) fd.append('folderId', folderId);
+      const res = await uploadDocumentFileAction(fd);
+      if ('file' in res && res.file) uploaded.push(res.file);
+      else errors.push(('error' in res && res.error) || `Failed to upload "${file.name}".`);
+    }
+    return { uploaded, errors };
+  };
+
+  /** Dropzone / browse: uploads to My Documents, then attaches to this booking. */
+  const handleAttachLocalFiles = async (fileList: FileList | File[] | null) => {
+    const files = fileList ? Array.from(fileList) : [];
+    if (files.length === 0 || isUploadingAttachment) return;
+    setIsUploadingAttachment(true);
+    setBookingError(null);
+    try {
+      const { uploaded, errors } = await uploadToMyDocuments(files, null);
+      if (uploaded.length > 0) {
+        setAttachedFiles((prev) => {
+          const seen = new Set(prev.map((f) => f.id));
+          return [...prev, ...uploaded.filter((f) => !seen.has(f.id)).map(({ id, name, size }) => ({ id, name, size }))];
+        });
+      }
+      if (errors.length > 0) setBookingError(errors.join(' '));
+    } catch {
+      setBookingError('We could not upload your files. Please try again.');
+    } finally {
+      setIsUploadingAttachment(false);
+    }
   };
 
   const handleCreatePickerFolder = async (e: React.FormEvent) => {
@@ -214,23 +309,14 @@ export function LawyerDetailView({
     setIsCreatingPickerFolder(true);
     setPickerNotice(null);
     try {
-      const res = await createDocumentFolderAction(pickerNewFolderName.trim(), 'client');
-      const newFolder = (res && 'folder' in res && res.folder) ? res.folder : {
-        id: `fld-${Date.now()}`,
-        name: pickerNewFolderName.trim(),
-        isRecentlyCreated: true,
-        files: [],
-      };
+      const res = await createDocumentFolderAction(pickerNewFolderName.trim());
+      if (!('folder' in res) || !res.folder) {
+        setPickerNotice(('error' in res && res.error) || 'Failed to create folder');
+        return;
+      }
+      const newFolder = res.folder;
       setDocPickerFolders((prev) => [newFolder, ...prev]);
       setActivePickerFolderId(newFolder.id);
-
-      try {
-        const custom = localStorage.getItem('justicia_client_custom_folders');
-        const parsed = custom ? JSON.parse(custom) : [];
-        localStorage.setItem('justicia_client_custom_folders', JSON.stringify([newFolder, ...parsed]));
-      } catch {
-        // ignore
-      }
 
       setPickerNewFolderName('');
       setPickerNotice(`Created folder "${newFolder.name}" successfully.`);
@@ -242,71 +328,65 @@ export function LawyerDetailView({
   };
 
   const handlePickerFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file || isUploadingPickerFile) return;
 
     setIsUploadingPickerFile(true);
     setPickerNotice(null);
 
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    let fType = 'pdf';
-    if (ext === 'doc' || ext === 'docx') fType = 'doc';
-    else if (ext === 'xls' || ext === 'xlsx') fType = 'excel';
-    else if (ext === 'csv') fType = 'csv';
-    else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') fType = 'png';
-
-    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-    const sizeStr = file.size > 1024 * 1024 ? `${sizeMb} MB` : `${Math.round(file.size / 1024)} KB`;
-
-    const targetFolderId = activePickerFolderId || (docPickerFolders[0]?.id || null);
+    // Only user-created folders are real storage folders; anything else goes to the vault root.
+    const activeFolder = docPickerFolders.find((f) => f.id === activePickerFolderId);
+    const targetFolderId =
+      activeFolder && activeFolder.kind === 'owned' && activeFolder.id !== 'uploaded-records'
+        ? activeFolder.id
+        : null;
 
     try {
-      const res = await uploadDocumentFileAction(targetFolderId, file.name, fType, sizeStr);
-      const newFileItem = (res && 'file' in res && res.file) ? res.file : {
-        id: `file-${Date.now()}`,
-        name: file.name,
-        size: sizeStr,
-        type: fType,
-        updatedAt: 'Just now',
-      };
+      const { uploaded, errors } = await uploadToMyDocuments([file], targetFolderId);
+      const newFileItem = uploaded[0];
+      if (!newFileItem) {
+        setPickerNotice(errors[0] || 'Failed to upload document');
+        return;
+      }
 
       setDocPickerFolders((prev) => {
-        let matched = false;
-        const updated = prev.map((f) => {
-          if (f.id === targetFolderId || (!targetFolderId && f.name.includes('Vault'))) {
-            matched = true;
-            return { ...f, files: [newFileItem, ...f.files] };
-          }
-          return f;
-        });
-        if (!matched) {
-          if (updated.length > 0) {
-            updated[0] = { ...updated[0], files: [newFileItem, ...updated[0].files] };
-          } else {
-            updated.push({
-              id: 'uploaded-records',
-              name: 'Client Vault & Uploaded Records',
-              isRecentlyCreated: false,
-              files: [newFileItem],
-            });
-          }
+        const destinationId = targetFolderId ?? 'uploaded-records';
+        if (prev.some((f) => f.id === destinationId)) {
+          return prev.map((f) => (f.id === destinationId ? { ...f, files: [newFileItem, ...f.files] } : f));
         }
-        return updated;
+        return [
+          { id: 'uploaded-records', name: 'Client Vault & Uploaded Records', kind: 'owned', isRecentlyCreated: false, files: [newFileItem] },
+          ...prev,
+        ];
       });
+      if (!targetFolderId) setActivePickerFolderId('uploaded-records');
 
       // Auto-select the newly uploaded file
-      setSelectedDocPickerFiles((prev) => Array.from(new Set([...prev, file.name])));
-      setPickerNotice(`Uploaded "${file.name}" and added to selection.`);
-    } catch (err: any) {
-      setPickerNotice(err?.message || 'Failed to upload document');
+      setSelectedDocPickerFiles((prev) => Array.from(new Set([...prev, newFileItem.id])));
+      setPickerNotice(`Uploaded "${newFileItem.name}" to My Documents and added it to your selection.`);
+    } catch {
+      setPickerNotice('Failed to upload document');
     } finally {
       setIsUploadingPickerFile(false);
-      if (e.target) e.target.value = '';
+      input.value = '';
     }
   };
 
   const handleConfirmDocPicker = () => {
-    setAttachedFiles((prev) => Array.from(new Set([...prev, ...selectedDocPickerFiles])));
+    const allFiles = new Map<string, DocumentFileItem>();
+    docPickerFolders.forEach((folder) => folder.files.forEach((f) => allFiles.set(f.id, f)));
+    setAttachedFiles((prev) => {
+      const keep = prev.filter((f) => selectedDocPickerFiles.includes(f.id) || !allFiles.has(f.id));
+      const seen = new Set(keep.map((f) => f.id));
+      const added = selectedDocPickerFiles
+        .filter((id) => !seen.has(id) && allFiles.has(id))
+        .map((id) => {
+          const f = allFiles.get(id)!;
+          return { id: f.id, name: f.name, size: f.size };
+        });
+      return [...keep, ...added];
+    });
     setSelectedDocPickerFiles([]);
     setShowDocPickerModal(false);
   };
@@ -456,17 +536,27 @@ export function LawyerDetailView({
 
 
   // Fetch booked slots for the selected day to prevent duplicate appointments
+  const [slotsRefreshKey, setSlotsRefreshKey] = useState<number>(0);
+  const isSlotBooked = (slot: string) => bookedSlots.some((booked) => slotsOverlap(booked, slot));
+
   useEffect(() => {
     if (!lawyer.userId) return;
+    let stale = false;
     const dateStr = `${monthNames[currentMonth]} ${selectedDay}, ${currentYear}`;
     getBookedSlotsForLawyer(lawyer.userId, dateStr).then((slots) => {
-      setBookedSlots(slots || []);
-      if (slots && slots.includes(selectedTimeSlot)) {
-        const available = timeSlots.find((s) => !slots.includes(s));
-        if (available) setSelectedTimeSlot(available);
-      }
+      if (stale) return;
+      const booked = slots || [];
+      setBookedSlots(booked);
+      setSelectedTimeSlot((current) => {
+        if (!booked.some((b) => slotsOverlap(b, current))) return current;
+        return timeSlots.find((s) => !booked.some((b) => slotsOverlap(b, s))) ?? current;
+      });
     });
-  }, [lawyer.userId, selectedDay, currentMonth, currentYear]);
+    return () => {
+      stale = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lawyer.userId, selectedDay, currentMonth, currentYear, slotsRefreshKey]);
 
   // Fetch live reviews from database if available
   useEffect(() => {
@@ -534,7 +624,6 @@ export function LawyerDetailView({
 
   const selectedMonthName = monthNames[currentMonth];
   const selectedMonthShort = monthShortNames[currentMonth];
-  const formattedDateStr = `${selectedMonthName} ${selectedDay}, ${currentYear}`;
   const clampDay = (year: number, month: number) =>
     setSelectedDay((d) => Math.min(d, new Date(year, month + 1, 0).getDate()));
 
@@ -570,147 +659,97 @@ export function LawyerDetailView({
     '4:00 PM - 5:00 PM • PST, GMT+8',
   ];
 
-  const handleClearInputs = () => {
+  const resetBookingForm = () => {
+    const t = getTodayPH();
+    setCurrentYear(t.year);
+    setCurrentMonth(t.month);
+    setSelectedDay(t.day);
+    setSelectedTimeSlot(DEFAULT_TIME_SLOT);
+    setCommunicationMode('video');
     setSubject('');
     setDescription('');
     setAttachedFiles([]);
     setAgreedToTerms(false);
+    setBookingError(null);
+    try {
+      localStorage.removeItem(bookingDraftKey(lawyer.userId));
+    } catch {
+      // storage unavailable — nothing to clear
+    }
+  };
+
+  const handleClearInputs = () => {
+    resetBookingForm();
     setBookingStatus('idle');
   };
 
   const handleSaveDraft = () => {
-    setBookingStatus('saved');
-    setTimeout(() => setBookingStatus('idle'), 4000);
-  };
-
-  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPaymentReceiptName(file.name);
-
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxDim = 800;
-          let width = img.width;
-          let height = img.height;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            const compressed = canvas.toDataURL('image/jpeg', 0.7);
-            setPaymentReceiptBase64(compressed);
-          } else {
-            setPaymentReceiptBase64(event.target?.result as string);
-          }
-        };
-        img.src = event.target?.result as string;
-      };
-      reader.readAsDataURL(file);
-    } else {
-      setPaymentReceiptBase64('');
+    const draft: BookingDraft = {
+      year: currentYear,
+      month: currentMonth,
+      day: selectedDay,
+      timeSlot: selectedTimeSlot,
+      communicationMode,
+      subject,
+      description,
+      attachments: attachedFiles,
+      agreedToTerms,
+      savedAt: new Date().toISOString(),
+    };
+    try {
+      localStorage.setItem(bookingDraftKey(lawyer.userId), JSON.stringify(draft));
+      setBookingError(null);
+      setBookingStatus('saved');
+      setTimeout(() => setBookingStatus((s) => (s === 'saved' ? 'idle' : s)), 4000);
+    } catch {
+      setBookingError('Your browser blocked saving the draft. Please check your storage settings and try again.');
     }
   };
 
   const handleSubmitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingBooking) return;
     setBookingError(null);
 
-    if (!subject.trim()) {
-      setBookingError('Please enter a consultation subject.');
+    if (isUploadingAttachment) {
+      setBookingError('Please wait for your files to finish uploading.');
       return;
     }
-    if (!paymentReference.trim()) {
-      setBookingError('Please enter your payment reference number / transaction hash.');
+    if (!subject.trim()) {
+      setBookingError('Please enter a consultation subject.');
       return;
     }
     if (!agreedToTerms) {
       setBookingError('Please agree to the attorney-client privilege review terms.');
       return;
     }
+    if (isSlotBooked(selectedTimeSlot)) {
+      setBookingError('This time slot is already booked. Please choose another time slot.');
+      return;
+    }
 
     setSubmittingBooking(true);
-    const dateStr = `${selectedMonthName} ${selectedDay}, ${currentYear}`;
-
     try {
       const res = await bookConsultationAction({
         lawyerId: lawyer.userId,
-        lawyerName: lawyer.fullName,
-        day: selectedDay,
-        month: selectedMonthName,
-        year: currentYear,
-        dateStr,
+        dateStr: `${selectedMonthName} ${selectedDay}, ${currentYear}`,
         timeSlot: selectedTimeSlot,
         communicationMode,
         subject,
         description,
-        attachedFiles: attachedFiles.map((name) => ({ name })),
-        payment: {
-          method: paymentMethod,
-          referenceNumber: paymentReference,
-          payerName: payerName || 'Verified Client',
-          amount: lawyer.feeStandard60min ?? 1500,
-          receiptFileName: paymentReceiptName,
-          receiptBase64: paymentReceiptBase64,
-        },
+        documentIds: attachedFiles.map((f) => f.id),
       });
 
-      if (res?.error) {
-        setBookingError(res.error);
-        setSubmittingBooking(false);
+      if (!('consultation' in res) || !res.consultation) {
+        setBookingError(('error' in res && res.error) || 'Error submitting booking');
+        setSlotsRefreshKey((k) => k + 1);
         return;
       }
 
-      // Automatically create a folder in client's MyDocuments
-      const folderId = `consultation-${Date.now()}`;
-      const newFolder = {
-        id: folderId,
-        name: subject || 'Consultation Intake Documents',
-        isRecentlyCreated: true,
-        files: [
-          ...attachedFiles.map((f, i) => ({
-            id: `f-${Date.now()}-${i}`,
-            name: f,
-            size: '1.8 MB',
-            type: 'pdf' as const,
-            updatedAt: 'Today',
-          })),
-          ...(paymentReceiptName
-            ? [
-              {
-                id: `f-receipt-${Date.now()}`,
-                name: paymentReceiptName || `Payment_Receipt_${paymentReference}.png`,
-                size: '520 KB',
-                type: 'png' as const,
-                updatedAt: 'Today',
-              },
-            ]
-            : []),
-        ],
-      };
-
-      try {
-        const existing = JSON.parse(localStorage.getItem('justicia_client_custom_folders') || '[]');
-        localStorage.setItem('justicia_client_custom_folders', JSON.stringify([newFolder, ...existing]));
-      } catch {
-        // ignore
-      }
-
-      setBookingStatus('submitted');
-      setBookedSlots((prev) => Array.from(new Set([...prev, selectedTimeSlot])));
+      setSubmittedConsultation(res.consultation);
+      resetBookingForm();
+      setBookingStatus('idle');
+      setSlotsRefreshKey((k) => k + 1);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error submitting booking';
       setBookingError(msg);
@@ -1420,46 +1459,6 @@ export function LawyerDetailView({
             </div>
           )}
 
-          {bookingStatus === 'submitted' && (
-            <div className="p-6 rounded-3xl bg-emerald-100/95 border border-emerald-300 text-emerald-950 space-y-3">
-              <div className="flex items-center gap-2">
-                <CheckCircleIcon className="w-6 h-6 text-emerald-800" />
-                <h3 className="font-lora font-bold text-lg">Consultation Request Confirmed</h3>
-              </div>
-              <p className="text-xs sm:text-sm">
-                Your booking request for <strong>{lawyer.fullName}</strong> on <strong>{formattedDateStr} ({selectedTimeSlot})</strong> has been received under confidential attorney-client privilege.
-              </p>
-              <div className="flex items-center gap-4 pt-2">
-                <Link
-                  href="/client/consultations"
-                  className="px-5 py-2.5 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-semibold hover:bg-[#352219]"
-                >
-                  View My Consultations
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBookingStatus('idle');
-                    setBookingError(null);
-                    setPaymentReference('');
-                    setPaymentReceiptName('');
-                    setPaymentReceiptBase64('');
-                    const dateStr = `${selectedMonthName} ${selectedDay}, ${currentYear}`;
-                    getBookedSlotsForLawyer(lawyer.userId, dateStr).then((slots) => {
-                      const allSlots = Array.from(new Set([...(slots || []), selectedTimeSlot]));
-                      setBookedSlots(allSlots);
-                      const nextSlot = timeSlots.find((s) => !allSlots.includes(s));
-                      if (nextSlot) setSelectedTimeSlot(nextSlot);
-                    });
-                  }}
-                  className="text-xs text-[#5C4535] underline font-semibold hover:text-[#23150F] cursor-pointer"
-                >
-                  Book Another Session
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Calendar & Time Slots Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
             {/* Calendar Card (Left - 8 cols) */}
@@ -1581,7 +1580,7 @@ export function LawyerDetailView({
             >
               {timeSlots.map((slot) => {
                 const isSelected = selectedTimeSlot === slot;
-                const isBooked = bookedSlots.includes(slot);
+                const isBooked = isSlotBooked(slot);
                 return (
                   <button
                     key={slot}
@@ -1645,7 +1644,7 @@ export function LawyerDetailView({
                     </span>
                   </div>
                   <p className="text-[11px] sm:text-xs text-[#5C4535] leading-relaxed">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                    Meet your attorney face-to-face online through Google Meet. Once the attorney confirms your booking, a private Google Meet link will be sent to you and will appear in your Consultations tab. Join a few minutes early from a quiet, private place with a stable internet connection, test your camera and microphone, and keep your documents ready to share on screen.
                   </p>
                 </div>
               </div>
@@ -1675,7 +1674,7 @@ export function LawyerDetailView({
                     <span className="text-xs sm:text-sm font-bold text-[#23150F]">Audio Call</span>
                   </div>
                   <p className="text-[11px] sm:text-xs text-[#5C4535] leading-relaxed">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                    Speak with your attorney by voice only through Google Meet. Once the attorney confirms your booking, a private Google Meet link will be sent to you and will appear in your Consultations tab. Join a few minutes early from a quiet, private place, test your microphone and speakers, and keep your camera off for the entire call.
                   </p>
                 </div>
               </div>
@@ -1728,28 +1727,43 @@ export function LawyerDetailView({
               <div className="space-y-2">
                 <label className="block text-xs font-semibold text-[#5C4535]">File Attachments</label>
                 <label
-                  className="w-full py-9 px-6 rounded-2xl bg-[#E4D5C2] flex flex-col items-center justify-center text-center cursor-pointer hover:bg-[#DECDBA] transition-all block relative"
+                  className={`w-full py-9 px-6 rounded-2xl flex flex-col items-center justify-center text-center transition-all block relative ${isDraggingFiles ? 'bg-[#DECDBA]' : 'bg-[#E4D5C2] hover:bg-[#DECDBA]'
+                    } ${isUploadingAttachment ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
                   style={{
                     boxShadow:
                       'inset 3px 3px 6px rgba(165, 140, 115, 0.45), inset -3px -3px 6px rgba(255, 255, 255, 0.85)',
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (!isDraggingFiles) setIsDraggingFiles(true);
+                  }}
+                  onDragLeave={() => setIsDraggingFiles(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingFiles(false);
+                    handleAttachLocalFiles(e.dataTransfer.files);
                   }}
                 >
                   <input
                     type="file"
                     multiple
                     className="hidden"
+                    disabled={isUploadingAttachment}
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.txt,.mp4"
                     onChange={(e) => {
-                      const files = e.target.files;
-                      if (!files || files.length === 0) return;
-                      const fileNames = Array.from(files).map((f) => f.name);
-                      setAttachedFiles((prev) => Array.from(new Set([...prev, ...fileNames])));
+                      const input = e.target;
+                      handleAttachLocalFiles(input.files ? Array.from(input.files) : null).finally(() => {
+                        input.value = '';
+                      });
                     }}
                   />
                   <svg className="w-9 h-9 text-[#7D6855] mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
                   <span className="text-xs text-[#5C4535] font-semibold mt-2.5 block">
-                    Click to browse files or Drag & Drop case documents
+                    {isUploadingAttachment
+                      ? 'Uploading to My Documents...'
+                      : 'Click to browse files or Drag & Drop case documents'}
                   </span>
                   <span className="text-[10px] text-[#8C7A6B] mt-0.5 block">
                     Attach contracts, demand letters, or evidence (PDF, DOCX, XLSX, Images)
@@ -1759,12 +1773,13 @@ export function LawyerDetailView({
                 {/* Attached Files List */}
                 {attachedFiles.length > 0 && (
                   <div className="space-y-1.5 pt-1">
-                    {attachedFiles.map((file, idx) => (
-                      <div key={idx} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#E5D8CB]/60 text-xs text-[#23150F]">
-                        <div className="flex items-center gap-1.5 truncate"><PaperclipIcon className="w-3.5 h-3.5 text-[#C58B3C] shrink-0" /><span className="truncate">{file}</span></div>
+                    {attachedFiles.map((file) => (
+                      <div key={file.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#E5D8CB]/60 text-xs text-[#23150F]">
+                        <div className="flex items-center gap-1.5 truncate"><PaperclipIcon className="w-3.5 h-3.5 text-[#C58B3C] shrink-0" /><span className="truncate">{file.name}</span><span className="text-[10px] text-[#7D6855] shrink-0">{file.size}</span></div>
                         <button
                           type="button"
-                          onClick={() => setAttachedFiles(attachedFiles.filter((_, i) => i !== idx))}
+                          aria-label={`Remove ${file.name}`}
+                          onClick={() => setAttachedFiles((prev) => prev.filter((f) => f.id !== file.id))}
                           className="text-red-700 hover:text-red-900 font-bold ml-2"
                         >
                           ✕
@@ -1785,127 +1800,6 @@ export function LawyerDetailView({
                 >
                   Share Uploaded Files from your Documents
                 </button>
-              </div>
-
-              {/* Payment & Proof of Payment Section */}
-              <div className="space-y-4 pt-3 border-t border-[#D1BEA8]/60">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <h3 className="font-lora text-xl font-bold text-[#23150F]">
-                      Consultation Retainer & Proof of Payment
-                    </h3>
-                    <p className="text-[11px] text-[#5C4535]">
-                      Upload your payment confirmation so counsel can verify and accept your appointment.
-                    </p>
-                  </div>
-                  <div className="px-3.5 py-1.5 rounded-full bg-[#E5D8CB] text-xs font-bold text-[#23150F] self-start sm:self-auto shadow-xs">
-                    ₱{(lawyer.feeStandard60min ?? 1500).toLocaleString()}.00 (60-Min Session)
-                  </div>
-                </div>
-
-                {/* Channel Selector */}
-                <div className="grid grid-cols-3 gap-2">
-                  {(['gcash', 'maya', 'bank_transfer'] as const).map((method) => {
-                    const label = method === 'gcash' ? 'GCash' : method === 'maya' ? 'Maya' : 'Bank Transfer';
-                    const isSelected = paymentMethod === method;
-                    return (
-                      <button
-                        key={method}
-                        type="button"
-                        onClick={() => setPaymentMethod(method)}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all ${isSelected
-                          ? 'bg-[#23150F] text-[#ded7cb] shadow-sm'
-                          : 'bg-[#E5D8CB] text-[#5C4535] hover:bg-[#DECDBA]'
-                          }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Account Details Box */}
-                <div className="p-3.5 rounded-2xl bg-[#E4D5C2]/80 border border-[#D5C2AB] text-xs text-[#3E2A1E] space-y-1">
-                  <div className="font-bold text-[#23150F] flex items-center justify-between">
-                    <span>
-                      {paymentMethod === 'gcash' && 'GCash Account:'}
-                      {paymentMethod === 'maya' && 'Maya Account:'}
-                      {paymentMethod === 'bank_transfer' && 'Bank Transmittal (BDO / BPI):'}
-                    </span>
-                    <span className="font-mono text-[#C58B3C]">
-                      {paymentMethod === 'gcash' && '0917-889-1234'}
-                      {paymentMethod === 'maya' && '0918-992-5678'}
-                      {paymentMethod === 'bank_transfer' && 'Acct: 0049-2819-3829'}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-[#5C4535]">
-                    Account Name: <strong>{lawyer.fullName}</strong> • Reference format: <code>JUSTICIA-{selectedDay}</code>
-                  </p>
-                </div>
-
-                {/* Payment Form Fields Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-semibold text-[#5C4535]">
-                      Reference / Transaction Number: <span className="text-red-700">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={paymentReference}
-                      onChange={(e) => setPaymentReference(e.target.value)}
-                      placeholder="e.g. 10023491823"
-                      className="w-full rounded-xl py-2 px-3 bg-[#E4D5C2] text-xs text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-semibold text-[#5C4535]">
-                      Sender / Payer Full Name:
-                    </label>
-                    <input
-                      type="text"
-                      value={payerName}
-                      onChange={(e) => setPayerName(e.target.value)}
-                      placeholder="e.g. Clyde Justine Rosal"
-                      className="w-full rounded-xl py-2 px-3 bg-[#E4D5C2] text-xs text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Upload Receipt File Input */}
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-semibold text-[#5C4535]">
-                    Proof of Payment (Screenshot Receipt / Deposit Slip):
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <label className="cursor-pointer px-4 py-2 rounded-xl bg-[#E5D8CB] hover:bg-[#D4B892] text-xs font-semibold text-[#23150F] transition shadow-xs">
-                      <span>Upload Receipt (PNG, JPG, PDF)</span>
-                      <input
-                        type="file"
-                        accept="image/*,.pdf"
-                        className="hidden"
-                        onChange={handleReceiptUpload}
-                      />
-                    </label>
-                    {paymentReceiptName ? (
-                      <span className="text-xs text-emerald-800 font-semibold truncate flex items-center gap-1">
-                        ✓ {paymentReceiptName}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPaymentReceiptName('');
-                            setPaymentReceiptBase64('');
-                          }}
-                          className="text-red-700 hover:text-red-900 ml-1 font-bold"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-[#7D6855]">No file chosen yet</span>
-                    )}
-                  </div>
-                </div>
               </div>
 
               {bookingError && (
@@ -2211,11 +2105,11 @@ export function LawyerDetailView({
                       </div>
 
                       {files.map((file: any) => {
-                        const isSelected = selectedDocPickerFiles.includes(file.name);
+                        const isSelected = selectedDocPickerFiles.includes(file.id);
                         return (
                           <div
                             key={file.id || file.name}
-                            onClick={() => handleToggleSelectDoc(file.name)}
+                            onClick={() => handleToggleSelectDoc(file.id)}
                             className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${isSelected
                               ? 'bg-[#E5D8CB] border-[#C58B3C] shadow-sm text-[#23150F]'
                               : 'bg-[#E8DDD0] border-[#D8C7B5] hover:bg-[#E2D4C3] text-[#34150F]'
@@ -2276,6 +2170,14 @@ export function LawyerDetailView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ─── Booking Submitted: Pending Confirmation Summary (design1) ─────── */}
+      {submittedConsultation && (
+        <ConsultationSummaryModal
+          data={clientConsultationToSummary(submittedConsultation)}
+          onClose={() => setSubmittedConsultation(null)}
+        />
       )}
     </div>
   );

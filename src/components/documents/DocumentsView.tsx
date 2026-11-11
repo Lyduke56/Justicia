@@ -55,12 +55,12 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const [newFolderName, setNewFolderName] = useState<string>('');
   const [newFileName, setNewFileName] = useState<string>('');
   const [newFileType, setNewFileType] = useState<DocumentItem['type']>('pdf');
-  const [newFileSize, setNewFileSize] = useState<string>('1.4 MB');
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
   const [isUploadingFile, setIsUploadingFile] = useState<boolean>(false);
   const [folderError, setFolderError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectedFileRef = useRef<File | null>(null);
   const navigationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
@@ -88,30 +88,19 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
     }
 
     setLoadingDocs(true);
-    getUserDocumentsDataAction(role).then((dbFolders: any) => {
-      let combined: FolderItem[] = [];
-      if (dbFolders && Array.isArray(dbFolders) && dbFolders.length > 0) {
-        combined = dbFolders;
-      }
+    // Folders and files are persisted in Supabase (documents table + storage).
+    // Drop the legacy browser-only folder cache so stale, unsaved folders no longer appear.
+    try {
+      localStorage.removeItem(customStorageKey);
+    } catch {
+      // ignore
+    }
 
-      // Also merge any instant local custom folders
-      try {
-        const custom = localStorage.getItem(customStorageKey);
-        if (custom) {
-          const parsed: FolderItem[] = JSON.parse(custom);
-          if (parsed && Array.isArray(parsed)) {
-            const existingIds = new Set(combined.map((f) => f.id));
-            const extra = parsed.filter((f) => !existingIds.has(f.id)).map((f) => ({ ...f, kind: 'owned' as const }));
-            combined = [...extra, ...combined];
-          }
-        }
-      } catch {
-        // ignore
-      }
-
-      setFolders(combined);
-      setLoadingDocs(false);
-    });
+    getUserDocumentsDataAction(role)
+      .then((dbFolders) => {
+        setFolders(Array.isArray(dbFolders) ? dbFolders : []);
+      })
+      .finally(() => setLoadingDocs(false));
   }, [role, storageKey, customStorageKey]);
 
   // Handle clicking on a folder:
@@ -169,31 +158,15 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
     setFolderError(null);
 
     try {
-      const res = await createDocumentFolderAction(newFolderName.trim(), role);
-      if (res && 'error' in res && res.error) {
-        setFolderError(res.error);
-        setIsCreatingFolder(false);
+      const res = await createDocumentFolderAction(newFolderName.trim());
+      if (!('folder' in res) || !res.folder) {
+        setFolderError(('error' in res && res.error) || 'Failed to create folder');
         return;
       }
 
-      const created: FolderItem = (res && 'folder' in res && res.folder) ? res.folder : {
-        id: `fld-${Date.now()}`,
-        name: newFolderName.trim(),
-        kind: 'owned',
-        isRecentlyCreated: true,
-        files: [],
-      };
-
+      const created: FolderItem = res.folder;
       setFolders((prev) => [created, ...prev]);
       if (role === 'lawyer') navigateLawyerDocuments('owned');
-
-      try {
-        const custom = localStorage.getItem(customStorageKey);
-        const parsed: FolderItem[] = custom ? JSON.parse(custom) : [];
-        localStorage.setItem(customStorageKey, JSON.stringify([created, ...parsed]));
-      } catch {
-        // ignore
-      }
 
       setNewFolderName('');
       setShowNewFolderModal(false);
@@ -208,9 +181,8 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    selectedFileRef.current = file;
     setNewFileName(file.name);
-    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-    setNewFileSize(file.size > 1024 * 1024 ? `${sizeMb} MB` : `${Math.round(file.size / 1024)} KB`);
 
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (ext === 'pdf') setNewFileType('pdf');
@@ -226,48 +198,54 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const handleUploadFile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFileName.trim() || isUploadingFile) return;
+
+    const file = selectedFileRef.current;
+    if (!file) {
+      setUploadError('Please choose a file from your device to upload.');
+      return;
+    }
+
     setIsUploadingFile(true);
     setUploadError(null);
 
-    const extension = '.' + (newFileType === 'doc' ? 'docx' : newFileType);
-    const fullName = newFileName.includes('.') ? newFileName : `${newFileName}${extension}`;
-    const targetFolderId = currentFolderId || (folders[0]?.id || null);
+    // Only user-created folders are real storage folders; anything else goes to the vault root.
+    const currentFolderItem = folders.find((f) => f.id === currentFolderId);
+    const targetFolderId =
+      currentFolderItem && currentFolderItem.kind === 'owned' && currentFolderItem.id !== 'uploaded-records'
+        ? currentFolderItem.id
+        : null;
 
     try {
-      const res = await uploadDocumentFileAction(targetFolderId, fullName, newFileType, newFileSize);
-      const newFile: DocumentItem = (res && 'file' in res && res.file) ? res.file : {
-        id: `file-${Date.now()}`,
-        name: fullName,
-        size: newFileSize,
-        type: newFileType,
-        updatedAt: 'Just now',
-      };
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('displayName', newFileName.trim());
+      if (targetFolderId) fd.append('folderId', targetFolderId);
+
+      const res = await uploadDocumentFileAction(fd);
+      if (!('file' in res) || !res.file) {
+        setUploadError(('error' in res && res.error) || 'Failed to upload document');
+        return;
+      }
+      const newFile: DocumentItem = res.file;
 
       setFolders((prev) => {
-        let matched = false;
-        const updated = prev.map((f) => {
-          if (f.id === targetFolderId || (!targetFolderId && f.name.includes('Vault'))) {
-            matched = true;
-            return { ...f, files: [newFile, ...f.files] };
-          }
-          return f;
-        });
-
-        if (!matched) {
-          if (updated.length > 0) {
-            updated[0] = { ...updated[0], files: [newFile, ...updated[0].files] };
-          } else {
-            updated.push({
-              id: 'uploaded-records',
-              name: 'Client Vault & Uploaded Records',
-              isRecentlyCreated: false,
-              files: [newFile],
-            });
-          }
+        const destinationId = targetFolderId ?? 'uploaded-records';
+        if (prev.some((f) => f.id === destinationId)) {
+          return prev.map((f) => (f.id === destinationId ? { ...f, files: [newFile, ...f.files] } : f));
         }
-        return updated;
+        return [
+          {
+            id: 'uploaded-records',
+            name: 'Client Vault & Uploaded Records',
+            kind: 'owned',
+            isRecentlyCreated: false,
+            files: [newFile],
+          },
+          ...prev,
+        ];
       });
 
+      selectedFileRef.current = null;
       setNewFileName('');
       setShowUploadFileModal(false);
     } catch (err: any) {
@@ -309,6 +287,8 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
           type="button"
           onClick={() => {
             if (currentFolder) {
+              selectedFileRef.current = null;
+              setNewFileName('');
               setShowUploadFileModal(true);
             } else {
               setShowNewFolderModal(true);
@@ -653,7 +633,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                   <div className="flex flex-col items-center justify-center p-3 pt-6">
                     <button
                       type="button"
-                      onClick={() => setShowUploadFileModal(true)}
+                      onClick={() => { selectedFileRef.current = null; setNewFileName(''); setShowUploadFileModal(true); }}
                       className="w-20 h-20 sm:w-22 sm:h-22 rounded-full flex items-center justify-center text-3xl font-light text-[#8C7A6A] hover:text-[#23150F] transition-all hover:scale-105"
                       style={{
                         backgroundColor: '#ECE1D2',
