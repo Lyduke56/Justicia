@@ -81,8 +81,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 2800,
     barPasserYear: 2017,
     isFavorite: false,
-    rating: 4.9,
-    reviewCount: 53,
   },
   {
     userId: '22222222-2222-4222-8222-000000000002',
@@ -100,8 +98,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 4000,
     barPasserYear: 2010,
     isFavorite: false,
-    rating: 4.92,
-    reviewCount: 54,
   },
   {
     userId: '22222222-2222-4222-8222-000000000003',
@@ -119,8 +115,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 4000,
     barPasserYear: 2013,
     isFavorite: false,
-    rating: 4.88,
-    reviewCount: 42,
   },
   {
     userId: '22222222-2222-4222-8222-000000000004',
@@ -138,8 +132,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 5500,
     barPasserYear: 2011,
     isFavorite: false,
-    rating: 4.94,
-    reviewCount: 61,
   },
   {
     userId: '22222222-2222-4222-8222-000000000005',
@@ -157,8 +149,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 4000,
     barPasserYear: 2015,
     isFavorite: false,
-    rating: 4.85,
-    reviewCount: 37,
   },
   {
     userId: '22222222-2222-4222-8222-000000000006',
@@ -176,8 +166,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 3500,
     barPasserYear: 2017,
     isFavorite: false,
-    rating: 4.82,
-    reviewCount: 29,
   },
   {
     userId: '22222222-2222-4222-8222-000000000007',
@@ -195,8 +183,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 3200,
     barPasserYear: 2018,
     isFavorite: false,
-    rating: 4.89,
-    reviewCount: 38,
   },
   {
     userId: '22222222-2222-4222-8222-000000000008',
@@ -214,8 +200,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 4500,
     barPasserYear: 2012,
     isFavorite: false,
-    rating: 4.91,
-    reviewCount: 45,
   },
   {
     userId: '22222222-2222-4222-8222-000000000009',
@@ -233,8 +217,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 4500,
     barPasserYear: 2008,
     isFavorite: false,
-    rating: 4.95,
-    reviewCount: 68,
   },
   {
     userId: '22222222-2222-4222-8222-000000000010',
@@ -252,8 +234,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 3800,
     barPasserYear: 2016,
     isFavorite: false,
-    rating: 4.87,
-    reviewCount: 31,
   },
   {
     userId: '22222222-2222-4222-8222-000000000011',
@@ -271,8 +251,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 5000,
     barPasserYear: 2009,
     isFavorite: false,
-    rating: 4.93,
-    reviewCount: 49,
   },
   {
     userId: '22222222-2222-4222-8222-000000000012',
@@ -290,8 +268,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 3000,
     barPasserYear: 2019,
     isFavorite: false,
-    rating: 4.86,
-    reviewCount: 26,
   },
   {
     userId: '22222222-2222-4222-8222-000000000013',
@@ -309,8 +285,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 4400,
     barPasserYear: 2014,
     isFavorite: false,
-    rating: 4.9,
-    reviewCount: 39,
   },
   {
     userId: '22222222-2222-4222-8222-000000000014',
@@ -328,8 +302,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 5200,
     barPasserYear: 2015,
     isFavorite: false,
-    rating: 4.92,
-    reviewCount: 44,
   },
   {
     userId: '22222222-2222-4222-8222-000000000015',
@@ -347,8 +319,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 3800,
     barPasserYear: 2011,
     isFavorite: false,
-    rating: 4.88,
-    reviewCount: 35,
   },
   {
     userId: '22222222-2222-4222-8222-000000000016',
@@ -366,8 +336,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 2700,
     barPasserYear: 2020,
     isFavorite: false,
-    rating: 4.84,
-    reviewCount: 22,
   },
   {
     userId: '22222222-2222-4222-8222-000000000017',
@@ -385,8 +353,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 4200,
     barPasserYear: 2013,
     isFavorite: false,
-    rating: 4.89,
-    reviewCount: 33,
   },
   {
     userId: '22222222-2222-4222-8222-000000000018',
@@ -404,8 +370,6 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
     feeExtended120min: 4000,
     barPasserYear: 2017,
     isFavorite: false,
-    rating: 4.91,
-    reviewCount: 40,
   },
 ];
 
