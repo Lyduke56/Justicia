@@ -19,7 +19,7 @@
   width: 100%;
   max-width: 1196px;
   margin: 0 auto;
-  padding: 48px 64px 80px 66px;
+  padding: 48px 70px 80px 66px;
   color: var(--ink);
   font-family: var(--font-lora), Georgia, serif;
 }
@@ -102,6 +102,8 @@
 }
 
 .headingPill {
+  position: relative;
+  left: -1px;
   display: flex;
   align-items: center;
   width: 310px;
@@ -161,22 +163,19 @@
   cursor: default;
 }
 
-.chevron {
+.filterArrow {
   position: absolute;
-  top: 12px;
-  right: 14px;
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 5px solid var(--ink);
+  top: 4px;
+  right: 6px;
   pointer-events: none;
 }
 
 .chartCard {
+  width: 100%;
   height: 316px;
+  margin-left: -1px;
   margin-top: 36px;
-  border-radius: 16px;
+  border-radius: 20px;
   background: var(--paper);
   box-shadow: var(--recessed);
 }
@@ -185,7 +184,7 @@
   width: 100%;
   height: 100%;
   overflow-x: auto;
-  padding: 30px 37px;
+  padding: 30px 38px;
 }
 
 .chartCanvas {
@@ -213,11 +212,14 @@
   text-align: right;
 }
 
-.gridRow i {
+.gridRow img {
   display: block;
-  width: 936px;
-  height: 1px;
-  background: #c8c7c5;
+  flex: none;
+}
+
+.chartTick {
+  position: absolute;
+  top: 240px;
 }
 
 .chartLine {
@@ -229,10 +231,6 @@
 .marker {
   position: absolute;
   transform: translate(-1px, -1px);
-}
-
-.selectedMarker {
-  filter: drop-shadow(0 0 2px #d39758);
 }
 
 .monthLabel {
@@ -263,7 +261,7 @@
   height: 66px;
   margin-top: 54px;
   padding: 0 30px 0 17px;
-  border-radius: 16px;
+  border-radius: 20px;
   background: var(--paper);
   box-shadow: var(--raised);
 }
@@ -328,30 +326,25 @@
   margin-bottom: 55px;
 }
 
-.payoutFilters {
-  min-height: 159px;
-  padding: 22px 29px;
-  border-radius: 16px;
+.inquiryPanel {
+  width: 100%;
+  height: 159px;
+  margin-left: -1px;
+  padding: 29px;
+  border-radius: 20px;
   background: var(--paper);
   box-shadow: var(--raised);
 }
 
-.payoutFilters h2 {
-  margin: 0 0 17px;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.32px;
-}
-
-.payoutTabs {
-  display: flex;
-  flex-wrap: wrap;
+.inquiryTabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 20px;
 }
 
-.payoutTabs button {
-  min-width: 184px;
+.inquiryTabs button {
   height: 33px;
+  padding: 0 5px;
   border: 0;
   border-radius: 5px;
   background: var(--paper);
@@ -362,34 +355,190 @@
   font-weight: 500;
   letter-spacing: 0.26px;
   cursor: pointer;
+  white-space: nowrap;
+  transition: box-shadow 180ms ease;
 }
 
-.payoutTabs button[aria-pressed="true"] {
+.inquiryTabs button[aria-pressed="true"] {
   background: var(--warm);
 }
 
-.payoutTable {
-  min-height: 250px;
+.inquiryTabs button:hover:not([aria-pressed="true"]) {
+  background: rgba(211, 151, 88, 0.15);
+}
+
+.inquiryTabs button:active {
+  box-shadow: var(--recessed);
+}
+
+.inquiryTabs button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.inquirySearchRow {
+  display: flex;
+  align-items: flex-start;
+  width: 1003px;
+  margin-top: 28px;
+}
+
+.inquirySearchInput,
+.areaSelectWrap select {
+  height: 40px;
+  border: 0;
+  border-radius: 5px;
+  outline-offset: 3px;
+  background: var(--paper);
+  box-shadow: var(--recessed);
+  color: rgba(52, 21, 18, 0.8);
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.28px;
+}
+
+.inquirySearchInput {
+  width: 421px;
+  min-width: 0;
+  padding: 0 13px;
+  margin-right: 19px;
+  flex: none;
+}
+
+.inquirySearchInput::placeholder {
+  color: rgba(52, 21, 18, 0.3);
+}
+
+.inquirySearchButton {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  width: 161px;
+  height: 33px;
+  margin-top: 3px;
+  margin-right: 46px;
+  padding-left: 47px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--warm);
+  box-shadow: var(--raised);
+  color: var(--ink);
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.24px;
+  cursor: pointer;
+  flex: none;
+}
+
+.areaSelectWrap {
+  position: relative;
+  display: block;
+  width: 356px;
+  margin-top: 3px;
+  flex: none;
+}
+
+.areaSelectWrap select {
+  appearance: none;
+  width: 100%;
+  padding: 0 42px 0 22px;
+  cursor: pointer;
+}
+
+.areaArrow {
+  position: absolute;
+  top: 7px;
+  right: 13px;
+  pointer-events: none;
+}
+
+.inquiryTableCard {
+  height: 250px;
   margin-top: 47px;
-  padding: 32px 38px;
-  border-radius: 16px;
+  padding: 14px 28px 30px;
+  border-radius: 20px;
   background: var(--paper);
   box-shadow: var(--recessed);
 }
 
-.tableHead {
+.inquiryTableScroll {
+  width: 1003px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.inquiryTableRow {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
-  font-size: 12px;
-  font-weight: 700;
+  grid-template-columns: repeat(4, 247px);
+  column-gap: 5px;
+  width: 1003px;
   text-align: center;
 }
 
-.payoutTable p {
-  margin: 60px 0 0;
+.inquiryTableHead {
+  height: 45.62px;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.32px;
+}
+
+.inquiryTableBody {
+  height: 35.09px;
+  margin-top: 5px;
+  align-items: center;
+  color: rgba(52, 21, 18, 0.8);
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.24px;
+}
+
+.inquiryTableBody > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusPill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 128px;
+  height: 21px;
+  margin: 0 auto;
+  border-radius: 20px;
+  color: var(--paper);
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.16px;
+  white-space: nowrap;
+}
+
+.pendingApproval {
+  background: #d39758;
+}
+.pendingPayment {
+  background: #ed0000;
+}
+.upcoming {
+  background: #20ae00;
+}
+.cancelled {
+  background: #8c7a6b;
+}
+
+.inquiryEmpty {
+  width: 1003px;
+  margin: 45px 0 0;
   color: rgba(52, 21, 18, 0.65);
-  font-size: 13px;
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -418,6 +567,34 @@
   .divider {
     margin-left: auto;
     margin-right: auto;
+  }
+  .inquiryPanel {
+    height: auto;
+  }
+  .inquiryTabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 12px;
+    row-gap: 18px;
+    padding: 6px;
+  }
+  .inquirySearchRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 161px;
+    gap: 12px;
+    width: 100%;
+    margin-top: 18px;
+  }
+  .inquirySearchInput,
+  .inquirySearchButton {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    justify-content: center;
+  }
+  .areaSelectWrap {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin: 0;
   }
 }
 
@@ -483,21 +660,47 @@
     margin: 16px 0 0;
     justify-content: flex-end;
   }
-  .payoutFilters {
-    min-height: 0;
+  .inquiryPanel {
+    height: auto;
+    padding: 20px 16px;
   }
-  .payoutTabs {
-    gap: 10px;
+  .inquiryTabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 10px;
+    row-gap: 16px;
+    padding: 7px 5px;
   }
-  .payoutTabs button {
-    min-width: 120px;
-    flex: 1;
+  .inquiryTabs button {
+    padding: 0 2px;
+    font-size: 12px;
   }
-  .payoutTable {
-    overflow-x: auto;
-    padding: 24px 16px;
+  .inquirySearchRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
   }
-  .tableHead {
-    min-width: 640px;
+  .inquirySearchInput {
+    width: 100%;
+    margin: 0;
+  }
+  .inquirySearchButton {
+    width: 120px;
+    margin: 0;
+    padding: 0;
+  }
+  .areaSelectWrap {
+    width: calc(100% - 132px);
+    margin: 0;
+  }
+  .inquiryTableCard {
+    overflow: hidden;
+    padding: 14px 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  .inquiryTabs {
+    grid-template-columns: 1fr;
   }
 }

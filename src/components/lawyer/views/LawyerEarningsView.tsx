@@ -74,11 +74,72 @@ const METRICS = [
   },
 ] as const;
 
+type InquiryTab =
+  "all" | "pendingApproval" | "pendingPayment" | "upcoming" | "cancelled";
+type InquiryStatus =
+  "pendingApproval" | "pendingPayment" | "upcoming" | "cancelled";
+
+const INQUIRY_TABS: { key: InquiryTab; label: string; demoCount: number }[] = [
+  { key: "all", label: "All Inquires", demoCount: 50 },
+  { key: "pendingApproval", label: "Pending Approval", demoCount: 17 },
+  { key: "pendingPayment", label: "Pending Payment", demoCount: 33 },
+  { key: "upcoming", label: "Upcoming", demoCount: 39 },
+  { key: "cancelled", label: "Cancelled", demoCount: 3 },
+];
+
+const DEMO_INQUIRIES: {
+  name: string;
+  date: string;
+  area: string;
+  status: InquiryStatus;
+}[] = [
+  {
+    name: "Clyde Justine Rosal",
+    date: "10/01/2026",
+    area: "Labor & Employment",
+    status: "pendingApproval",
+  },
+  {
+    name: "Axziel Jay Bartolabac",
+    date: "09/26/2026",
+    area: "Criminal Law",
+    status: "upcoming",
+  },
+  {
+    name: "Benideck Longakit",
+    date: "09/20/2026",
+    area: "Civil Law",
+    status: "pendingPayment",
+  },
+  {
+    name: "Christopher John Rubio",
+    date: "09/16/2026",
+    area: "Criminal Law",
+    status: "pendingPayment",
+  },
+];
+
+const STATUS_LABELS: Record<InquiryStatus, string> = {
+  pendingApproval: "PENDING CONFIRMATION",
+  pendingPayment: "PENDING PAYMENT",
+  upcoming: "CONFIRMED APPOINTMENT",
+  cancelled: "CANCELLED",
+};
+
 export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
   const [selectedMonth, setSelectedMonth] = useState(0);
-  const [payoutFilter, setPayoutFilter] = useState<
-    "all" | "pending" | "completed"
-  >("all");
+  const [activeInquiryTab, setActiveInquiryTab] = useState<InquiryTab>("all");
+  const [draftSearch, setDraftSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [draftArea, setDraftArea] = useState("Labor & Employment");
+  const [appliedArea, setAppliedArea] = useState("all");
+
+  const visibleInquiries = (isDemo ? DEMO_INQUIRIES : []).filter((inquiry) => {
+    if (activeInquiryTab !== "all" && inquiry.status !== activeInquiryTab)
+      return false;
+    if (appliedArea !== "all" && inquiry.area !== appliedArea) return false;
+    return inquiry.name.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   return (
     <div className={styles.page}>
@@ -94,6 +155,7 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
               <div className={styles.metricValue}>
                 <Image
                   src={metric.icon}
+                  loading="eager"
                   width={42}
                   height={42}
                   alt=""
@@ -117,7 +179,7 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
       >
         <div className={styles.sectionHeader}>
           <h1 className={styles.headingPill} id="earnings-chart-heading">
-            Earnings Overview
+            Today’s Scheduled Consulations
           </h1>
           <div className={styles.filters}>
             <label className={styles.selectWrap}>
@@ -125,7 +187,15 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
               <select value="month" disabled aria-label="Chart period">
                 <option value="month">Filter by: MONTH</option>
               </select>
-              <span className={styles.chevron} aria-hidden="true" />
+              <Image
+                className={styles.filterArrow}
+                src="/figma-earnings-dropdown.svg"
+                loading="eager"
+                width={26}
+                height={26}
+                alt=""
+                aria-hidden="true"
+              />
             </label>
             <label className={styles.selectWrap}>
               <span className={styles.srOnly}>Highlight month</span>
@@ -143,7 +213,15 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
                   </option>
                 ))}
               </select>
-              <span className={styles.chevron} aria-hidden="true" />
+              <Image
+                className={styles.filterArrow}
+                src="/figma-earnings-dropdown.svg"
+                loading="eager"
+                width={26}
+                height={26}
+                alt=""
+                aria-hidden="true"
+              />
             </label>
           </div>
         </div>
@@ -163,12 +241,37 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
                     style={{ top: 8 + index * 58 }}
                   >
                     <span>{tick}</span>
-                    <i />
+                    <Image
+                      src={
+                        tick === 0
+                          ? "/figma-earnings-chart-baseline.svg"
+                          : "/figma-earnings-chart-grid.svg"
+                      }
+                      loading="eager"
+                      width={tick === 0 ? 936 : 935}
+                      height={1}
+                      alt=""
+                      aria-hidden="true"
+                    />
                   </div>
+                ))}
+                {MONTHS.map((month, index) => (
+                  <Image
+                    className={styles.chartTick}
+                    src="/figma-earnings-chart-tick.svg"
+                    loading="eager"
+                    width={1}
+                    height={3}
+                    alt=""
+                    aria-hidden="true"
+                    key={`${month}-tick`}
+                    style={{ left: 36 + index * 85 }}
+                  />
                 ))}
                 <Image
                   className={styles.chartLine}
                   src="/figma-earnings-chart-line.svg"
+                  loading="eager"
                   width={936}
                   height={136}
                   alt=""
@@ -176,8 +279,9 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
                 />
                 {CHART_MARKERS.map(([x, y], index) => (
                   <Image
-                    className={`${styles.marker} ${selectedMonth === index ? styles.selectedMarker : ""}`}
+                    className={styles.marker}
                     src="/figma-earnings-chart-marker.svg"
+                    loading="eager"
                     width={9}
                     height={6}
                     alt=""
@@ -211,6 +315,7 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
       >
         <Image
           src="/figma-earnings-download.svg"
+          loading="eager"
           width={40}
           height={40}
           alt=""
@@ -243,40 +348,118 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
       <div className={styles.divider} aria-hidden="true" />
 
       <section
-        className={styles.payoutSection}
-        aria-labelledby="payout-history-heading"
+        className={styles.inquiriesSection}
+        aria-label="Consultation inquiries"
       >
-        <div className={styles.payoutFilters}>
-          <h2 id="payout-history-heading">Payout History</h2>
-          <div className={styles.payoutTabs} aria-label="Filter payout history">
-            {(["all", "pending", "completed"] as const).map((filter) => (
+        <div className={styles.inquiryPanel}>
+          <div
+            className={styles.inquiryTabs}
+            aria-label="Filter consultation inquiries"
+          >
+            {INQUIRY_TABS.map((tab) => (
               <button
                 type="button"
-                key={filter}
-                aria-pressed={payoutFilter === filter}
-                onClick={() => setPayoutFilter(filter)}
+                key={tab.key}
+                aria-pressed={activeInquiryTab === tab.key}
+                onClick={() => setActiveInquiryTab(tab.key)}
               >
-                {filter === "all"
-                  ? "All Payouts"
-                  : filter === "pending"
-                    ? "Pending"
-                    : "Completed"}
+                {tab.label} ({isDemo ? tab.demoCount : 0})
               </button>
             ))}
           </div>
+          <form
+            className={styles.inquirySearchRow}
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSearchQuery(draftSearch.trim());
+              setAppliedArea(draftArea);
+            }}
+          >
+            <label className={styles.srOnly} htmlFor="earnings-inquiry-search">
+              Search Client Name
+            </label>
+            <input
+              id="earnings-inquiry-search"
+              className={styles.inquirySearchInput}
+              type="search"
+              value={draftSearch}
+              onChange={(event) => setDraftSearch(event.target.value)}
+              placeholder="Search Client Name"
+            />
+            <button className={styles.inquirySearchButton} type="submit">
+              <Image
+                src="/figma-earnings-search.svg"
+                loading="eager"
+                width={14}
+                height={14}
+                alt=""
+                aria-hidden="true"
+              />
+              Search
+            </button>
+            <label className={styles.areaSelectWrap}>
+              <span className={styles.srOnly}>Consultation area</span>
+              <select
+                value={draftArea}
+                onChange={(event) => setDraftArea(event.target.value)}
+                aria-label="Consultation area"
+              >
+                <option value="Labor & Employment">
+                  Labor &amp; Employment
+                </option>
+                <option value="all">All Practice Areas</option>
+                <option value="Criminal Law">Criminal Law</option>
+                <option value="Civil Law">Civil Law</option>
+              </select>
+              <Image
+                className={styles.areaArrow}
+                src="/figma-earnings-dropdown.svg"
+                loading="eager"
+                width={26}
+                height={26}
+                alt=""
+                aria-hidden="true"
+              />
+            </label>
+          </form>
         </div>
-        <div className={styles.payoutTable}>
-          <div className={styles.tableHead} aria-hidden="true">
-            <span>PERIOD</span>
-            <span>GROSS EARNINGS</span>
-            <span>FEES</span>
-            <span>NET PAYOUT</span>
-            <span>STATUS</span>
+        <div className={styles.inquiryTableCard}>
+          <div
+            className={styles.inquiryTableScroll}
+            role="table"
+            aria-label="Consultation inquiries"
+          >
+            <div
+              className={`${styles.inquiryTableRow} ${styles.inquiryTableHead}`}
+              role="row"
+            >
+              <span role="columnheader">CLIENT NAME</span>
+              <span role="columnheader">DATE AND TIME</span>
+              <span role="columnheader">CONSULTATION AREA</span>
+              <span role="columnheader">STATUS</span>
+            </div>
+            {visibleInquiries.map((inquiry) => (
+              <div
+                className={`${styles.inquiryTableRow} ${styles.inquiryTableBody}`}
+                role="row"
+                key={`${inquiry.name}-${inquiry.date}`}
+              >
+                <span role="cell">{inquiry.name}</span>
+                <span role="cell">{inquiry.date}</span>
+                <span role="cell">{inquiry.area}</span>
+                <span role="cell">
+                  <span
+                    className={`${styles.statusPill} ${styles[inquiry.status]}`}
+                  >
+                    {STATUS_LABELS[inquiry.status]}
+                  </span>
+                </span>
+              </div>
+            ))}
+            {visibleInquiries.length === 0 && (
+              <p className={styles.inquiryEmpty}>No matching consultations.</p>
+            )}
           </div>
-          <p>
-            No {payoutFilter === "all" ? "" : `${payoutFilter} `}payout records
-            are available yet.
-          </p>
         </div>
       </section>
     </div>
