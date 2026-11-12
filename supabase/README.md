@@ -135,3 +135,20 @@ cp .env.local.example .env.local
 ```
 
 Find your Supabase URL and keys in: Dashboard → Project Settings → API
+
+
+## Verified consultation reviews
+
+For an existing database, run [0007_verified_consultation_reviews.sql](./migrations/0007_verified_consultation_reviews.sql) in the Supabase SQL Editor after earlier migrations. Fresh installs using [complete_setup.sql](./complete_setup.sql) already include this change. Do not rerun older migrations after 0007; they can restore obsolete policies or attempt to insert demo reviews.
+
+This migration adds a unique consultation link, checks completed consultations and participant IDs, and limits client inserts and lawyer replies. Existing unlinked reviews are preserved for audit but excluded from public review lists. They are not automatically assigned to consultations. Reviews display the client's account name when available, otherwise Verified Client.
+
+The app requires a reachable NEXT_PUBLIC_SUPABASE_URL and the matching server-only SUPABASE_SERVICE_ROLE_KEY. Browser storage is no longer used for reviews or the rated status. Never put the service key in a public environment variable.
+
+Validation: sign in as a client with a confirmed consultation whose scheduled time has started, end the consultation, submit a rating, then refresh. Verify the rating appears on the lawyer profile and the consultation remains rated. Check another browser session for the same account, and the lawyer's review dashboard. Pending consultations must not allow reviews; a second review of the same consultation must be rejected. Simulate a failed save and confirm the modal stays open with an error.
+
+The migration also preserves hidden-review filtering, aligns the review lawyer foreign key with consultations, and repairs the deployed rating-summary trigger to use lawyer_profiles.user_id. It adds rating_avg and rating_count if missing.
+
+Verified on 2026-11-09: a signed-in client completed a temporary consultation, received the rating modal, submitted four stars, refreshed, and still saw Rated 4 / 5. The public lawyer profile showed the saved feedback and no Write a Review button. The database contained exactly one matching review. The temporary review and consultation were removed afterward. Transactional SQL checks also verified replies, duplicate rejection, immutable ratings, and the completed-only rule, then rolled back test records.
+
+Run automated action checks with `node --test tests/review-actions.test.cjs` (stateful database double; nine cases) and type checks with `npm run typecheck`.

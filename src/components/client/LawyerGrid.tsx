@@ -295,9 +295,9 @@ function FindLawyerCard({
   variants: Variants;
 }) {
   const experienceYrs = lawyer.experienceYears ?? 9;
-  const ratingNum = typeof lawyer.rating === 'number' ? lawyer.rating.toFixed(1) : '4.9';
-  const reviewsCount = typeof lawyer.reviewCount === 'number' ? lawyer.reviewCount : 53;
-  const ratingText = `${ratingNum} (${reviewsCount} Reviews) • ${experienceYrs} yrs practice`;
+  const ratingText = typeof lawyer.rating === 'number' && typeof lawyer.reviewCount === 'number'
+    ? `${lawyer.rating.toFixed(1)} (${lawyer.reviewCount} Reviews) • ${experienceYrs} yrs practice`
+    : `View consultation reviews on profile • ${experienceYrs} yrs practice`;
 
   const languagesText =
     lawyer.languages && lawyer.languages.length > 0

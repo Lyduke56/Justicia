@@ -218,11 +218,16 @@ export type DocumentRow = {
 };
 
 export type ReviewRow = {
+  is_hidden?: boolean;
+  consultation_id: string | null;
   id: string;
   client_id: string;
   lawyer_id: string;
   rating: number;
   comment: string | null;
+  counsel_reply?: string | null;
+  counsel_replied_at?: string | null;
+  helpful_count?: number | null;
   created_at: string;
 };
 

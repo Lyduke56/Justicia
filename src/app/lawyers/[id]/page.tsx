@@ -1,3 +1,4 @@
+import { getLawyerReviewsAction } from '@/app/actions/reviewActions';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import Image from 'next/image';
@@ -43,6 +44,10 @@ export default async function PublicLawyerProfilePage({ params }: Props) {
 
   if (!profile) notFound();
 
+  const reviewResult = await getLawyerReviewsAction(id);
+  const reviewCount = reviewResult.reviews.length;
+  const reviewAverage = reviewCount ? reviewResult.reviews.reduce((sum, r) => sum + r.stars, 0) / reviewCount : 0;
+
   // Fetch child tables in parallel
   const [
     { data: practiceAreas },
@@ -85,7 +90,7 @@ export default async function PublicLawyerProfilePage({ params }: Props) {
           </p>
           <p className="text-xs text-[#A69584] flex items-center gap-3 flex-wrap">
             <span className="text-[#C58B3C] font-semibold flex items-center gap-1">
-              ★ 4.9 <span className="text-[#7D6855] font-normal">(53 Reviews)</span>
+              {reviewResult.success ? <>★ {reviewAverage.toFixed(1)} <span className="text-[#7D6855] font-normal">({reviewCount} Reviews)</span></> : 'Reviews unavailable'}
             </span>
             {profile.experience_years && (
               <span>● {profile.experience_years} years of practice</span>
