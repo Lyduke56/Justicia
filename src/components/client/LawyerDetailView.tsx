@@ -1044,11 +1044,10 @@ export function LawyerDetailView({
                       setSelectedReviewStar((prev) => (prev === s ? 'all' : s));
                       setReviewPage(1);
                     }}
-                    className={`rounded-[12px] px-5 py-1.5 sm:px-6 sm:py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer select-none inline-flex items-center gap-1.5 ${
-                      isActive
-                        ? 'neu-raised-highlight-sm text-[#341512]/80'
-                        : 'neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 text-[#341512]/80'
-                    }`}
+                    className={`rounded-[12px] px-5 py-1.5 sm:px-6 sm:py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer select-none inline-flex items-center gap-1.5 ${isActive
+                      ? 'neu-raised-highlight-sm text-[#341512]/80'
+                      : 'neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 text-[#341512]/80'
+                      }`}
                   >
                     <StarIcon filled className="w-3.5 h-3.5 text-[#C58B3C]" />
                     <span className="font-lora font-bold text-[#341512]/80">{s}</span>
@@ -1164,11 +1163,10 @@ export function LawyerDetailView({
                       key={p}
                       type="button"
                       onClick={() => setReviewPage(p)}
-                      className={`rounded-full transition-all cursor-pointer ${
-                        isActive
-                          ? 'w-2.5 h-2.5 bg-[#D39758] scale-125'
-                          : 'w-2 h-2 bg-[#341512]/70 hover:bg-[#341512]'
-                      }`}
+                      className={`rounded-full transition-all cursor-pointer ${isActive
+                        ? 'w-2.5 h-2.5 bg-[#D39758] scale-125'
+                        : 'w-2 h-2 bg-[#341512]/70 hover:bg-[#341512]'
+                        }`}
                       aria-label={`Go to review page ${p}`}
                     />
                   );
@@ -1203,108 +1201,80 @@ export function LawyerDetailView({
           )}
 
           {/* Calendar & Time Slots Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-            {/* Calendar Card (Left - 8 cols) */}
-            <div
-              className="lg:col-span-8 rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] flex flex-col justify-between"
-              style={{
-                boxShadow:
-                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
-              }}
-            >
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-10">
-                {/* Big Date Highlight */}
-                <div className="text-center sm:text-left sm:pr-8 sm:border-r border-[#D1BEA8]/80 shrink-0 min-w-[120px]">
-                  <div className="font-lora text-base font-bold uppercase tracking-widest text-[#4A3525]">
-                    {selectedMonthShort}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+            {/* Calendar Card (Left - 8 cols, matches Client Dashboard Calendar) */}
+            <div className="lg:col-span-8 rounded-[24px] neu-raised bg-[#E5D8CB] flex flex-col justify-center px-5 py-3.5 sm:px-6 sm:py-3.5">
+              <div className="w-full flex flex-col sm:flex-row items-center gap-5 sm:gap-6 lg:gap-8">
+                {/* Left column: month, giant day number, weekday */}
+                <div className="flex flex-col items-center justify-center sm:min-w-[120px] lg:min-w-[140px] shrink-0 select-none pl-1 sm:pl-2">
+                  {/* Month with left/right chevrons for navigation */}
+                  <div className="flex items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handlePrevMonth}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[#341512]/70 hover:text-[#341512] hover:bg-[#DDCFC0]/50 transition-all cursor-pointer active:scale-90"
+                      title="Previous Month"
+                      aria-label="Previous Month"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="font-lora text-sm sm:text-base lg:text-[24px] font-semibold tracking-wide text-[#341512]/80 uppercase">
+                      {selectedMonthShort}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleNextMonth}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[#341512]/70 hover:text-[#341512] hover:bg-[#DDCFC0]/50 transition-all cursor-pointer active:scale-90"
+                      title="Next Month"
+                      aria-label="Next Month"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
                   </div>
-                  <div className="font-lora text-6xl sm:text-7xl font-bold text-[#C58B3C] leading-none my-1">
-                    {selectedDay}
-                  </div>
-                  <div className="font-lora text-xs sm:text-sm font-bold tracking-widest uppercase text-[#4A3525]">
+
+                  <span className="font-lora text-5xl sm:text-6xl mb-0.5 lg:text-[130px] font-semibold text-[#D39758] leading-none mb-2 select-none">
+                    {String(selectedDay).padStart(2, '0')}
+                  </span>
+                  <span className="font-lora text-[11px] sm:text-sm lg:text-[20px] font-semibold tracking-wider text-[#341512]/80 uppercase pt-0.5">
                     {selectedDayOfWeek}
-                  </div>
+                  </span>
                 </div>
 
-                {/* Mini Calendar Grid with Month Switcher Controls */}
-                <div className="flex-1 w-full max-w-sm sm:max-w-none">
-                  {/* Month Navigation Bar */}
-                  <div className="flex items-center justify-between pb-3 px-1">
-                    <span className="font-lora text-base sm:text-lg font-bold text-[#4A3525] tracking-wide">
-                      {selectedMonthName} {currentYear}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleGoToToday}
-                        className="px-2.5 py-0.5 rounded-full bg-[#E5D8CB] hover:bg-[#D5C2AB] text-[#34150F] text-[10px] font-bold uppercase tracking-wider transition-colors shadow-xs"
-                        title="Snap to Today"
+                {/* Right column: month grid */}
+                <div className="flex-1 w-full min-w-0 pr-1 sm:pr-2">
+                  <div className="grid grid-cols-7 justify-items-center mb-1.5">
+                    {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => (
+                      <span
+                        key={d}
+                        className="font-lora text-xs sm:text-[15px] font-semibold text-[#341512]/80 tracking-wide text-center"
                       >
-                        Today
-                      </button>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={handlePrevMonth}
-                          className="w-7 h-7 rounded-full bg-[#E5D8CB] hover:bg-[#D5C2AB] text-[#34150F] flex items-center justify-center font-bold text-sm transition-colors shadow-xs active:scale-95"
-                          title="Previous Month"
-                          aria-label="Previous Month"
-                        >
-                          ‹
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleNextMonth}
-                          className="w-7 h-7 rounded-full bg-[#E5D8CB] hover:bg-[#D5C2AB] text-[#34150F] flex items-center justify-center font-bold text-sm transition-colors shadow-xs active:scale-95"
-                          title="Next Month"
-                          aria-label="Next Month"
-                        >
-                          ›
-                        </button>
-                      </div>
-                    </div>
+                        {d}
+                      </span>
+                    ))}
                   </div>
 
-                  {/* Day of Week Headers */}
-                  <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center pb-3 text-[11px] sm:text-xs font-bold text-[#4A3525] uppercase tracking-wider">
-                    <span>SUN</span>
-                    <span>MON</span>
-                    <span>TUE</span>
-                    <span>WED</span>
-                    <span>THU</span>
-                    <span>FRI</span>
-                    <span>SAT</span>
-                  </div>
-
-                  {/* Dynamic Days in Month Grid */}
-                  <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-xs">
+                  <div className="grid grid-cols-7 justify-items-center gap-y-1">
                     {daysInMonth.map((item, idx) => {
                       if (!item.day) {
-                        return <div key={`empty-${idx}`} className="h-8 w-8" />;
+                        return <div key={`empty-${idx}`} className="size-7 sm:size-8 lg:size-8.5" />;
                       }
                       const isSelected = item.day === selectedDay;
-                      const today = getTodayPH();
-                      const isToday =
-                        item.day === today.day &&
-                        currentMonth === today.month &&
-                        currentYear === today.year;
 
                       return (
                         <button
                           key={`day-${item.day}`}
                           type="button"
                           onClick={() => setSelectedDay(item.day!)}
-                          className={`h-8 w-8 mx-auto rounded-full flex flex-col items-center justify-center font-medium text-xs transition-all cursor-pointer relative ${isSelected
-                            ? 'bg-[#E5D8CB] text-[#C58B3C] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.18)] scale-105'
-                            : isToday
-                              ? 'text-[#23150F] font-bold border border-[#C58B3C]/60 bg-[#E8DDD0]'
-                              : 'text-[#3E2A1E] hover:bg-[#DECEB8] hover:text-[#23150F]'
+                          className={`size-7 sm:size-8 lg:size-9 flex items-center justify-center rounded-full font-lora text-xs sm:text-[15px] select-none transition-all cursor-pointer ${isSelected
+                            ? 'neu-raised-sm bg-[#E5D8CB] text-[#D39758] font-bold'
+                            : 'text-[#341512]/80 hover:bg-[#DDCFC0]/60'
                             }`}
                         >
-                          <span>{String(item.day).padStart(2, '0')}</span>
-                          {isToday && !isSelected && (
-                            <span className="w-1 h-1 rounded-full bg-[#C58B3C] -mt-0.5" />
-                          )}
+                          {String(item.day).padStart(2, '0')}
                         </button>
                       );
                     })}
@@ -1313,81 +1283,84 @@ export function LawyerDetailView({
               </div>
             </div>
 
-            {/* Time Slots Card (Right - 4 cols) */}
-            <div
-              className="lg:col-span-4 rounded-[28px] p-6 bg-[#E5D8CB] flex flex-col justify-center space-y-3"
-              style={{
-                boxShadow:
-                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
-              }}
-            >
-              {timeSlots.map((slot) => {
-                const isSelected = selectedTimeSlot === slot;
-                const isBooked = isSlotBooked(slot);
-                return (
-                  <button
-                    key={slot}
-                    type="button"
-                    disabled={isBooked}
-                    onClick={() => !isBooked && setSelectedTimeSlot(slot)}
-                    className={`w-full py-2.5 px-3 rounded-full text-xs font-medium transition-all text-center relative ${isBooked
-                      ? 'opacity-40 cursor-not-allowed bg-stone-300 text-stone-500 line-through'
-                      : isSelected
-                        ? 'bg-[#E5D8CB] text-[#23150F] font-bold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
-                        : 'bg-[#E6D7C3] hover:bg-[#E5D8CB]/60 text-[#5C4535] shadow-[2px_2px_5px_rgba(182,155,130,0.25)]'
-                      }`}
-                  >
-                    <span>{slot}</span>
-                    {isBooked && (
-                      <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-rose-700 not-italic no-underline">
-                        (Booked)
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+            {/* Time Slots Card (Right - 4 cols, matching calendar height) */}
+            <div className="lg:col-span-4 flex flex-col h-full space-y-3">
+              {/* Header Badge - exact same width as container below */}
+              <div className="neu-raised-sm !bg-[#D39758]/30 w-full py-2.5 rounded-[16px] text-center shrink-0">
+                <span className="font-lora text-[11px] sm:text-xs font-bold tracking-wider text-[#341512] uppercase">
+                  Available Time Slots
+                </span>
+              </div>
+
+              {/* Recessed Slots Container - scrollable with discrete scrollbar, fits 5 capsules */}
+              <div className="neu-recessed rounded-[24px] px-9 py-7 flex-1 min-h-0 max-h-[250px] overflow-y-auto neu-scrollbar-discrete flex flex-col gap-5 justify-start">
+                {timeSlots.map((slot) => {
+                  const isSelected = selectedTimeSlot === slot;
+                  const isBooked = isSlotBooked(slot);
+                  return (
+                    <button
+                      key={slot}
+                      type="button"
+                      disabled={isBooked}
+                      onClick={() => !isBooked && setSelectedTimeSlot(slot)}
+                      className={`w-full py-2 px-3 rounded-full text-xs font-lora font-medium transition-all text-center relative cursor-pointer shrink-0 ${isBooked
+                        ? 'opacity-40 cursor-not-allowed bg-stone-300 text-stone-500 line-through'
+                        : isSelected
+                          ? 'neu-raised-highlight-sm text-[#341512] font-bold scale-[1.01]'
+                          : 'neu-raised-sm bg-[#E5D8CB] text-[#341512]/80 hover:text-[#341512]'
+                        }`}
+                    >
+                      <span>{slot}</span>
+                      {isBooked && (
+                        <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-rose-700 not-italic no-underline">
+                          (Booked)
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
           {/* Mode of Communication Section */}
           <div className="space-y-3">
-            <h2 className="font-lora text-2xl font-bold text-[#23150F]">Mode of Communication</h2>
-            <div
-              className="rounded-[28px] p-5 sm:p-6 bg-[#E5D8CB] space-y-3"
-              style={{
-                boxShadow:
-                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
-              }}
-            >
+            <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512] mb-5">Mode of Communication</h2>
+            <div className="neu-recessed rounded-[24px] sm:rounded-[28px] p-6 sm:p-7 space-y-4 sm:space-y-5">
               {/* Option 1: Video Consultation */}
               <div
                 onClick={() => setCommunicationMode('video')}
-                className={`flex items-start gap-3.5 p-4 rounded-[20px] cursor-pointer transition-all ${communicationMode === 'video'
-                  ? 'bg-[#E5D8CB] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
-                  : 'bg-transparent hover:bg-[#E5D8CB]/50'
+                className={`w-full flex items-start gap-3.5 p-4 sm:p-5 rounded-[20px] cursor-pointer transition-all ${communicationMode === 'video'
+                  ? 'neu-raised-highlight'
+                  : 'neu-recessed hover:bg-[#E5D8CB]/40'
                   }`}
               >
                 <div className="mt-0.5">
                   <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${communicationMode === 'video' ? 'border-[#23150F]' : 'border-[#7D6855]'
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${communicationMode === 'video' ? 'border-[#341512]' : 'border-[#341512]/60'
                       }`}
                   >
-                    {communicationMode === 'video' && <div className="w-2 h-2 rounded-full bg-[#23150F]" />}
+                    {communicationMode === 'video' && <div className="w-2 h-2 rounded-full bg-[#341512]" />}
                   </div>
                 </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-[#23150F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="w-4 h-4 text-[#341512]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
-                    <span className="text-xs sm:text-sm font-bold text-[#23150F]">Video Consultation</span>
-                    <span className="text-[9px] uppercase tracking-wider font-bold bg-[#E5D8CB] text-[#9E6C28] px-2 py-0.5 rounded-full ml-1">
+                    <span className="font-lora text-xs sm:text-sm font-bold text-[#341512]">Video Consultation</span>
+                    <span
+                      className={`text-[8px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ml-1 select-none transition-all duration-200 ${communicationMode === 'video'
+                        ? 'bg-[#D39758]/30 text-[#341512] shadow-[1.5px_1.5px_3px_rgba(145,110,75,0.35),-1px_-1px_2.5px_rgba(252,238,223,0.4)]'
+                        : 'bg-[#E5D8CB]/80 text-[#341512]/70 shadow-[1.5px_1.5px_3px_rgba(182,155,130,0.35),-1px_-1px_2px_rgba(252,238,223,0.35)]'
+                        }`}
+                    >
                       Recommended
                     </span>
                   </div>
-                  <p className="text-[11px] sm:text-xs text-[#5C4535] leading-relaxed">
-                    Meet your attorney face-to-face online through Google Meet. Once the attorney confirms your booking, a private Google Meet link will be sent to you and will appear in your Consultations tab. Join a few minutes early from a quiet, private place with a stable internet connection, test your camera and microphone, and keep your documents ready to share on screen.
+                  <p className="text-[11px] sm:text-xs text-[#341512]/80 leading-normal font-inter">
+                    Connect face-to-face online via Google Meet with video camera and live screen sharing.
                   </p>
                 </div>
               </div>
@@ -1395,29 +1368,29 @@ export function LawyerDetailView({
               {/* Option 2: Audio Call */}
               <div
                 onClick={() => setCommunicationMode('audio')}
-                className={`flex items-start gap-3.5 p-4 rounded-[20px] cursor-pointer transition-all ${communicationMode === 'audio'
-                  ? 'bg-[#E5D8CB] shadow-[4px_5px_12px_rgba(165,135,105,0.35),-3px_-3px_8px_rgba(255,255,255,0.85)]'
-                  : 'bg-transparent hover:bg-[#E5D8CB]/50'
+                className={`w-full flex items-start gap-3.5 p-4 sm:p-5 rounded-[20px] cursor-pointer transition-all ${communicationMode === 'audio'
+                  ? 'neu-raised-highlight'
+                  : 'neu-recessed hover:bg-[#E5D8CB]/40'
                   }`}
               >
                 <div className="mt-0.5">
                   <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${communicationMode === 'audio' ? 'border-[#23150F]' : 'border-[#7D6855]'
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${communicationMode === 'audio' ? 'border-[#341512]' : 'border-[#341512]/60'
                       }`}
                   >
-                    {communicationMode === 'audio' && <div className="w-2 h-2 rounded-full bg-[#23150F]" />}
+                    {communicationMode === 'audio' && <div className="w-2 h-2 rounded-full bg-[#341512]" />}
                   </div>
                 </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-[#23150F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="w-4 h-4 text-[#341512]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                     </svg>
-                    <span className="text-xs sm:text-sm font-bold text-[#23150F]">Audio Call</span>
+                    <span className="font-lora text-xs sm:text-sm font-bold text-[#341512]">Audio Call</span>
                   </div>
-                  <p className="text-[11px] sm:text-xs text-[#5C4535] leading-relaxed">
-                    Speak with your attorney by voice only through Google Meet. Once the attorney confirms your booking, a private Google Meet link will be sent to you and will appear in your Consultations tab. Join a few minutes early from a quiet, private place, test your microphone and speakers, and keep your camera off for the entire call.
+                  <p className="text-[11px] sm:text-xs text-[#341512]/80 leading-normal font-inter">
+                    Speak with your attorney by voice only via private Google Meet audio call.
                   </p>
                 </div>
               </div>
@@ -1426,56 +1399,38 @@ export function LawyerDetailView({
 
           {/* Purpose of Consultation Section */}
           <div className="space-y-3">
-            <h2 className="font-lora text-2xl font-bold text-[#23150F]">Purpose of Consultation</h2>
-            <div
-              className="rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-5"
-              style={{
-                boxShadow:
-                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
-              }}
-            >
+            <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512] mb-5">Purpose of Consultation</h2>
+            <div className="neu-raised rounded-[24px] sm:rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-5">
               {/* Subject Input */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-[#5C4535]">Subject:</label>
+                <label className="block font-lora text-sm font-medium text-[#341512] mb-2">Subject:</label>
                 <input
                   type="text"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  placeholder="e.g., Makati Residential Lease: Deposit Dispute & Formal Notice to Vacate"
-                  className="w-full rounded-2xl py-3 px-4 bg-[#E4D5C2] text-xs sm:text-sm text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none"
-                  style={{
-                    boxShadow:
-                      'inset 3px 3px 6px rgba(165, 140, 115, 0.45), inset -3px -3px 6px rgba(255, 255, 255, 0.85)',
-                  }}
+                  placeholder="e.g., Makati Residential Lease Deposit Dispute & Formal Notice to Vacate"
+                  className="neu-input w-full rounded-full py-2.5 sm:py-3 px-5 text-xs sm:text-sm text-[#341512] placeholder:text-[#341512]/40 font-inter"
                 />
               </div>
 
               {/* Subject Description */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-[#5C4535]">Subject Description:</label>
+                <label className="block font-lora text-sm font-medium text-[#341512] mb-2">Subject Description:</label>
                 <textarea
                   rows={5}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Provide concise facts, key contract dates, and specific legal queries for counsel to review..."
-                  className="w-full rounded-2xl py-3 px-4 bg-[#E4D5C2] text-xs sm:text-sm text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none resize-y"
-                  style={{
-                    boxShadow:
-                      'inset 3px 3px 6px rgba(165, 140, 115, 0.45), inset -3px -3px 6px rgba(255, 255, 255, 0.85)',
-                  }}
+                  className="neu-input w-full rounded-[20px] p-4 sm:p-5 text-xs sm:text-sm text-[#341512] placeholder:text-[#341512]/40 font-inter resize-none h-36 sm:h-40"
                 />
               </div>
 
               {/* File Attachments Dropzone */}
               <div className="space-y-2">
-                <label className="block text-xs font-semibold text-[#5C4535]">File Attachments</label>
+                <label className="block font-lora text-sm font-medium text-[#341512] mb-2">File Attachments</label>
                 <label
-                  className={`w-full py-9 px-6 rounded-2xl flex flex-col items-center justify-center text-center transition-all block relative ${isDraggingFiles ? 'bg-[#DECDBA]' : 'bg-[#E4D5C2] hover:bg-[#DECDBA]'
+                  className={`neu-recessed w-full py-9 px-6 rounded-[20px] flex flex-col items-center justify-center text-center transition-all block relative ${isDraggingFiles ? 'bg-[#DECDBA]' : 'bg-[#E5D8CB] hover:bg-[#DECDBA]/40'
                     } ${isUploadingAttachment ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
-                  style={{
-                    boxShadow:
-                      'inset 3px 3px 6px rgba(165, 140, 115, 0.45), inset -3px -3px 6px rgba(255, 255, 255, 0.85)',
-                  }}
                   onDragOver={(e) => {
                     e.preventDefault();
                     if (!isDraggingFiles) setIsDraggingFiles(true);
@@ -1500,16 +1455,16 @@ export function LawyerDetailView({
                       });
                     }}
                   />
-                  <svg className="w-9 h-9 text-[#7D6855] mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  {/* Clean tray download/upload icon matching Image 2 */}
+                  <svg className="w-11 h-11 text-[#341512]/60 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
-                  <span className="text-xs text-[#5C4535] font-semibold mt-2.5 block">
+                  <span className="font-lora text-xs sm:text-sm text-[#341512]/70 font-medium mt-3 block">
                     {isUploadingAttachment
                       ? 'Uploading to My Documents...'
-                      : 'Click to browse files or Drag & Drop case documents'}
-                  </span>
-                  <span className="text-[10px] text-[#8C7A6B] mt-0.5 block">
-                    Attach contracts, demand letters, or evidence (PDF, DOCX, XLSX, Images)
+                      : 'Drag and Drop, or Attach Relevant Files'}
                   </span>
                 </label>
 
@@ -1517,13 +1472,17 @@ export function LawyerDetailView({
                 {attachedFiles.length > 0 && (
                   <div className="space-y-1.5 pt-1">
                     {attachedFiles.map((file) => (
-                      <div key={file.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#E5D8CB]/60 text-xs text-[#23150F]">
-                        <div className="flex items-center gap-1.5 truncate"><PaperclipIcon className="w-3.5 h-3.5 text-[#C58B3C] shrink-0" /><span className="truncate">{file.name}</span><span className="text-[10px] text-[#7D6855] shrink-0">{file.size}</span></div>
+                      <div key={file.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#E5D8CB]/60 text-xs text-[#341512]">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <PaperclipIcon className="w-3.5 h-3.5 text-[#C58B3C] shrink-0" />
+                          <span className="truncate">{file.name}</span>
+                          <span className="text-[10px] text-[#341512]/60 shrink-0">{file.size}</span>
+                        </div>
                         <button
                           type="button"
                           aria-label={`Remove ${file.name}`}
                           onClick={() => setAttachedFiles((prev) => prev.filter((f) => f.id !== file.id))}
-                          className="text-red-700 hover:text-red-900 font-bold ml-2"
+                          className="text-red-700 hover:text-red-900 font-bold ml-2 cursor-pointer"
                         >
                           ✕
                         </button>
@@ -1532,14 +1491,14 @@ export function LawyerDetailView({
                   </div>
                 )}
 
-                <div className="text-center py-1">
-                  <span className="text-[11px] font-bold tracking-widest text-[#7D6855] uppercase">OR</span>
+                <div className="text-center py-2">
+                  <span className="font-lora text-xs sm:text-sm font-semibold tracking-wider text-[#341512]/70 uppercase">OR</span>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleOpenDocPicker}
-                  className="neu-raised-sm bg-[#E5D8CB] px-8 py-2.5 rounded-full text-xs sm:text-sm font-inter font-semibold text-[#34150F] hover:text-[#C58B3C] active:scale-95 transition-all mx-auto block cursor-pointer select-none"
+                  className="neu-raised-highlight-sm px-7 py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-lora font-semibold text-[#341512] hover:brightness-105 active:scale-95 transition-all mx-auto block cursor-pointer select-none"
                 >
                   Share Uploaded Files from your Documents
                 </button>
@@ -1547,19 +1506,44 @@ export function LawyerDetailView({
 
               {bookingError && (
                 <div className="p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 text-xs font-semibold">
-                  <span className="flex items-center gap-1.5"><svg className="w-4 h-4 text-rose-600 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg><span>{bookingError}</span></span>
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-rose-600 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span>{bookingError}</span>
+                  </span>
                 </div>
               )}
 
               {/* Privilege Agreement Checkbox */}
-              <label className="flex items-start gap-3 cursor-pointer pt-3">
+              <label className="flex items-start gap-3 cursor-pointer pt-3 select-none">
+                <div
+                  role="checkbox"
+                  aria-checked={agreedToTerms}
+                  tabIndex={0}
+                  onClick={() => setAgreedToTerms(!agreedToTerms)}
+                  onKeyDown={(e) => {
+                    if (e.key === ' ' || e.key === 'Enter') {
+                      e.preventDefault();
+                      setAgreedToTerms(!agreedToTerms);
+                    }
+                  }}
+                  className="mt-0.5 w-4 h-4 rounded border border-[#341512]/60 bg-transparent flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                >
+                  {agreedToTerms && (
+                    <svg className="w-3 h-3 text-[#D39758]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </div>
                 <input
                   type="checkbox"
                   checked={agreedToTerms}
                   onChange={(e) => setAgreedToTerms(e.target.checked)}
-                  className="mt-0.5 rounded border-[#C8B59E] text-[#C58B3C] focus:ring-[#C58B3C] w-4 h-4 cursor-pointer"
+                  className="sr-only"
+                  tabIndex={-1}
                 />
-                <span className="text-xs text-[#5C4535] leading-relaxed select-none">
+                <span className="font-inter text-xs text-[#341512]/80 leading-relaxed">
                   I agree that this intake form and attached records will be reviewed strictly under confidential attorney-client privilege prior to the scheduled consultation session.
                 </span>
               </label>
@@ -1567,31 +1551,32 @@ export function LawyerDetailView({
           </div>
 
           {/* Action Buttons Row */}
-          <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-1">
+          <div className="flex items-center justify-end gap-3 pt-1">
             <button
               type="button"
               onClick={handleClearInputs}
-              className="w-full sm:w-auto px-6 py-2 rounded-xl border border-[#C8B59E] text-xs font-medium text-[#5C4535] hover:bg-[#E5D8CB] transition-colors"
+              className="rounded-xl border border-[#341512]/60 px-5 py-2 text-xs sm:text-sm font-lora font-semibold text-[#341512] hover:bg-[#341512]/5 transition-colors cursor-pointer select-none"
             >
               Clear All Inputs
             </button>
             <button
               type="button"
               onClick={handleSaveDraft}
-              className="neu-raised-sm bg-[#E5D8CB] w-full sm:w-auto px-8 py-2.5 rounded-full text-xs font-inter font-semibold text-[#5C4535] hover:text-[#34150F] active:scale-95 transition-all cursor-pointer select-none"
+              className="neu-raised-sm !bg-[#D39758]/70 rounded-xl px-7 py-2 text-xs sm:text-sm font-lora font-semibold text-[#341512] hover:brightness-105 active:scale-95 transition-all cursor-pointer select-none"
             >
               Save
             </button>
           </div>
 
-          {/* Divider Line */}
-          <hr className="border-[#D1BEA8]/80 my-8" />
+          {/* Divider Line separating Purpose of Consultation & Actions from Submit Booking */}
+          <hr className="border-t-2 border-[#C8B59E] my-8 sm:my-10" />
 
           {/* Centered Large Submit Button */}
           <div className="pt-2 pb-6">
             <button
               type="submit"
-              className="neu-btn-caramel w-full max-w-xs mx-auto block py-3 px-10 rounded-full text-sm sm:text-base font-lora font-bold text-white text-center transition-all cursor-pointer shadow-md active:scale-95"
+              disabled={submittingBooking}
+              className="neu-raised-sm !bg-[#D39758]/70 w-full max-w-sm mx-auto block py-3.5 px-8 rounded-xl sm:rounded-2xl text-base font-lora font-bold text-[#341512] text-center transition-all cursor-pointer active:scale-95 shadow-none disabled:opacity-60"
             >
               {submittingBooking ? 'Submitting Request...' : 'Submit Booking'}
             </button>
@@ -1599,26 +1584,22 @@ export function LawyerDetailView({
         </form>
       )}
 
-      {/* ─── TAB 4: CASES HANDLED (Matches Image 2) ─────────────────────────── */}
+      {/* ─── TAB 4: CASES HANDLED (Matches Figma Design) ───────────────────── */}
       {activeTab === 'cases' && (
-        <div className="space-y-5 animate-in fade-in duration-150">
-          {/* Stack of 4 Case Cards matching Figma */}
+        <div className="space-y-6 animate-in fade-in duration-150">
+          {/* Stack of Case Cards */}
           {casesHandled.map((caseItem) => (
             <div
               key={caseItem.id}
-              className="rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-2.5"
-              style={{
-                boxShadow:
-                  '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
-              }}
+              className="neu-raised rounded-[24px] sm:rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-2.5 transition-all mb-10"
             >
-              <div className="font-bold text-[10px] sm:text-[11px] text-[#C58B3C] uppercase tracking-wider">
+              <div className="font-inter font-bold text-[10px] sm:text-[11px] text-[#D39758] uppercase tracking-wider">
                 {caseItem.docket}
               </div>
-              <h3 className="font-lora text-lg sm:text-xl font-bold text-[#23150F] leading-tight">
+              <h3 className="font-lora text-lg sm:text-xl font-bold text-[#341512] leading-tight">
                 {caseItem.title}
               </h3>
-              <p className="text-xs sm:text-[13px] text-[#3E2A1E] leading-relaxed text-justify">
+              <p className="font-inter text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify">
                 {caseItem.content}
               </p>
             </div>
@@ -1630,11 +1611,7 @@ export function LawyerDetailView({
               type="button"
               onClick={() => setCasePage((p) => Math.max(1, p - 1))}
               disabled={casePage <= 1}
-              className="w-9 h-9 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
-              style={{
-                boxShadow:
-                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
-              }}
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 flex items-center justify-center text-[#341512]/80 hover:text-[#341512] disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
               aria-label="Previous cases page"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -1642,7 +1619,7 @@ export function LawyerDetailView({
               </svg>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               {[1, 2, 3, 4].map((p) => {
                 const isActive = p === casePage;
                 return (
@@ -1650,7 +1627,9 @@ export function LawyerDetailView({
                     key={p}
                     type="button"
                     onClick={() => setCasePage(p)}
-                    className={`w-2.5 h-2.5 rounded-full transition-all ${isActive ? 'bg-[#362519] scale-125' : 'bg-[#C58B3C]/80 hover:bg-[#362519]'
+                    className={`rounded-full transition-all cursor-pointer ${isActive
+                      ? 'w-2.5 h-2.5 bg-[#D39758] scale-125'
+                      : 'w-2 h-2 bg-[#341512]/70 hover:bg-[#341512]'
                       }`}
                     aria-label={`Go to case page ${p}`}
                   />
@@ -1662,11 +1641,7 @@ export function LawyerDetailView({
               type="button"
               onClick={() => setCasePage((p) => Math.min(4, p + 1))}
               disabled={casePage >= 4}
-              className="w-9 h-9 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
-              style={{
-                boxShadow:
-                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
-              }}
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 flex items-center justify-center text-[#341512]/80 hover:text-[#341512] disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
               aria-label="Next cases page"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
