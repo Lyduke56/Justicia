@@ -1,0 +1,159 @@
+/* Parchment materials shared in spirit with the client/lawyer neu-* surfaces.
+   Explicit admin classes keep these refinements local to this portal. */
+.admin-portal {
+  --admin-paper: #e5d8cb;
+  --admin-peach: #dfc5a9;
+  --admin-ink: #341512;
+  --admin-muted: #705744;
+  --admin-line: #cbb6a1;
+  --admin-focus: #80501f;
+  --admin-raised: 8px 8px 18px rgba(177, 152, 130, .42), -8px -8px 18px rgba(252, 238, 223, .9), inset 1px 1px 2px rgba(255, 248, 238, .6);
+  --admin-small: 4px 4px 9px rgba(177, 152, 130, .4), -4px -4px 9px rgba(252, 238, 223, .9), inset 1px 1px 1px rgba(255, 248, 238, .5);
+  --admin-inset: inset 3px 3px 7px rgba(164, 140, 117, .42), inset -3px -3px 7px rgba(255, 243, 230, .9);
+  --admin-plate-shadow: 5px 5px 12px rgba(168, 137, 108, .35), -5px -5px 12px rgba(252, 238, 223, .85), inset 1px 1px 2px rgba(255, 247, 235, .6);
+  color: var(--admin-ink);
+  background: var(--admin-paper);
+  font-family: var(--font-inter), Arial, sans-serif;
+  color-scheme: light;
+}
+
+.admin-portal ::selection { background: #dfbd8d; color: var(--admin-ink); }
+.admin-portal :where(h1, h2, h3, .admin-heading) { font-family: var(--font-lora), Georgia, serif; font-weight: 500; }
+.admin-portal h1 { font-size: clamp(1.8rem, 2.8vw, 2.65rem); line-height: 1.25; letter-spacing: -.035em; }
+.admin-portal h2, .admin-portal h3 { line-height: 1.4; }
+.admin-portal :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 4px;
+}
+.admin-portal :where(button, a, input, select, textarea) { -webkit-tap-highlight-color: transparent; }
+.admin-portal :where(button, select) { cursor: pointer; }
+.admin-portal :where(button:disabled) { cursor: not-allowed; opacity: .55; }
+.admin-portal :where(input, select, textarea) { accent-color: var(--admin-focus); }
+.admin-portal :where(input, textarea)::placeholder { color: #806955; opacity: 1; }
+.admin-portal :where(p, dd) { overflow-wrap: anywhere; }
+.admin-portal :where(main, aside, .admin-table-scroll, .admin-dialog-panel) {
+  scrollbar-width: thin;
+  scrollbar-color: #b69b80 var(--admin-paper);
+}
+.admin-portal ::-webkit-scrollbar { width: 6px; height: 6px; }
+.admin-portal ::-webkit-scrollbar-track { background: var(--admin-paper); }
+.admin-portal ::-webkit-scrollbar-thumb { background: #b69b80; border-radius: 20px; }
+
+.admin-portal .admin-page { width: 100%; max-width: 1360px; margin-inline: auto; padding: clamp(24px, 3.3vw, 48px); }
+.admin-portal .admin-page > * + * { margin-top: 32px; }
+.admin-portal .admin-eyebrow { color: var(--admin-focus); font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+.admin-portal .admin-description { color: var(--admin-muted); font-size: 14px; line-height: 1.75; max-width: 660px; margin-top: 12px; }
+.admin-portal .admin-card { background: var(--admin-paper); border: 1px solid transparent; border-radius: 28px; box-shadow: var(--admin-raised); }
+.admin-portal .admin-plate { background: var(--admin-peach); border: 1px solid transparent; border-radius: 18px; box-shadow: var(--admin-plate-shadow); }
+.admin-portal .admin-inset { background: var(--admin-paper); border: 1px solid transparent; border-radius: 16px; box-shadow: var(--admin-inset); }
+.admin-portal .admin-icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; color: var(--admin-focus); }
+.admin-portal .admin-field {
+  background: var(--admin-paper); color: var(--admin-ink); border: 1px solid transparent;
+  border-radius: 16px; box-shadow: var(--admin-inset); min-height: 44px;
+  transition: outline-color 160ms ease;
+}
+.admin-portal .admin-field:focus-visible { outline-offset: 2px; }
+.admin-portal .admin-field:disabled { opacity: .6; cursor: not-allowed; }
+
+.admin-portal .admin-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 10px 18px; border: 1px solid transparent; border-radius: 14px;
+  background: var(--admin-paper); color: var(--admin-ink); box-shadow: var(--admin-small);
+  font-size: 12px; font-weight: 600; line-height: 1.5; text-align: center;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.admin-portal .admin-button-primary { background: #d39b58; box-shadow: 4px 5px 12px rgba(164, 119, 64, .35), -3px -3px 8px rgba(252, 238, 223, .8), inset 1px 1px 2px rgba(255, 235, 202, .6); }
+.admin-portal .admin-button-dark { background: #4a2e25; color: #fff1e1; box-shadow: 4px 5px 12px rgba(74, 46, 37, .25), -3px -3px 8px rgba(252, 238, 223, .7), inset 1px 1px 2px rgba(255, 235, 202, .2); }
+.admin-portal .admin-button-success { background: #d3dfcb; color: #235333; }
+.admin-portal .admin-button-danger { background: #ead0c6; color: #842d29; }
+.admin-portal .admin-button-warning { background: #e7cc9f; color: #624317; }
+.admin-portal .admin-icon-button { width: 44px; height: 44px; padding: 8px; flex-shrink: 0; font-size: 20px; }
+.admin-portal .admin-text-link { color: var(--admin-focus); font-size: 12px; font-weight: 600; text-underline-offset: 4px; }
+.admin-portal .admin-text-link:hover { text-decoration: underline; }
+.admin-portal .admin-filter { text-align: left; transition: box-shadow 160ms ease, transform 160ms ease; }
+.admin-portal .admin-filter[aria-pressed="true"] { background: var(--admin-peach); box-shadow: var(--admin-inset); border-color: #a68157; }
+.admin-portal .admin-filter-count { display: block; margin-top: 12px; font-family: var(--font-lora), Georgia, serif; font-size: 30px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.admin-portal .admin-filter-bar { display: flex; flex-wrap: wrap; gap: 12px; padding: 8px; }
+.admin-portal .admin-filter-bar .admin-button { border-radius: 999px; }
+@media (hover: hover) {
+  .admin-portal .admin-button:not(:disabled):hover, .admin-portal .admin-filter:hover { transform: translateY(-1px); }
+  .admin-portal .admin-button-primary:not(:disabled):hover { background: #dca565; }
+  .admin-portal .admin-button-dark:not(:disabled):hover { background: #56372b; }
+}
+.admin-portal .admin-button:not(:disabled):active { transform: translateY(1px); box-shadow: var(--admin-inset); }
+.admin-portal .admin-button-dark:not(:disabled):active { box-shadow: inset 3px 3px 7px #26140e, inset -2px -2px 5px #644334; }
+.admin-portal .admin-button:disabled { transform: none; box-shadow: none; }
+
+.admin-portal .admin-table-scroll { position: relative; overflow-x: auto; border-radius: 28px; }
+.admin-portal .admin-table { width: 100%; text-align: left; border-collapse: collapse; font-size: 13px; }
+.admin-portal .admin-table thead { background: var(--admin-peach); color: var(--admin-ink); box-shadow: inset 0 1px 2px rgba(255, 247, 235, .8); }
+.admin-portal .admin-table th { font-size: 11px; font-weight: 600; letter-spacing: .025em; white-space: nowrap; }
+.admin-portal .admin-table td { border-top: 1px solid rgba(150, 117, 85, .18); }
+.admin-portal .admin-table tbody tr:hover { background: rgba(255, 240, 222, .3); }
+.admin-portal .admin-table :where(th, td) { padding: 18px 22px; }
+.admin-portal .admin-table .admin-button { min-height: 40px; padding: 8px 12px; }
+.admin-portal .admin-status { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid rgba(90, 70, 50, .16); box-shadow: inset 1px 1px 2px rgba(255, 255, 255, .4); }
+.admin-portal .admin-status-neutral { background: #ddd0bf; color: #594937; }
+.admin-portal .admin-status-success { background: #d3dfcb; color: #235333; }
+.admin-portal .admin-status-warning { background: #e7cc9f; color: #624317; }
+.admin-portal .admin-status-danger { background: #ead0c6; color: #842d29; }
+.admin-portal .admin-status-info { background: #d8d0df; color: #534263; }
+.admin-portal .admin-decision { background: var(--admin-paper); border: 1px solid transparent; box-shadow: var(--admin-small); border-radius: 18px; }
+.admin-portal .admin-decision:has(input:checked) { background: var(--admin-peach); border-color: #a68157; box-shadow: var(--admin-inset); }
+.admin-portal .admin-decision:has(input:focus-visible) { outline: 2px solid var(--admin-focus); outline-offset: 4px; }
+
+/* Persistent shell */
+.admin-portal .admin-header { background: #341512; color: #f1e2d0; box-shadow: 0 3px 12px rgba(52, 21, 18, .2); }
+.admin-portal .admin-header :focus-visible { outline-color: #e5b579; }
+.admin-portal .admin-header-action { min-height: 44px; border-radius: 14px; padding: 8px 12px; transition: background 160ms ease; }
+.admin-portal .admin-header-action:hover { background: #4c2c23; }
+.admin-portal .admin-sidebar { margin: 24px 0 24px 24px; padding: 20px 16px; width: 244px; border-radius: 26px; background: var(--admin-paper); box-shadow: var(--admin-raised); }
+.admin-portal .admin-nav-link { display: flex; width: 100%; min-height: 48px; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; font-family: var(--font-lora), Georgia, serif; font-size: 13px; color: #59402e; transition: background-color 160ms ease, box-shadow 160ms ease; }
+.admin-portal .admin-nav-link:hover { background: #dfcebc; }
+.admin-portal .admin-nav-link[aria-current="page"] { color: var(--admin-ink); background: var(--admin-peach); box-shadow: var(--admin-inset); font-weight: 600; }
+.admin-portal .admin-nav-link svg { width: 19px; height: 19px; flex-shrink: 0; color: #80501f; }
+.admin-portal .admin-sidebar-label { margin: 4px 14px 20px; color: var(--admin-muted); font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .18em; }
+.admin-portal .admin-sidebar-footer { border-top: 1px solid var(--admin-line); padding-top: 16px; margin-top: 28px; }
+.admin-portal .admin-account-menu { color: var(--admin-ink); background: var(--admin-paper); box-shadow: 8px 12px 28px rgba(52, 21, 18, .22), inset 1px 1px 2px #fff1e2; border-radius: 22px; }
+.admin-portal .admin-account-menu :focus-visible { outline-color: var(--admin-focus); }
+.admin-portal .admin-skip-link { position: fixed; left: 20px; top: -100px; z-index: 100; padding: 12px 20px; background: var(--admin-paper); border-radius: 12px; }
+.admin-portal .admin-skip-link:focus { top: 10px; }
+.admin-portal .admin-view-enter { animation: adminViewEnter 220ms ease-out both; }
+@keyframes adminViewEnter { from { opacity: 0; } to { opacity: 1; } }
+
+/* Native top-layer dialogs preserve focus containment and viewport positioning. */
+.admin-portal.admin-dialog { border: 0; padding: 0; width: min(620px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); margin: auto; border-radius: 30px; overflow: auto; box-shadow: 12px 20px 60px rgba(52, 21, 18, .3), inset 1px 1px 2px #fff1e2; }
+.admin-portal.admin-dialog::backdrop { background: rgba(35, 21, 15, .5); backdrop-filter: blur(5px); }
+.admin-portal .admin-dialog-panel { padding: clamp(24px, 4vw, 36px); }
+.admin-portal .admin-dialog-panel :where(h2, h3) { overflow-wrap: anywhere; }
+.admin-portal .admin-dialog-panel > .flex > div { min-width: 0; }
+.admin-portal .admin-dialog-panel button[aria-label^="Close"] { flex-shrink: 0; width: 44px; padding: 8px; }
+.admin-portal.admin-dialog-drawer { width: min(460px, calc(100vw - 16px)); height: calc(100dvh - 24px); max-height: none; margin: 12px 12px 12px auto; }
+.admin-portal.admin-dialog-navigation { width: min(300px, calc(100vw - 32px)); height: calc(100dvh - 24px); max-height: none; margin: 12px auto 12px 12px; }
+.admin-portal.admin-dialog-navigation .admin-dialog-panel { display: flex; min-height: 100%; flex-direction: column; justify-content: space-between; padding: 22px 16px; }
+
+.admin-portal .admin-metric-value { display: flex; align-items: baseline; gap: 12px; margin-top: 24px; padding: 18px 20px; font-variant-numeric: tabular-nums; }
+.admin-portal .admin-metric-value strong { font-family: var(--font-lora), Georgia, serif; font-size: 38px; line-height: 1; font-weight: 500; }
+.admin-portal .admin-metric-value span { font-size: 11px; color: var(--admin-muted); }
+.admin-portal .admin-list { padding: 8px 20px; }
+.admin-portal .admin-list > li + li { border-top: 1px solid rgba(150, 117, 85, .2); }
+.admin-portal .admin-empty { padding: 36px 24px; text-align: center; color: var(--admin-muted); font-size: 13px; line-height: 1.7; }
+.admin-portal .admin-skeleton { background: #d7c5b3; border-radius: 8px; animation: adminSkeleton 1.8s ease-in-out infinite; }
+@keyframes adminSkeleton { 50% { opacity: .45; } }
+
+@media (max-width: 767px) {
+  .admin-portal .admin-page { padding: 28px 20px; }
+  .admin-portal .admin-page > * + * { margin-top: 28px; }
+  .admin-portal .admin-card { border-radius: 24px; }
+  .admin-portal .admin-filter-bar { gap: 10px; }
+  .admin-portal .admin-filter-bar .admin-button { font-size: 11px; padding-inline: 12px; }
+  .admin-portal .admin-dialog-panel { padding: 24px 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-portal *, .admin-portal *::before, .admin-portal *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .admin-portal .admin-button:not(:disabled):hover, .admin-portal .admin-button:not(:disabled):active, .admin-portal .admin-filter:hover { transform: none; }
+}
+@media (forced-colors: active) {
+  .admin-portal :where(.admin-card, .admin-plate, .admin-inset, .admin-button, .admin-field, .admin-nav-link, .admin-decision) { border: 1px solid ButtonText; }
+  .admin-portal [aria-pressed="true"], .admin-portal [aria-current="page"], .admin-portal .admin-decision:has(input:checked) { outline: 2px solid Highlight; outline-offset: 2px; }
+}

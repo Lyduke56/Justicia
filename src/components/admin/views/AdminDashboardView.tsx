@@ -3,7 +3,6 @@ import { ShieldCheckIcon, ScaleIcon, UserGroupIcon, DocumentTextIcon } from '@/c
 
 type PendingLawyer = { user_id: string; full_name: string; roll_number: string; ibp_chapter: string | null };
 type AuditEntry = { id: string; action: string; targetType?: string; timestamp: string };
-
 type Props = {
   pendingLawyersCount: number;
   approvedLawyersCount: number;
@@ -12,62 +11,50 @@ type Props = {
   recentAuditEntries: AuditEntry[];
 };
 
-const cardClass = 'rounded-3xl border border-[#E8DCCB] bg-[#EFE5D8] shadow-[6px_6px_16px_rgba(0,0,0,0.06),-6px_-6px_16px_rgba(255,255,255,0.85)]';
-const linkClass = 'rounded-lg text-xs font-semibold text-[#946525] hover:text-[#6B4517] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#946525]';
-
 export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, totalUsersCount, pendingLawyersPreview, recentAuditEntries }: Props) {
   const stats = [
     { label: 'Awaiting review', value: pendingLawyersCount, note: 'Lawyer applications', href: '/admin/lawyers/verification-queue', icon: ShieldCheckIcon },
     { label: 'Approved lawyers', value: approvedLawyersCount, note: 'Approved profiles', href: '/admin/lawyers', icon: ScaleIcon },
-    { label: 'Registered users', value: totalUsersCount, note: 'All account roles', href: '/admin/users', icon: UserGroupIcon },
+    { label: 'Registered users', value: totalUsersCount, note: 'Across all roles', href: '/admin/users', icon: UserGroupIcon },
   ];
 
-  return <div className="mx-auto max-w-7xl space-y-8 p-6 sm:p-10 lg:p-12">
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#946525]">Administration</p>
-        <h1 className="mt-1 font-cormorant text-4xl font-semibold leading-tight text-[#34150F] sm:text-5xl">Platform overview</h1>
-        <p className="mt-2 max-w-2xl text-sm text-[#705C49]">Review lawyer applications, manage accounts, and inspect recent administrative activity.</p>
+  return (
+    <div className="admin-page">
+      <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+        <div><p className="admin-eyebrow">Administration / Overview</p><h1 className="mt-3">A clear view of Justicia.</h1><p className="admin-description">Review lawyer applications, manage accounts, and keep track of the people behind the platform.</p></div>
+        <Link href="/admin/lawyers/verification-queue" className="admin-button admin-button-primary self-start shrink-0"><ShieldCheckIcon className="h-4 w-4" />Review applications</Link>
       </div>
-      <Link href="/admin/lawyers/verification-queue" className="inline-flex self-start items-center gap-2 rounded-2xl bg-[#C58B3C] px-5 py-3 text-xs font-semibold text-[#23150F] shadow-[3px_3px_8px_rgba(0,0,0,0.1)] hover:bg-[#B37B2F] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#946525]">
-        <ShieldCheckIcon className="h-4 w-4" /> Review applications
-      </Link>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {stats.map(({ label, value, note, href, icon: Icon }) => (
+          <Link key={href} href={href} className="admin-card admin-filter block p-6">
+            <div className="flex items-center justify-between gap-4"><h2 className="text-base">{label}</h2><span className="admin-plate admin-icon"><Icon className="h-5 w-5" /></span></div>
+            <div className="admin-plate admin-metric-value"><strong>{value.toLocaleString('en-PH')}</strong><span>{note}</span></div>
+            <span className="admin-text-link mt-5 flex items-center justify-between">View records <span aria-hidden="true">↗</span></span>
+          </Link>
+        ))}
+      </div>
+      <div className="grid gap-7 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <section className="admin-card min-w-0 p-6 sm:p-7" aria-labelledby="pending-lawyers-heading">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4"><div><p className="admin-eyebrow">Credential review</p><h2 id="pending-lawyers-heading" className="mt-2 text-xl">Applications to review</h2></div><span className="admin-inset px-3 py-2 text-xs">{pendingLawyersCount} pending</span></div>
+          {pendingLawyersPreview.length ? <ul className="admin-inset admin-list">
+            {pendingLawyersPreview.map((lawyer) => <li key={lawyer.user_id} className="flex items-center justify-between gap-4 py-5">
+              <div className="min-w-0"><p className="truncate text-sm font-semibold">{lawyer.full_name}</p><p className="mt-1 truncate text-xs text-[#705744]">Roll {lawyer.roll_number}{lawyer.ibp_chapter ? ' · ' + lawyer.ibp_chapter : ''}</p></div>
+              <Link href={'/admin/lawyers/' + lawyer.user_id} className="admin-button shrink-0">Review</Link>
+            </li>)}
+          </ul> : <div className="admin-inset admin-empty"><ShieldCheckIcon className="mx-auto mb-3 h-7 w-7" /><p className="font-semibold">The queue is clear.</p><p className="mt-1">New applications will appear here when submitted.</p></div>}
+          <Link href="/admin/lawyers/verification-queue" className="admin-text-link mt-6 inline-flex py-2">Open verification queue <span aria-hidden="true" className="ml-2">→</span></Link>
+        </section>
+        <section className="admin-card min-w-0 p-6 sm:p-7" aria-labelledby="activity-heading">
+          <div className="mb-6 flex items-center gap-4"><span className="admin-plate admin-icon"><DocumentTextIcon className="h-5 w-5" /></span><div><p className="admin-eyebrow">Audit trail</p><h2 id="activity-heading" className="mt-2 text-xl">Recent activity</h2></div></div>
+          {recentAuditEntries.length ? <ul className="admin-inset admin-list">
+            {recentAuditEntries.map((entry) => <li key={entry.id} className="flex items-start gap-3 py-5">
+              <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#9B6B38]" />
+              <div className="min-w-0"><p className="text-sm font-medium">{entry.action.replaceAll('_', ' ').replaceAll('.', ' ')}</p><p className="mt-2 text-xs text-[#705744]">{new Date(entry.timestamp).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}</p></div>
+            </li>)}
+          </ul> : <div className="admin-inset admin-empty"><p className="font-semibold">No activity recorded yet.</p><p className="mt-1">Recorded administrative actions will appear here.</p></div>}
+          <Link href="/admin/settings/security-audit-log" className="admin-text-link mt-6 inline-flex py-2">View audit log <span aria-hidden="true" className="ml-2">→</span></Link>
+        </section>
+      </div>
     </div>
-
-    <div className="grid gap-5 sm:grid-cols-3">
-      {stats.map(({ label, value, note, href, icon: Icon }) => <Link key={href} href={href} className={`${cardClass} block p-5 transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#946525]`}>
-        <div className="flex items-start justify-between gap-3"><span className="text-xs font-semibold text-[#705C49]">{label}</span><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E5D7C5] text-[#946525]"><Icon className="h-5 w-5" /></span></div>
-        <p className="mt-3 font-cormorant text-4xl font-bold leading-none">{value}</p>
-        <p className="mt-2 text-xs text-[#7D6855]">{note}</p>
-      </Link>)}
-    </div>
-
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-      <section className={`${cardClass} min-w-0 p-6`} aria-labelledby="pending-lawyers-heading">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#D8CAAD] pb-4">
-          <div><h2 id="pending-lawyers-heading" className="font-cormorant text-2xl font-bold">Applications to review</h2><p className="mt-1 text-xs text-[#7D6855]">Most recent pending submissions</p></div>
-          <Link href="/admin/lawyers/verification-queue" className={linkClass}>View queue →</Link>
-        </div>
-        {pendingLawyersPreview.length ? <ul className="divide-y divide-[#E8DCCB]">
-          {pendingLawyersPreview.map((lawyer) => <li key={lawyer.user_id} className="flex items-center justify-between gap-4 py-4">
-            <div className="min-w-0"><p className="truncate text-sm font-semibold">{lawyer.full_name}</p><p className="mt-1 truncate text-xs text-[#7D6855]">Roll {lawyer.roll_number}{lawyer.ibp_chapter ? ` · ${lawyer.ibp_chapter}` : ''}</p></div>
-            <Link href={`/admin/lawyers/${lawyer.user_id}`} className={linkClass}>Review</Link>
-          </li>)}
-        </ul> : <p className="py-10 text-center text-sm text-[#7D6855]">No applications are waiting for review.</p>}
-      </section>
-
-      <section className={`${cardClass} min-w-0 p-6`} aria-labelledby="activity-heading">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#D8CAAD] pb-4">
-          <div><h2 id="activity-heading" className="font-cormorant text-2xl font-bold">Recent activity</h2><p className="mt-1 text-xs text-[#7D6855]">Latest recorded admin actions</p></div>
-          <Link href="/admin/settings/security-audit-log" className={linkClass}>View audit log →</Link>
-        </div>
-        {recentAuditEntries.length ? <ul className="divide-y divide-[#E8DCCB]">
-          {recentAuditEntries.map((entry) => <li key={entry.id} className="flex items-start gap-3 py-4">
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#E5D7C5] text-[#946525]"><DocumentTextIcon className="h-4 w-4" /></span>
-            <div className="min-w-0"><p className="break-words text-sm font-medium">{entry.action.replaceAll('_', ' ').replaceAll('.', ' ')}</p><p className="mt-1 text-xs text-[#7D6855]">{new Date(entry.timestamp).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}</p></div>
-          </li>)}
-        </ul> : <p className="py-10 text-center text-sm text-[#7D6855]">No administrative activity has been recorded yet.</p>}
-      </section>
-    </div>
-  </div>;
+  );
 }

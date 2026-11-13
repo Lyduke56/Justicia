@@ -48,39 +48,39 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
   const isRejected = profile.verification_status === 'rejected';
 
   return (
-    <div className="p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-8">
+    <div className="admin-page">
       {/* ─── Header & Breadcrumbs ─────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <Link
               href="/admin/lawyers/verification-queue"
-              className="text-[11px] font-bold tracking-[0.2em] text-[#7D6855] hover:text-[#34150F] uppercase"
+              className="text-[11px] font-bold tracking-[0.2em] text-[#705744] hover:text-[#34150F] uppercase"
             >
               ← Verification Queue
             </Link>
-            <span className="text-[#A69584]">/</span>
-            <span className="text-[11px] font-bold tracking-[0.2em] text-[#C58B3C] uppercase">
+            <span className="text-[#806955]">/</span>
+            <span className="text-[11px] font-bold tracking-[0.2em] text-[#80501F] uppercase">
               Lawyer Dossier
             </span>
           </div>
 
           <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-            <h1 className="font-cormorant text-4xl sm:text-5xl font-medium text-[#34150F] tracking-tight">
+            <h1 className="font-lora text-4xl sm:text-5xl font-medium text-[#34150F] tracking-tight">
               Atty. {profile.full_name}
             </h1>
 
             <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+              className={`admin-status ${
                 isApproved
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  ? 'admin-status-success'
                   : isPending
-                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                  ? 'admin-status-warning'
                   : isNeedsInfo
-                  ? 'bg-orange-50 text-orange-800 border-orange-300'
+                  ? 'admin-status-info'
                   : isRejected
-                  ? 'bg-red-50 text-red-800 border-red-200'
-                  : 'bg-gray-100 text-gray-700 border-gray-300'
+                  ? 'admin-status-danger'
+                  : 'admin-status-neutral'
               }`}
             >
               <span>{isApproved ? '✅' : isPending ? '⏳' : isNeedsInfo ? '📋' : isRejected ? '✗' : '📝'}</span>
@@ -98,7 +98,7 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
             </span>
           </div>
 
-          <p className="text-xs text-[#7D6855] mt-1">
+          <p className="text-xs text-[#705744] mt-1">
             Registered: {account?.email} • Account created{' '}
             {account?.created_at ? new Date(account.created_at).toLocaleDateString('en-PH') : '—'}
           </p>
@@ -107,7 +107,7 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
         <div className="flex items-center gap-2">
           <Link
             href="/admin/lawyers"
-            className="px-4 py-2 rounded-xl border border-[#D8CAAD] text-xs font-semibold text-[#5C4535] hover:bg-[#E5D7C5] transition-all"
+            className="admin-button px-4 py-2 text-xs font-semibold transition-all"
           >
             All Lawyers
           </Link>
@@ -118,49 +118,48 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Official Bar Credentials */}
         <div
-          className="lg:col-span-1 rounded-3xl p-6 bg-[#EFE5D8] border border-[#E8DCCB] space-y-6 self-start"
-          style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
+          className="admin-card lg:col-span-1 p-6 space-y-6 self-start"
         >
           <div className="border-b border-[#D8CAAD] pb-4">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#C58B3C]">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#80501F]">
               Supreme Court & IBP Records
             </span>
-            <h2 className="font-cormorant text-2xl font-bold text-[#34150F] mt-0.5">
+            <h2 className="font-lora text-2xl font-bold text-[#34150F] mt-0.5">
               Bar Credentials
             </h2>
           </div>
 
           <div className="space-y-4 text-xs">
             <div>
-              <span className="font-semibold text-[#7D6855] block">Roll of Attorneys Number</span>
-              <p className="text-base font-mono font-bold text-[#34150F] mt-0.5 bg-[#FAF6F0] p-2.5 rounded-xl border border-[#D8CAAD]">
+              <span className="font-semibold text-[#705744] block">Roll of Attorneys Number</span>
+              <p className="admin-inset text-base font-mono font-bold text-[#34150F] mt-0.5 p-2.5">
                 {profile.roll_number || 'None provided'}
               </p>
             </div>
 
             <div>
-              <span className="font-semibold text-[#7D6855] block">IBP Chapter</span>
+              <span className="font-semibold text-[#705744] block">IBP Chapter</span>
               <p className="text-sm font-medium text-[#34150F] mt-0.5">
                 {profile.ibp_chapter || 'Not assigned'}
               </p>
             </div>
 
             <div>
-              <span className="font-semibold text-[#7D6855] block">Philippine Bar Admission Year</span>
+              <span className="font-semibold text-[#705744] block">Philippine Bar Admission Year</span>
               <p className="text-sm font-medium text-[#34150F] mt-0.5">
                 {profile.bar_passer_year ? `Bar Class of ${profile.bar_passer_year}` : 'Not provided'}
               </p>
             </div>
 
             <div>
-              <span className="font-semibold text-[#7D6855] block">Years of Active Practice</span>
+              <span className="font-semibold text-[#705744] block">Years of Active Practice</span>
               <p className="text-sm font-medium text-[#34150F] mt-0.5">
                 {profile.experience_years ? `${profile.experience_years} years` : 'Not provided'}
               </p>
             </div>
 
             <div className="border-t border-[#D8CAAD] pt-4">
-              <span className="font-semibold text-[#7D6855] block">Platform Visibility</span>
+              <span className="font-semibold text-[#705744] block">Platform Visibility</span>
               <div className="flex items-center gap-2 mt-1">
                 <div className={`w-2 h-2 rounded-full ${profile.is_visible ? 'bg-emerald-500' : 'bg-gray-400'}`} />
                 <span className="text-xs font-medium text-[#34150F]">
@@ -175,14 +174,13 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
         <div className="lg:col-span-2 space-y-6">
           {/* Card: Practice Details & Rates */}
           <div
-            className="rounded-3xl p-6 bg-[#EFE5D8] border border-[#E8DCCB] space-y-6"
-            style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
+            className="admin-card p-6 space-y-6"
           >
             <div className="border-b border-[#D8CAAD] pb-4">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#C58B3C]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#80501F]">
                 Professional Offering
               </span>
-              <h2 className="font-cormorant text-2xl font-bold text-[#34150F] mt-0.5">
+              <h2 className="font-lora text-2xl font-bold text-[#34150F] mt-0.5">
                 Legal Practice & Consultation Rates
               </h2>
             </div>
@@ -190,7 +188,7 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
             <div className="space-y-4 text-xs">
               {/* Practice Areas */}
               <div>
-                <span className="font-semibold text-[#7D6855] block mb-2">Practice Areas</span>
+                <span className="font-semibold text-[#705744] block mb-2">Practice Areas</span>
                 <div className="flex flex-wrap gap-2">
                   {profile.practice_areas && profile.practice_areas.length > 0 ? (
                     profile.practice_areas.map((area: string) => (
@@ -202,14 +200,14 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
                       </span>
                     ))
                   ) : (
-                    <span className="text-[#A69584]">None declared</span>
+                    <span className="text-[#806955]">None declared</span>
                   )}
                 </div>
               </div>
 
               {/* Languages */}
               <div>
-                <span className="font-semibold text-[#7D6855] block mb-1">Languages & Dialects</span>
+                <span className="font-semibold text-[#705744] block mb-1">Languages & Dialects</span>
                 <p className="text-sm text-[#34150F]">
                   {profile.languages?.join(', ') || 'Filipino, English'}
                 </p>
@@ -217,22 +215,22 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
 
               {/* Rates */}
               <div>
-                <span className="font-semibold text-[#7D6855] block mb-2">Standard Consultation Rates</span>
+                <span className="font-semibold text-[#705744] block mb-2">Standard Consultation Rates</span>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-3 rounded-2xl bg-[#F5EDE2] border border-[#E8DCCB] text-center">
-                    <span className="text-[10px] uppercase font-bold text-[#7D6855]">Initial 30 Min</span>
+                  <div className="admin-inset p-3 text-center">
+                    <span className="text-[10px] uppercase font-bold text-[#705744]">Initial 30 Min</span>
                     <p className="text-lg font-bold text-[#34150F] mt-0.5">
                       {profile.fee_initial_30min ? `₱${profile.fee_initial_30min}` : 'Not set'}
                     </p>
                   </div>
-                  <div className="p-3 rounded-2xl bg-[#F5EDE2] border border-[#E8DCCB] text-center">
-                    <span className="text-[10px] uppercase font-bold text-[#7D6855]">Standard 1 Hour</span>
+                  <div className="admin-inset p-3 text-center">
+                    <span className="text-[10px] uppercase font-bold text-[#705744]">Standard 1 Hour</span>
                     <p className="text-lg font-bold text-[#34150F] mt-0.5">
                       {profile.fee_standard_60min ? `₱${profile.fee_standard_60min}` : 'Not set'}
                     </p>
                   </div>
-                  <div className="p-3 rounded-2xl bg-[#F5EDE2] border border-[#E8DCCB] text-center">
-                    <span className="text-[10px] uppercase font-bold text-[#7D6855]">Extended 2 Hours</span>
+                  <div className="admin-inset p-3 text-center">
+                    <span className="text-[10px] uppercase font-bold text-[#705744]">Extended 2 Hours</span>
                     <p className="text-lg font-bold text-[#34150F] mt-0.5">
                       {profile.fee_extended_120min ? `₱${profile.fee_extended_120min}` : 'Not set'}
                     </p>
@@ -243,8 +241,8 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
               {/* Bio Statement */}
               {profile.about && (
                 <div className="pt-2">
-                  <span className="font-semibold text-[#7D6855] block mb-1">Biography / Legal Statement</span>
-                  <div className="p-4 rounded-2xl bg-[#F5EDE2] border border-[#E8DCCB] text-xs text-[#5C4535] leading-relaxed">
+                  <span className="font-semibold text-[#705744] block mb-1">Biography / Legal Statement</span>
+                  <div className="admin-inset p-4 text-xs text-[#5C4535] leading-relaxed">
                     {profile.about}
                   </div>
                 </div>
@@ -264,25 +262,24 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
           {/* Audit History */}
           {auditLogs && auditLogs.length > 0 && (
             <div
-              className="rounded-3xl p-6 bg-[#EFE5D8] border border-[#E8DCCB] space-y-4"
-              style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
+              className="admin-card p-6 space-y-4"
             >
-              <h3 className="font-cormorant text-xl font-bold text-[#34150F]">
+              <h3 className="font-lora text-xl font-bold text-[#34150F]">
                 Application Audit Trail
               </h3>
               <div className="space-y-2 text-xs">
                 {auditLogs.map((log) => (
                   <div
                     key={log.id}
-                    className="flex items-center justify-between p-3 rounded-xl bg-[#F5EDE2] border border-[#E8DCCB]"
+                    className="admin-inset flex items-center justify-between p-3"
                   >
                     <div>
                       <span className="font-bold text-[#34150F]">{log.action}</span>
-                      <p className="text-[11px] text-[#7D6855] mt-0.5">
+                      <p className="text-[11px] text-[#705744] mt-0.5">
                         {log.details ? JSON.stringify(log.details) : 'Audit recorded'}
                       </p>
                     </div>
-                    <span className="text-[11px] text-[#A69584]">
+                    <span className="text-[11px] text-[#806955]">
                       {new Date(log.created_at).toLocaleString('en-PH')}
                     </span>
                   </div>
