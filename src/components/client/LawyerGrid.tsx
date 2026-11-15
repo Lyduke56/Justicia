@@ -233,11 +233,10 @@ export function LawyerGrid({
           type="button"
           onClick={() => handlePageChange(page - 1)}
           disabled={page <= 1}
-          className={`size-10 rounded-full neu-raised-sm bg-[#E5D8CB] flex items-center justify-center transition-all focus:outline-none ${
-            page <= 1
-              ? 'opacity-30 cursor-not-allowed text-[#583C37]'
-              : 'text-[#583C37] hover:text-[#C58B3C] active:scale-95 cursor-pointer'
-          }`}
+          className={`size-10 rounded-full neu-raised-sm bg-[#E5D8CB] flex items-center justify-center transition-all focus:outline-none ${page <= 1
+            ? 'opacity-30 cursor-not-allowed text-[#583C37]'
+            : 'text-[#583C37] hover:text-[#C58B3C] active:scale-95 cursor-pointer'
+            }`}
           aria-label="Previous lawyers page"
         >
           <ChevronLeftIcon className="w-6 h-6 stroke-[2.2]" />
@@ -253,11 +252,10 @@ export function LawyerGrid({
                 key={pageNum}
                 type="button"
                 onClick={() => handlePageChange(pageNum)}
-                className={`rounded-full transition-all cursor-pointer focus:outline-none ${
-                  isActive
-                    ? 'w-3 h-3 bg-[#D39758]'
-                    : 'w-2 h-2 bg-[#34150F] hover:bg-[#C58B3C]'
-                }`}
+                className={`rounded-full transition-all cursor-pointer focus:outline-none ${isActive
+                  ? 'w-3 h-3 bg-[#D39758]'
+                  : 'w-2 h-2 bg-[#34150F] hover:bg-[#C58B3C]'
+                  }`}
                 aria-label={`Go to page ${pageNum}`}
               />
             );
@@ -269,11 +267,10 @@ export function LawyerGrid({
           type="button"
           onClick={() => handlePageChange(page + 1)}
           disabled={page >= totalPages}
-          className={`size-10 rounded-full neu-raised-sm bg-[#E5D8CB] flex items-center justify-center transition-all focus:outline-none ${
-            page >= totalPages
-              ? 'opacity-30 cursor-not-allowed text-[#583C37]'
-              : 'text-[#583C37] hover:text-[#C58B3C] active:scale-95 cursor-pointer'
-          }`}
+          className={`size-10 rounded-full neu-raised-sm bg-[#E5D8CB] flex items-center justify-center transition-all focus:outline-none ${page >= totalPages
+            ? 'opacity-30 cursor-not-allowed text-[#583C37]'
+            : 'text-[#583C37] hover:text-[#C58B3C] active:scale-95 cursor-pointer'
+            }`}
           aria-label="Next lawyers page"
         >
           <ChevronRightIcon className="w-6 h-6 stroke-[2.2]" />
@@ -332,9 +329,9 @@ function FindLawyerCard({
       aria-label={`View details and book consultation with ${lawyer.fullName}`}
     >
       {/* Top Section matching Client Dashboard LawyerCard spacing and font sizes */}
-      <div className="flex items-center gap-3 sm:gap-3.5">
+      <div className="flex items-center gap-3 sm:gap-2">
         {/* Silhouette Avatar Circle - height aligns with IBP Verified capsule & Specializations line */}
-        <div className="w-[64px] h-[64px] sm:w-[76px] sm:h-[76px] shrink-0 flex items-center justify-center text-[#4A3528] group-hover:text-[#C58B3C] transition-colors overflow-hidden">
+        <div className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] shrink-0 flex items-center justify-center text-[#4A3528] group-hover:text-[#C58B3C] transition-colors overflow-hidden">
           {lawyer.photoUrl ? (
             <Image
               src={lawyer.photoUrl}

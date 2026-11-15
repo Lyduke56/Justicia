@@ -256,6 +256,18 @@ export function ClientShell({ user, children }: ClientShellProps) {
             )}
           </div>
 
+          {/* Settings Shortcut */}
+          <button
+            type="button"
+            id="nav-settings-header"
+            onClick={() => router.push('/client/settings')}
+            className="p-1.5 rounded-lg transition-colors hover:text-[#C58B3C]"
+            title="Settings"
+            aria-label="Settings"
+          >
+            <GearIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+          </button>
+
           {/* User Profile */}
           <div className="relative">
             <button
