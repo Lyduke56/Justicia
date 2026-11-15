@@ -1331,6 +1331,112 @@ export async function uploadDocumentFileAction(
 }
 
 /**
+ * Deletes a document file owned by the current user.
+ */
+export async function deleteDocumentFileAction(
+  documentId: string
+): Promise<{ success: true } | { success?: false; error: string }> {
+  try {
+    const session = await requireSession();
+    if ('error' in session) return { error: session.error };
+    const { db, user } = session;
+
+    const { error } = await db
+      .from('documents')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', documentId)
+      .eq('owner_id', user.id);
+
+    if (error) {
+      console.error('[deleteDocumentFileAction] update failed:', error.message);
+      return { error: 'Failed to delete the document.' };
+    }
+
+    revalidatePath('/client/documents');
+    revalidatePath('/lawyer/documents');
+    return { success: true };
+  } catch (err) {
+    console.error('[deleteDocumentFileAction] error:', err);
+    return { error: 'Failed to delete the document.' };
+  }
+}
+
+/**
+ * Deletes a folder owned by the current user and soft-deletes files inside it.
+ */
+export async function deleteDocumentFolderAction(
+  folderId: string
+): Promise<{ success: true } | { success?: false; error: string }> {
+  try {
+    const session = await requireSession();
+    if ('error' in session) return { error: session.error };
+    const { db, user } = session;
+
+    const now = new Date().toISOString();
+    const { error: folderErr } = await db
+      .from('documents')
+      .update({ deleted_at: now })
+      .eq('id', folderId)
+      .eq('owner_id', user.id);
+
+    if (folderErr) {
+      console.error('[deleteDocumentFolderAction] folder delete failed:', folderErr.message);
+      return { error: 'Failed to delete folder.' };
+    }
+
+    // Also soft-delete files associated with this folder path
+    await db
+      .from('documents')
+      .update({ deleted_at: now })
+      .eq('owner_id', user.id)
+      .like('storage_path', `%/${folderId}/%`);
+
+    revalidatePath('/client/documents');
+    revalidatePath('/lawyer/documents');
+    return { success: true };
+  } catch (err) {
+    console.error('[deleteDocumentFolderAction] error:', err);
+    return { error: 'Failed to delete folder.' };
+  }
+}
+
+/**
+ * Renames a folder owned by the current user.
+ */
+export async function renameDocumentFolderAction(
+  folderId: string,
+  newName: string
+): Promise<{ success: true; newName: string } | { success?: false; error: string }> {
+  try {
+    const trimmed = (newName ?? '').trim();
+    if (!trimmed) return { error: 'Folder name cannot be empty.' };
+    if (trimmed.length > 100) return { error: 'Folder name must be 100 characters or fewer.' };
+
+    const session = await requireSession();
+    if ('error' in session) return { error: session.error };
+    const { db, user } = session;
+
+    const { error } = await db
+      .from('documents')
+      .update({ filename: `${FOLDER_PREFIX}${trimmed}` })
+      .eq('id', folderId)
+      .eq('owner_id', user.id);
+
+    if (error) {
+      console.error('[renameDocumentFolderAction] update failed:', error.message);
+      return { error: 'Failed to rename folder.' };
+    }
+
+    revalidatePath('/client/documents');
+    revalidatePath('/lawyer/documents');
+    return { success: true, newName: trimmed };
+  } catch (err) {
+    console.error('[renameDocumentFolderAction] error:', err);
+    return { error: 'Failed to rename folder.' };
+  }
+}
+
+/**
  * Returns the signed-in user's My Documents folders:
  *  - "Client Vault & Uploaded Records" (files not in a folder)
  *  - user-created folders

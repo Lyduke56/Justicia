@@ -1,10 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useLawyerReviews } from './useLawyerReviews';
-import { motion, AnimatePresence } from 'motion/react';
-import { createClient } from '@/lib/supabase/client';
+import {
+  motion,
+  AnimatePresence,
+  MotionConfig,
+  animate,
+  useAnimationControls,
+  useInView,
+  useMotionValue,
+  useTransform,
+} from 'motion/react';
+import type { HTMLMotionProps, Variants } from 'motion/react';
 import type { PublicLawyerProfile } from './LawyerGrid';
 import {
   bookConsultationAction,
@@ -42,6 +51,21 @@ interface BookingDraft {
 
 const DEFAULT_TIME_SLOT = '2:00 PM - 3:00 PM • PST, GMT+8';
 const bookingDraftKey = (lawyerId: string) => `justicia_booking_draft_${lawyerId}`;
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const MONTH_SHORT_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEPT', 'OCT', 'NOV', 'DEC'];
+
+const TIME_SLOTS = [
+  '9:00 AM - 10:00 AM • PST, GMT+8',
+  '10:00 AM - 11:00 AM • PST, GMT+8',
+  '1:00 PM - 2:00 PM • PST, GMT+8',
+  '2:00 PM - 3:00 PM • PST, GMT+8',
+  '3:00 PM - 4:00 PM • PST, GMT+8',
+  '4:00 PM - 5:00 PM • PST, GMT+8',
+];
 
 /** Parses "2:00 PM - 3:00 PM • …" into minutes-from-midnight. */
 function parseSlotMinutes(slot: string): { start: number; end: number } | null {
@@ -81,6 +105,14 @@ interface LawyerDetailViewProps {
 }
 
 type TabType = 'about' | 'reviews' | 'booking' | 'cases';
+const TABS: { key: TabType; label: string }[] = [
+  { key: 'about', label: 'About' },
+  { key: 'reviews', label: 'Reviews' },
+  { key: 'booking', label: 'Consultation Booking' },
+  { key: 'cases', label: 'Cases Handled' },
+];
+const TAB_ORDER: TabType[] = TABS.map((t) => t.key);
+
 // Always resolves "today" in Philippine time (GMT+8), regardless of device/server timezone
 const getTodayPH = () => {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -93,18 +125,345 @@ const getTodayPH = () => {
   return { year: get('year'), month: get('month') - 1, day: get('day') };
 };
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  MOTION PRIMITIVES
+//  Everything below is reusable. The big idea: buttons behave like physical keys
+//  (snap down fast, spring back with a little overshoot), active choices are a
+//  single "pill" that slides between options, and content enters in a staggered
+//  sequence instead of all at once.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Overall screen scale. 1 = original size. Lower = smaller (0.9 = 90%). Layout is untouched. */
+const SCREEN_SCALE = 0.95;
+
+const EASE_OUT: [number, number, number, number] = [0.22, 1, 0.36, 1];
+const SPRING_PILL = { type: 'spring', stiffness: 520, damping: 38 } as const;
+
+/**
+ * Page-load choreography (seconds):
+ *   0.00 back button → 0.12 banner (focus-in) → 0.35 avatar → 0.50 name → 0.60–0.80 details
+ *   0.95 tabs cascade in → 1.00 sheen sweeps the banner → 1.35 active tab pill settles
+ *   1.20 first panel starts, and everything inside it staggers after that.
+ */
+const INTRO_DELAY = 1.2;
+/** Extra delay that content inside the tab panels adds while the page is still introducing itself. */
+const IntroContext = createContext(0);
+
+/** Key-press feel: hover lifts, press snaps down in ~60ms, release springs back with overshoot. */
+const makeKeyVariants = (travel = 2.5, squish = 0.968, lift = -1.5): Variants => ({
+  rest: {
+    y: 0,
+    scale: 1,
+    filter: 'brightness(1)',
+    transition: { type: 'spring', stiffness: 560, damping: 15, mass: 0.7 },
+  },
+  hover: {
+    y: lift,
+    scale: 1,
+    filter: 'brightness(1.03)',
+    transition: { type: 'spring', stiffness: 500, damping: 26 },
+  },
+  pressed: {
+    y: travel,
+    scale: squish,
+    filter: 'brightness(0.95)',
+    transition: { duration: 0.06, ease: 'easeOut' },
+  },
+});
+const KEY_VARIANTS = makeKeyVariants();
+const CARD_KEY_VARIANTS = makeKeyVariants(2, 0.99, -2);
+
+/** Inset shadow that fades in while pressed, so the face looks pushed into the surface. */
+const OVERLAY_VARIANTS: Variants = {
+  rest: { opacity: 0, transition: { duration: 0.18 } },
+  hover: { opacity: 0 },
+  pressed: { opacity: 1, transition: { duration: 0.05 } },
+};
+
+function PressOverlay() {
+  return (
+    <motion.span
+      aria-hidden
+      variants={OVERLAY_VARIANTS}
+      className="pointer-events-none absolute inset-0 z-20 rounded-[inherit]"
+      style={{
+        boxShadow: 'inset 3px 3px 8px rgba(120,84,48,0.40), inset -2px -2px 5px rgba(255,244,232,0.5)',
+        background: 'linear-gradient(145deg, rgba(120,84,48,0.12), rgba(255,255,255,0) 60%)',
+      }}
+    />
+  );
+}
+
+type KeyProps = Omit<
+  HTMLMotionProps<'button'>,
+  'children' | 'variants' | 'initial' | 'animate' | 'whileHover' | 'whileTap'
+> & { children?: React.ReactNode };
+
+/** Drop-in tactile <button>. Pass the same classNames you'd give a normal button. */
+function Key({ className = '', children, disabled, ...rest }: KeyProps) {
+  const on = !disabled;
+  return (
+    <motion.button
+      type="button"
+      disabled={disabled}
+      variants={KEY_VARIANTS}
+      initial="rest"
+      animate="rest"
+      whileHover={on ? 'hover' : undefined}
+      whileTap={on ? 'pressed' : undefined}
+      className={`group relative touch-manipulation select-none ${className}`}
+      {...rest}
+    >
+      {children}
+      <PressOverlay />
+    </motion.button>
+  );
+}
+
+/** Tactile <Link>. The Link stays a plain anchor; the key face inside it is what moves. */
+function KeyLink({ href, className = '', children }: { href: string; className?: string; children: React.ReactNode }) {
+  return (
+    <Link href={href} className="inline-flex rounded-[12px]">
+      <motion.span
+        variants={KEY_VARIANTS}
+        initial="rest"
+        animate="rest"
+        whileHover="hover"
+        whileTap="pressed"
+        className={`relative select-none ${className}`}
+      >
+        {children}
+        <PressOverlay />
+      </motion.span>
+    </Link>
+  );
+}
+
+/**
+ * The shared "active option" background. Render it inside whichever option is selected
+ * and give every instance in a group the same layoutId — it glides from option to option.
+ * A solid base sits under the highlight so the old recessed/raised surface never bleeds through.
+ */
+function HighlightPill({
+  layoutId,
+  radius,
+  variant = 'neu-raised-highlight-sm',
+  intro = false,
+}: {
+  layoutId: string;
+  radius: number;
+  variant?: string;
+  /** Delay (s) for a one-time "settle in" on first page load; false for none. */
+  intro?: number | false;
+}) {
+  return (
+    <motion.span
+      aria-hidden
+      layoutId={layoutId}
+      transition={SPRING_PILL}
+      initial={intro === false ? undefined : { opacity: 0, scale: 0.8 }}
+      animate={
+        intro === false
+          ? undefined
+          : { opacity: 1, scale: 1, transition: { delay: intro, type: 'spring', stiffness: 260, damping: 20 } }
+      }
+      style={{ borderRadius: radius }}
+      className="pointer-events-none absolute inset-0 z-0"
+    >
+      <span className="absolute inset-0 rounded-[inherit] bg-[#E5D8CB]" />
+      <span className={`absolute inset-0 rounded-[inherit] ${variant}`} />
+    </motion.span>
+  );
+}
+
+/** Fade + rise when scrolled into view (once). */
+function Reveal({
+  children,
+  className = '',
+  delay = 0,
+  y = 18,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+  y?: number;
+}) {
+  const introDelay = useContext(IntroContext);
+  return (
+    <motion.div
+      className={className}
+      initial={{ opacity: 0, y }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.12 }}
+      transition={{ duration: 0.7, delay: introDelay + delay, ease: EASE_OUT }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/**
+ * Height-collapsing wrapper for banners/notices. `gap` must equal the parent's space-y
+ * (in px) so the layout doesn't jump when the notice mounts or unmounts.
+ */
+function Collapse({ children, gap = 0, className = '' }: { children: React.ReactNode; gap?: number; className?: string }) {
+  return (
+    <motion.div
+      initial={{ height: 0, opacity: 0, marginBottom: -gap }}
+      animate={{ height: 'auto', opacity: 1, marginBottom: 0 }}
+      exit={{ height: 0, opacity: 0, marginBottom: -gap }}
+      transition={{ duration: 0.3, ease: EASE_OUT }}
+      className={`overflow-hidden ${className}`}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/** Number that counts up the first time it scrolls into view and re-tweens when the value changes. */
+function CountUp({
+  value,
+  decimals = 0,
+  prefix = '',
+  duration = 0.9,
+  delay = 0,
+  className = '',
+}: {
+  value: number;
+  decimals?: number;
+  prefix?: string;
+  duration?: number;
+  delay?: number;
+  className?: string;
+}) {
+  const introDelay = useContext(IntroContext);
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, amount: 0.5 });
+  const mv = useMotionValue(0);
+  const text = useTransform(
+    mv,
+    (v) => prefix + (decimals > 0 ? v.toFixed(decimals) : Math.round(v).toLocaleString())
+  );
+  useEffect(() => {
+    if (!inView) return;
+    const controls = animate(mv, value, { duration, delay: introDelay + delay, ease: EASE_OUT });
+    return () => controls.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inView, value, duration, mv]);
+  return (
+    <motion.span ref={ref} className={`tabular-nums ${className}`}>
+      {text}
+    </motion.span>
+  );
+}
+
+/** Small odometer-style number: old value rolls up and out, new one rolls in. */
+function RollNumber({ value }: { value: number }) {
+  return (
+    <span className="relative inline-flex overflow-hidden align-bottom tabular-nums">
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={value}
+          initial={{ y: '100%', opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: '-100%', opacity: 0 }}
+          transition={{ duration: 0.2, ease: EASE_OUT }}
+          className="inline-block"
+        >
+          {value}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
+// ─── Shared variants ─────────────────────────────────────────────────────────
+
+/** Tab panels and paginated lists: slide in from the direction you navigated. */
+const SLIDE_VARIANTS: Variants = {
+  enter: (d: number) => ({ opacity: 0, x: d * 28 }),
+  center: { opacity: 1, x: 0, transition: { duration: 0.34, ease: EASE_OUT } },
+  exit: (d: number) => ({ opacity: 0, x: d * -28, transition: { duration: 0.16, ease: 'easeIn' } }),
+};
+
+/** Tab panels: a soft rise + drift from the side you navigated toward. `delay` is only non-zero on first load. */
+type PanelCustom = { dir: number; delay: number };
+const PANEL_VARIANTS: Variants = {
+  enter: ({ dir }: PanelCustom) => ({ opacity: 0, x: dir * 18, y: 14, scale: 0.992 }),
+  center: ({ delay }: PanelCustom) => ({
+    opacity: 1,
+    x: 0,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.6, delay, ease: EASE_OUT },
+  }),
+  exit: ({ dir }: PanelCustom) => ({
+    opacity: 0,
+    x: dir * -14,
+    scale: 0.996,
+    transition: { duration: 0.2, ease: 'easeIn' },
+  }),
+};
+
+/** Tab bar: each tab rises in with a little spring. */
+const TAB_BAR_VARIANTS: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.075, delayChildren: 0.95 } },
+};
+const TAB_ITEM_VARIANTS: Variants = {
+  hidden: { opacity: 0, y: 16, scale: 0.92 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 240, damping: 20 } },
+};
+
+const makeRollVariants = (dist: number): Variants => ({
+  enter: (d: number) => ({ y: d * dist, opacity: 0 }),
+  center: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 420, damping: 30 } },
+  exit: (d: number) => ({ y: d * -dist, opacity: 0, transition: { duration: 0.18 } }),
+});
+const DAY_ROLL = makeRollVariants(46);
+const LABEL_ROLL = makeRollVariants(16);
+
+const STAGGER_VARIANTS: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.07, delayChildren: 0.04 } },
+  exit: { opacity: 0, transition: { duration: 0.14 } },
+};
+const STAGGER_ITEM: Variants = {
+  hidden: { opacity: 0, y: 18, scale: 0.985 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: EASE_OUT } },
+};
+
+const CASE_PAGE_VARIANTS: Variants = {
+  enter: (d: number) => ({ opacity: 0, x: d * 28 }),
+  center: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.3, ease: EASE_OUT, staggerChildren: 0.08, delayChildren: 0.05 },
+  },
+  exit: (d: number) => ({ opacity: 0, x: d * -28, transition: { duration: 0.16, ease: 'easeIn' } }),
+};
+const CASE_CARD_VARIANTS: Variants = {
+  enter: { opacity: 0, y: 20 },
+  center: { opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE_OUT } },
+};
+
+const SHAKE = { x: [0, -9, 9, -6, 6, -3, 0], transition: { duration: 0.45 } };
 
 // ─── Neumorphic SVG Icon Helpers (Zero AI Emojis) ───────────────────────────
 
-function StarIcon({ filled = false, className = "w-4 h-4" }: { filled?: boolean; className?: string }) {
+function StarIcon({ filled = false, className = 'w-4 h-4' }: { filled?: boolean; className?: string }) {
   return (
-    <svg className={`${className} ${filled ? 'text-[#C58B3C] fill-[#C58B3C]' : 'text-[#CBB8A4] fill-transparent stroke-current'}`} viewBox="0 0 20 20" strokeWidth="1.2">
+    <svg
+      className={`${className} transition-colors duration-300 ${filled ? 'text-[#C58B3C] fill-[#C58B3C]' : 'text-[#CBB8A4] fill-transparent stroke-current'}`}
+      viewBox="0 0 20 20"
+      strokeWidth="1.2"
+    >
       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
     </svg>
   );
 }
 
-function ScalesIcon({ className = "w-3.5 h-3.5 text-[#C58B3C] shrink-0" }: { className?: string }) {
+function ScalesIcon({ className = 'w-3.5 h-3.5 text-[#C58B3C] shrink-0' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M12 3v18M7 21h10M3 7h18" />
@@ -114,7 +473,7 @@ function ScalesIcon({ className = "w-3.5 h-3.5 text-[#C58B3C] shrink-0" }: { cla
   );
 }
 
-function PaperclipIcon({ className = "w-3.5 h-3.5 text-[#C58B3C] shrink-0" }: { className?: string }) {
+function PaperclipIcon({ className = 'w-3.5 h-3.5 text-[#C58B3C] shrink-0' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.373L8.558 18.315a1.5 1.5 0 0 1-2.121-2.121l7.693-7.693" />
@@ -122,7 +481,7 @@ function PaperclipIcon({ className = "w-3.5 h-3.5 text-[#C58B3C] shrink-0" }: { 
   );
 }
 
-function FolderIcon({ className = "w-4 h-4 text-[#C58B3C] shrink-0" }: { className?: string }) {
+function FolderIcon({ className = 'w-4 h-4 text-[#C58B3C] shrink-0' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
@@ -130,13 +489,316 @@ function FolderIcon({ className = "w-4 h-4 text-[#C58B3C] shrink-0" }: { classNa
   );
 }
 
-function FileDocIcon({ className = "w-4 h-4 text-[#7A6756] shrink-0" }: { className?: string }) {
+function FileDocIcon({ className = 'w-4 h-4 text-[#7A6756] shrink-0' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
     </svg>
   );
 }
+
+function CloseIcon({ className = 'w-3 h-3' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
+/** Check mark that draws itself. */
+function AnimatedCheck({ className = 'w-4 h-4', delay = 0 }: { className?: string; delay?: number }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+      <motion.path
+        d="M5 12.5l4.5 4.5L19 7"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 0.35, delay, ease: EASE_OUT }}
+      />
+    </svg>
+  );
+}
+
+function Spinner({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={`${className} animate-spin motion-reduce:animate-none`} viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    </svg>
+  );
+}
+
+function LineIcon({
+  children,
+  className = 'w-8 h-8 text-[#341512]/80 shrink-0',
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      {children}
+    </svg>
+  );
+}
+
+// ─── Small composed components ───────────────────────────────────────────────
+
+const LOREM_BIO =
+  'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.';
+
+const LOREM_CASE =
+  'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
+
+const BULLETS = [
+  'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+  'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+  'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.',
+];
+
+/** Bullets that slide in one after another when the list scrolls into view. */
+function BulletList({ items = BULLETS, className = '' }: { items?: string[]; className?: string }) {
+  const introDelay = useContext(IntroContext);
+  return (
+    <motion.ul
+      className={`space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed font-inter ${className}`}
+      initial="hidden"
+      whileInView="show"
+      viewport={{ once: true, amount: 0.4 }}
+      variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09, delayChildren: 0.15 + introDelay } } }}
+    >
+      {items.map((t) => (
+        <motion.li
+          key={t}
+          variants={{
+            hidden: { opacity: 0, x: -10 },
+            show: { opacity: 1, x: 0, transition: { duration: 0.4, ease: EASE_OUT } },
+          }}
+          className="flex items-start gap-2"
+        >
+          <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
+          <span>{t}</span>
+        </motion.li>
+      ))}
+    </motion.ul>
+  );
+}
+
+/** Professional / educational background card. Rises in, lifts on hover, and its icon wiggles. */
+function InfoCard({
+  icon,
+  title,
+  subtitle,
+  delay = 0,
+}: {
+  icon: React.ReactNode;
+  title: React.ReactNode;
+  subtitle?: string;
+  delay?: number;
+}) {
+  const introDelay = useContext(IntroContext);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 22 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.2 }}
+      transition={{ duration: 0.7, delay: introDelay + delay, ease: EASE_OUT }}
+      whileHover="hover"
+      variants={{ hover: { y: -3, transition: { type: 'spring', stiffness: 400, damping: 22 } } }}
+      className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default"
+    >
+      <div className="flex items-center gap-3.5">
+        <motion.span
+          variants={{ hover: { rotate: [0, -10, 8, 0], scale: 1.1, transition: { duration: 0.5 } } }}
+          className="inline-flex shrink-0"
+        >
+          {icon}
+        </motion.span>
+        <div>
+          <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80 leading-tight">{title}</h4>
+          {subtitle && <p className="text-xs text-[#341512]/80 font-inter">{subtitle}</p>}
+        </div>
+      </div>
+      <BulletList className={subtitle ? 'pt-1' : ''} />
+    </motion.div>
+  );
+}
+
+/** Previous / next keys plus a row of dots where the active dot glides between pages. */
+function PageControls({
+  total,
+  current,
+  onChange,
+  idPrefix,
+  label,
+}: {
+  total: number;
+  current: number;
+  onChange: (page: number) => void;
+  idPrefix: string;
+  label: string;
+}) {
+  const arrow =
+    'w-9 h-9 sm:w-10 sm:h-10 rounded-full neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 flex items-center justify-center text-[#341512]/80 hover:text-[#341512] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer';
+  return (
+    <div className="flex items-center justify-center gap-4 pt-3 pb-4">
+      <Key onClick={() => onChange(Math.max(1, current - 1))} disabled={current <= 1} className={arrow} aria-label={`Previous ${label} page`}>
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+      </Key>
+
+      <div className="flex items-center gap-1">
+        {Array.from({ length: total }).map((_, idx) => {
+          const p = idx + 1;
+          const active = p === current;
+          return (
+            <motion.button
+              key={p}
+              type="button"
+              onClick={() => onChange(p)}
+              whileHover={{ scale: 1.25 }}
+              whileTap={{ scale: 0.8 }}
+              aria-label={`Go to ${label} page ${p}`}
+              aria-current={active || undefined}
+              className="relative w-5 h-5 flex items-center justify-center cursor-pointer"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#341512]/70" />
+              {active && (
+                <motion.span
+                  layoutId={`${idPrefix}-dot`}
+                  transition={SPRING_PILL}
+                  className="absolute w-3 h-3 rounded-full bg-[#D39758]"
+                />
+              )}
+            </motion.button>
+          );
+        })}
+      </div>
+
+      <Key onClick={() => onChange(Math.min(total, current + 1))} disabled={current >= total} className={arrow} aria-label={`Next ${label} page`}>
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      </Key>
+    </div>
+  );
+}
+
+/** Radio-style option for the communication mode. */
+function ModeCard({
+  selected,
+  onSelect,
+  icon,
+  title,
+  description,
+  badge,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  badge?: string;
+}) {
+  return (
+    <motion.div
+      role="radio"
+      aria-checked={selected}
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      variants={CARD_KEY_VARIANTS}
+      initial="rest"
+      animate="rest"
+      whileHover="hover"
+      whileTap="pressed"
+      className={`group relative isolate w-full flex items-start gap-3.5 p-4 sm:p-5 rounded-[20px] cursor-pointer select-none ${selected ? '' : 'neu-recessed hover:bg-[#E5D8CB]/40'
+        }`}
+    >
+      {selected && <HighlightPill layoutId="mode-pill" radius={20} variant="neu-raised-highlight" />}
+
+      <div className="relative z-10 mt-0.5">
+        <div
+          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${selected ? 'border-[#341512]' : 'border-[#341512]/60'
+            }`}
+        >
+          <AnimatePresence initial={false}>
+            {selected && (
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0 }}
+                transition={{ type: 'spring', stiffness: 600, damping: 18 }}
+                className="w-2 h-2 rounded-full bg-[#341512]"
+              />
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      <div className="relative z-10 space-y-1">
+        <div className="flex items-center gap-2">
+          <motion.span
+            animate={selected ? { scale: [1, 1.3, 1], rotate: [0, -8, 0] } : { scale: 1, rotate: 0 }}
+            transition={{ duration: 0.45 }}
+            className="inline-flex"
+          >
+            {icon}
+          </motion.span>
+          <span className="font-lora text-xs sm:text-sm font-bold text-[#341512]">{title}</span>
+          {badge && (
+            <span
+              className={`text-[8px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ml-1 select-none transition-all duration-200 ${selected
+                  ? 'bg-[#D39758]/30 text-[#341512] shadow-[1.5px_1.5px_3px_rgba(145,110,75,0.35),-1px_-1px_2.5px_rgba(252,238,223,0.4)]'
+                  : 'bg-[#E5D8CB]/80 text-[#341512]/70 shadow-[1.5px_1.5px_3px_rgba(182,155,130,0.35),-1px_-1px_2px_rgba(252,238,223,0.35)]'
+                }`}
+            >
+              {badge}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] sm:text-xs text-[#341512]/80 leading-normal font-inter">{description}</p>
+      </div>
+
+      <PressOverlay />
+    </motion.div>
+  );
+}
+
+function ReviewSkeleton() {
+  return (
+    <div className="neu-raised-highlight rounded-[18px] sm:rounded-[20px] p-5 sm:p-6 space-y-3 animate-pulse motion-reduce:animate-none">
+      <div className="flex items-center gap-3.5">
+        <div className="w-9 h-9 rounded-full bg-[#341512]/10" />
+        <div className="space-y-2">
+          <div className="h-3 w-32 rounded-full bg-[#341512]/10" />
+          <div className="h-2.5 w-20 rounded-full bg-[#341512]/10" />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="h-2.5 w-full rounded-full bg-[#341512]/10" />
+        <div className="h-2.5 w-5/6 rounded-full bg-[#341512]/10" />
+      </div>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  MAIN COMPONENT
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Banner entrance: each line is staggered by its delay. */
+const enter = (delay: number, y = 14) => ({
+  initial: { opacity: 0, y },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.75, delay, ease: EASE_OUT },
+});
 
 export function LawyerDetailView({
   lawyer,
@@ -145,6 +807,34 @@ export function LawyerDetailView({
   onEdit,
 }: LawyerDetailViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
+  const [tabDir, setTabDir] = useState<number>(1);
+
+  // True only during the first-load sequence. Once it ends (or you switch tabs), content stops waiting for the intro.
+  const [introActive, setIntroActive] = useState<boolean>(true);
+  useEffect(() => {
+    const t = setTimeout(() => setIntroActive(false), (INTRO_DELAY + 1.6) * 1000);
+    return () => clearTimeout(t);
+  }, []);
+  const introDelay = introActive ? INTRO_DELAY : 0;
+  const panelCustom: PanelCustom = { dir: tabDir, delay: introDelay };
+
+  const changeTab = (next: TabType) => {
+    if (next === activeTab) return;
+    setIntroActive(false);
+    setTabDir(TAB_ORDER.indexOf(next) > TAB_ORDER.indexOf(activeTab) ? 1 : -1);
+    setActiveTab(next);
+  };
+
+  const handleTabKeyDown = (e: React.KeyboardEvent) => {
+    const i = TAB_ORDER.indexOf(activeTab);
+    let next: TabType;
+    if (e.key === 'ArrowRight') next = TAB_ORDER[(i + 1) % TAB_ORDER.length];
+    else if (e.key === 'ArrowLeft') next = TAB_ORDER[(i - 1 + TAB_ORDER.length) % TAB_ORDER.length];
+    else return;
+    e.preventDefault();
+    changeTab(next);
+    requestAnimationFrame(() => document.getElementById(`lawyer-tab-${next}`)?.focus());
+  };
 
   const [currentYear, setCurrentYear] = useState<number>(() => getTodayPH().year);
   const [currentMonth, setCurrentMonth] = useState<number>(() => getTodayPH().month);
@@ -177,12 +867,32 @@ export function LawyerDetailView({
   const [attachedFiles, setAttachedFiles] = useState<BookingAttachment[]>([]);
   const [bookingStatus, setBookingStatus] = useState<'idle' | 'saved'>('idle');
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
   const [submittingBooking, setSubmittingBooking] = useState<boolean>(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [invalidField, setInvalidField] = useState<'subject' | 'terms' | null>(null);
   const [submittedConsultation, setSubmittedConsultation] = useState<ClientConsultation | null>(null);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState<boolean>(false);
   const [isDraggingFiles, setIsDraggingFiles] = useState<boolean>(false);
   const draftRestoredRef = useRef<boolean>(false);
+
+  // Shake controls for fields that fail validation
+  const subjectShake = useAnimationControls();
+  const termsShake = useAnimationControls();
+
+  // Direction tracking so the calendar rolls the right way (forward = up/right)
+  const monthKey = currentYear * 12 + currentMonth;
+  const prevMonthKeyRef = useRef<number>(monthKey);
+  const monthDir = monthKey >= prevMonthKeyRef.current ? 1 : -1;
+  useEffect(() => {
+    prevMonthKeyRef.current = monthKey;
+  }, [monthKey]);
+
+  const prevDayRef = useRef<number>(selectedDay);
+  const dayDir = selectedDay >= prevDayRef.current ? 1 : -1;
+  useEffect(() => {
+    prevDayRef.current = selectedDay;
+  }, [selectedDay]);
 
   useEffect(() => {
     if (activeTab === 'booking') {
@@ -235,7 +945,18 @@ export function LawyerDetailView({
     const ro = new ResizeObserver(updateBioFade);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [updateBioFade, lawyer.about]);
+  }, [updateBioFade, lawyer.about, activeTab]);
+
+  // Escape closes the documents vault
+  useEffect(() => {
+    if (!showDocPickerModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowDocPickerModal(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showDocPickerModal]);
+
   // ─── Document Vault Picker Handlers ──────────────────────────────────────────
   const handleOpenDocPicker = async () => {
     setShowDocPickerModal(true);
@@ -406,16 +1127,21 @@ export function LawyerDetailView({
   useEffect(() => {
     if (!lawyer.userId) return;
     let stale = false;
-    const dateStr = `${monthNames[currentMonth]} ${selectedDay}, ${currentYear}`;
-    getBookedSlotsForLawyer(lawyer.userId, dateStr).then((slots) => {
-      if (stale) return;
-      const booked = slots || [];
-      setBookedSlots(booked);
-      setSelectedTimeSlot((current) => {
-        if (!booked.some((b) => slotsOverlap(b, current))) return current;
-        return timeSlots.find((s) => !booked.some((b) => slotsOverlap(b, s))) ?? current;
+    setLoadingSlots(true);
+    const dateStr = `${MONTH_NAMES[currentMonth]} ${selectedDay}, ${currentYear}`;
+    getBookedSlotsForLawyer(lawyer.userId, dateStr)
+      .then((slots) => {
+        if (stale) return;
+        const booked = slots || [];
+        setBookedSlots(booked);
+        setSelectedTimeSlot((current) => {
+          if (!booked.some((b) => slotsOverlap(b, current))) return current;
+          return TIME_SLOTS.find((s) => !booked.some((b) => slotsOverlap(b, s))) ?? current;
+        });
+      })
+      .finally(() => {
+        if (!stale) setLoadingSlots(false);
       });
-    });
     return () => {
       stale = true;
     };
@@ -424,20 +1150,13 @@ export function LawyerDetailView({
 
   // ─── Cases State ──────────────────────────────────────────────────────────────
   const [casePage, setCasePage] = useState<number>(1);
+  const [caseDir, setCaseDir] = useState<number>(1);
 
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-  const monthShortNames = [
-    'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
-    'JUL', 'AUG', 'SEPT', 'OCT', 'NOV', 'DEC'
-  ];
-
+  const todayPH = getTodayPH();
   const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay(); // 0 = Sun
 
-  const daysInMonth = React.useMemo(() => {
+  const daysInMonth = useMemo(() => {
     const slots: Array<{ day: number | null }> = [];
     for (let i = 0; i < firstDayOfWeek; i++) {
       slots.push({ day: null });
@@ -448,17 +1167,19 @@ export function LawyerDetailView({
     return slots;
   }, [firstDayOfWeek, totalDaysInMonth]);
 
-  const selectedDateObj = React.useMemo(() => {
+  const selectedDateObj = useMemo(() => {
     const validDay = Math.min(selectedDay, totalDaysInMonth);
     return new Date(currentYear, currentMonth, validDay);
   }, [currentYear, currentMonth, selectedDay, totalDaysInMonth]);
 
-  const selectedDayOfWeek = React.useMemo(() => {
+  const selectedDayOfWeek = useMemo(() => {
     return selectedDateObj.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
   }, [selectedDateObj]);
 
-  const selectedMonthName = monthNames[currentMonth];
-  const selectedMonthShort = monthShortNames[currentMonth];
+  const selectedMonthName = MONTH_NAMES[currentMonth];
+  const selectedMonthShort = MONTH_SHORT_NAMES[currentMonth];
+  const isTodaySelected =
+    currentYear === todayPH.year && currentMonth === todayPH.month && selectedDay === todayPH.day;
   const clampDay = (year: number, month: number) =>
     setSelectedDay((d) => Math.min(d, new Date(year, month + 1, 0).getDate()));
 
@@ -485,15 +1206,6 @@ export function LawyerDetailView({
     setSelectedDay(t.day);
   };
 
-  const timeSlots = [
-    '9:00 AM - 10:00 AM • PST, GMT+8',
-    '10:00 AM - 11:00 AM • PST, GMT+8',
-    '1:00 PM - 2:00 PM • PST, GMT+8',
-    '2:00 PM - 3:00 PM • PST, GMT+8',
-    '3:00 PM - 4:00 PM • PST, GMT+8',
-    '4:00 PM - 5:00 PM • PST, GMT+8',
-  ];
-
   const resetBookingForm = () => {
     const t = getTodayPH();
     setCurrentYear(t.year);
@@ -506,6 +1218,7 @@ export function LawyerDetailView({
     setAttachedFiles([]);
     setAgreedToTerms(false);
     setBookingError(null);
+    setInvalidField(null);
     try {
       localStorage.removeItem(bookingDraftKey(lawyer.userId));
     } catch {
@@ -541,21 +1254,28 @@ export function LawyerDetailView({
     }
   };
 
+  const flagInvalid = (field: 'subject' | 'terms', message: string) => {
+    setBookingError(message);
+    setInvalidField(field);
+    (field === 'subject' ? subjectShake : termsShake).start(SHAKE);
+  };
+
   const handleSubmitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submittingBooking) return;
     setBookingError(null);
+    setInvalidField(null);
 
     if (isUploadingAttachment) {
       setBookingError('Please wait for your files to finish uploading.');
       return;
     }
     if (!subject.trim()) {
-      setBookingError('Please enter a consultation subject.');
+      flagInvalid('subject', 'Please enter a consultation subject.');
       return;
     }
     if (!agreedToTerms) {
-      setBookingError('Please agree to the attorney-client privilege review terms.');
+      flagInvalid('terms', 'Please agree to the attorney-client privilege review terms.');
       return;
     }
     if (isSlotBooked(selectedTimeSlot)) {
@@ -609,6 +1329,12 @@ export function LawyerDetailView({
   const initialFee = lawyer.feeInitial30min ?? 700;
   const extendedFee = lawyer.feeExtended120min ?? 2300;
 
+  const rateRows = [
+    { label: 'Initial Consultation (30 mins)', value: initialFee },
+    { label: 'Standard Consultation (1 hr)', value: standardFee },
+    { label: 'Extended Consultation (2 hrs)', value: extendedFee },
+  ];
+
   // Filtered reviews and dynamic rating metrics
   const filteredReviews = reviewsList.filter((rev) => {
     if (selectedReviewStar === 'all') return true;
@@ -629,1275 +1355,1534 @@ export function LawyerDetailView({
   );
 
   // Cases handled matching Figma design
-  const casesHandled = [
-    {
-      id: 1,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      title: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
-      content:
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
-    },
-    {
-      id: 2,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      title: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
-      content:
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
-    },
-    {
-      id: 3,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      title: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
-      content:
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
-    },
-    {
-      id: 4,
-      docket: 'SUBJECT MATTER & CASE DOCKET',
-      title: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
-      content:
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
-    },
-  ];
+  const casesHandled = [1, 2, 3, 4].map((id) => ({
+    id,
+    docket: 'SUBJECT MATTER & CASE DOCKET',
+    title: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
+    content: LOREM_CASE,
+  }));
+
+  // Documents vault: current folder + its files
+  const currentPickerFolder =
+    docPickerFolders.find((f) => f.id === activePickerFolderId) || docPickerFolders[0];
+  const pickerFiles = (currentPickerFolder?.files || []) as Array<DocumentFileItem & { updatedAt?: string }>;
+
+  const backArrow = (
+    <motion.svg
+      variants={{ rest: { x: 0 }, hover: { x: -4 }, pressed: { x: -2 } }}
+      transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+      className="w-4 h-4 text-[#341512]/80 shrink-0"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2.2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+    </motion.svg>
+  );
+  const backClasses =
+    'neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 rounded-[12px] px-4 py-2 inline-flex items-center gap-2.5 font-lora text-xs sm:text-[13px] font-semibold text-[#341512]/80 hover:text-[#341512] transition-colors cursor-pointer';
+
+  const fieldRing = (on: boolean) =>
+    on ? 'ring-2 ring-rose-400/80' : 'ring-0 ring-transparent';
 
   return (
-    <div className="space-y-6 sm:space-y-7 select-none animate-in fade-in duration-200">
-      {/* ─── Back Navigation Link (Encapsulated with Rise Look) ────────────────── */}
-      <div className="flex items-center justify-start pb-1">
-        {onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className="neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 rounded-[12px] px-4 py-2 inline-flex items-center gap-2.5 font-lora text-xs sm:text-[13px] font-semibold text-[#341512]/80 hover:text-[#341512] transition-all hover:brightness-102 active:scale-97 cursor-pointer select-none"
-          >
-            <svg className="w-4 h-4 text-[#341512]/80 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            <span>Back to Lawyers Directory</span>
-          </button>
-        ) : (
-          <Link
-            href="/client/lawyers"
-            className="neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 rounded-[12px] px-4 py-2 inline-flex items-center gap-2.5 font-lora text-xs sm:text-[13px] font-semibold text-[#341512]/80 hover:text-[#341512] transition-all hover:brightness-102 active:scale-97 cursor-pointer select-none"
-          >
-            <svg className="w-4 h-4 text-[#341512]/80 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            <span>Back to Lawyers Directory</span>
-          </Link>
-        )}
-      </div>
-
-      {/* ─── Lawyer Banner Header Card ───────── */}
-      <div className="neu-raised-highlight w-full rounded-[20px] sm:rounded-[22px] px-6 py-5 sm:px-8 sm:py-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 transition-all select-none">
-        <div className="flex items-center gap-4 sm:gap-6">
-          {/* Avatar */}
-          {lawyer.photoUrl ? (
-            <img
-              src={lawyer.photoUrl}
-              alt={lawyer.fullName}
-              className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-full shrink-0"
-            />
+    <MotionConfig reducedMotion="user">
+      <div className="space-y-6 sm:space-y-7 select-none" style={{ zoom: SCREEN_SCALE }}>
+        {/* ─── Back Navigation ────────────────── */}
+        <motion.div {...enter(0, 10)} className="flex items-center justify-start pb-1">
+          {onBack ? (
+            <Key onClick={onBack} className={backClasses}>
+              {backArrow}
+              <span>Back to Lawyers Directory</span>
+            </Key>
           ) : (
-            <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center text-[#341512]/80">
-              <svg className="w-full h-full" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="4.2">
-                <circle cx="32" cy="32" r="28" />
-                <circle cx="32" cy="24" r="8" />
-                <path d="M16 48c0-8.837 7.163-14 16-14s16 5.163 16 14" strokeLinecap="round" />
-              </svg>
-            </div>
+            <KeyLink href="/client/lawyers" className={backClasses}>
+              {backArrow}
+              <span>Back to Lawyers Directory</span>
+            </KeyLink>
           )}
+        </motion.div>
 
-          {/* Lawyer Info */}
-          <div className="space-y-1">
-            <h1 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80 leading-snug">
-              {lawyer.fullName}{lawyer.fullName.includes(',') ? '' : ', Ll.B.'}
-            </h1>
-            <p className="text-xs sm:text-[13px] text-[#341512]/80 font-inter font-normal leading-tight">
-              Roll No. {lawyer.rollNumber || '58942'} <span className="mx-2 text-[#341512]/80">|</span> IBP {lawyer.ibpChapter?.toUpperCase() || 'MAKATI'}
-            </p>
-            <div className="flex items-center gap-1.5 text-xs sm:text-[13px] text-[#341512]/80 font-inter">
-              <svg className="w-3.5 h-3.5 fill-transparent stroke-current text-[#341512]/80" viewBox="0 0 20 20" strokeWidth="1.6">
-                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-              </svg>
-              <span>{averageRating.toFixed(1)} ({totalReviewsCount} Reviews)</span>
-              <span className="mx-1">•</span>
-              <span>{lawyer.experienceYears ?? 9} years of practice</span>
-            </div>
-            <p className="text-xs sm:text-[13px] text-[#341512]/80 font-inter">
-              {lawyer.practiceAreas && lawyer.practiceAreas.length > 0
-                ? lawyer.practiceAreas.join(' • ')
-                : 'Labor & Employment • Corporate • Civil Law'}
-            </p>
+        {/* ─── Lawyer Banner Header Card ───────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 26, scale: 0.98, filter: 'blur(10px)' }}
+          animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+          transition={{ duration: 0.9, delay: 0.12, ease: EASE_OUT }}
+          className="neu-raised-highlight relative w-full rounded-[20px] sm:rounded-[22px] px-6 py-5 sm:px-8 sm:py-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 select-none"
+        >
+          {/* One soft sheen sweeps across the banner right after it lands */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+            <motion.span
+              initial={{ x: '-140%' }}
+              animate={{ x: '420%' }}
+              transition={{ duration: 1.5, delay: 1.0, ease: 'easeInOut' }}
+              className="absolute inset-y-0 w-1/4 -skew-x-12 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+            />
           </div>
-        </div>
 
-        {/* Rate on right side */}
-        <div className="flex items-baseline md:justify-end gap-1 shrink-0 self-start md:self-center">
-          <span className="font-lora text-2xl sm:text-3xl font-bold text-[#341512]/80">
-            ₱{standardFee.toLocaleString()}
-          </span>
-          <span className="text-xs sm:text-sm font-inter text-[#341512]/80 font-normal">
-            /per hour
-          </span>
-        </div>
-      </div>
-
-      {/* ─── Navigation Tabs ───── */}
-      <div className="flex flex-wrap items-center gap-6 sm:gap-10 pt-1 pb-1 select-none">
-        {[
-          { key: 'about', label: 'About' },
-          { key: 'reviews', label: 'Reviews' },
-          { key: 'booking', label: 'Consultation Booking' },
-          { key: 'cases', label: 'Cases Handled' },
-        ].map((tab) => {
-          const isActive = activeTab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key as TabType)}
-              className={`font-lora text-sm sm:text-base font-semibold transition-all cursor-pointer select-none ${isActive
-                ? 'neu-raised-highlight-sm rounded-[12px] px-6 py-2 text-[#341512]/80'
-                : 'px-2 py-1 text-[#341512]/80 hover:text-[#341512]'
-                }`}
+          <div className="flex items-center gap-4 sm:gap-6">
+            {/* Avatar */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.6, rotate: -8 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              transition={{ type: 'spring', stiffness: 220, damping: 18, delay: 0.35 }}
+              className="shrink-0"
             >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ─── TAB 1: ABOUT (Matches Figma Specs) ─────────────────────────────────── */}
-      {activeTab === 'about' && (
-        <div className="space-y-8 animate-in fade-in duration-150">
-          {/* Top Row: Bio (flexible) & Consultation Rates (fixed width — edit the px value) */}
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_415px] gap-6 items-stretch">
-            {/* Bio Card */}
-            <div className="relative rounded-[20px] sm:rounded-[24px] neu-recessed bg-[#E5D8CB] flex flex-col max-h-[220px] sm:max-h-[235px] overflow-hidden">
-              <div
-                ref={bioRef}
-                onScroll={updateBioFade}
-                className="flex-1 min-h-0 overflow-y-auto neu-scrollbar-discrete space-y-3 py-6 sm:py-7 pl-6 sm:pl-7 pr-3 sm:pr-4 mr-1.5"
-              >
-                <p className="text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify font-inter">
-                  Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-                </p>
-              </div>
-            </div>
-
-            {/* Consultation Rates Card */}
-            <div className="rounded-[20px] sm:rounded-[24px] px-6 py-6 sm:px-7 sm:py-7 neu-raised-highlight flex flex-col justify-center space-y-4 sm:space-y-5">
-              <h3 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80 text-center">
-                Consultation Rates:
-              </h3>
-
-              <div className="space-y-3.5 sm:space-y-4 font-inter text-[#341512]/80">
-                <div className="flex justify-between items-baseline gap-4">
-                  <span className="text-xs sm:text-[15px] font-lora font-medium text-[#341512]/80">Initial Consultation (30 mins)</span>
-                  <div className="text-right shrink-0 whitespace-nowrap">
-                    <span className="font-lora font-bold text-sm sm:text-base text-[#341512]/80">₱{initialFee.toLocaleString()}</span>
-                    <span className="text-xs sm:text-[13px] text-[#341512]/80 ml-0.5">/per hour</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-baseline gap-4">
-                  <span className="text-xs sm:text-[15px] font-lora font-medium text-[#341512]/80">Standard Consultation (1 hr)</span>
-                  <div className="text-right shrink-0 whitespace-nowrap">
-                    <span className="font-lora font-bold text-sm sm:text-base text-[#341512]/80">₱{standardFee.toLocaleString()}</span>
-                    <span className="text-xs sm:text-[13px] text-[#341512]/80 ml-0.5">/per hour</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-baseline gap-4">
-                  <span className="text-xs sm:text-[15px] font-lora font-medium text-[#341512]/80">Extended Consultation (2 hrs)</span>
-                  <div className="text-right shrink-0 whitespace-nowrap">
-                    <span className="font-lora font-bold text-sm sm:text-base text-[#341512]/80">₱{extendedFee.toLocaleString()}</span>
-                    <span className="text-xs sm:text-[13px] text-[#341512]/80 ml-0.5">/per hour</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Professional Background Section */}
-          <div className="space-y-4">
-            <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80">Professional Background</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-              {/* Areas of Practice */}
-              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
-                <div className="flex items-center gap-3.5">
-                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+              {lawyer.photoUrl ? (
+                <img
+                  src={lawyer.photoUrl}
+                  alt={lawyer.fullName}
+                  className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-full"
+                />
+              ) : (
+                <div className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center text-[#341512]/80">
+                  <svg className="w-full h-full" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="4.2">
+                    <circle cx="32" cy="32" r="28" />
+                    <circle cx="32" cy="24" r="8" />
+                    <path d="M16 48c0-8.837 7.163-14 16-14s16 5.163 16 14" strokeLinecap="round" />
                   </svg>
-                  <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80">Areas of Practice</h4>
-                </div>
-                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed font-inter">
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Legal Experience */}
-              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
-                <div className="flex items-center gap-3.5">
-                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m14 13-7.5 7.5a2.12 2.12 0 1 1-3-3L11 10" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m16 16 6-6" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m8 8 6-6" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m9 7 8 8" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m21 11-8-8" />
-                  </svg>
-                  <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80">Legal Experience</h4>
-                </div>
-                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed font-inter">
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Consultation Services */}
-              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
-                <div className="flex items-center gap-3.5">
-                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 6.75 3.19-1.595A3 3 0 0 1 7.234 16H18a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v12.75Z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 16v2.25a2.25 2.25 0 0 1-2.25 2.25H9.75l-2.25 1.125" />
-                  </svg>
-                  <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80">Consultation Services</h4>
-                </div>
-                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed font-inter">
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Philippine Bar Examination Passer */}
-              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
-                <div className="flex items-center gap-3.5">
-                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <circle cx="12" cy="8" r="5.5" strokeLinecap="round" strokeLinejoin="round" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.5 13.5 17.5 21l-5.5-2.75L6.5 21l2-7.5" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 8 1.5 1.5 3-3" />
-                  </svg>
-                  <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80">
-                    Philippine Bar Examination Passer ({lawyer.barPasserYear ?? 2022})
-                  </h4>
-                </div>
-                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed font-inter">
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Educational Background Section */}
-          <div className="space-y-4">
-            <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80">Educational Background</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-              {/* Card 1: Juris Doctor */}
-              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
-                <div className="flex items-center gap-3.5">
-                  {/* Scales of Justice Icon */}
-                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M12 3v18M7 21h10M3 7h18" />
-                    <path d="M6 7l-3 7c0 1.5 1.5 2.5 3 2.5s3-1 3-2.5L6 7z" />
-                    <path d="M18 7l-3 7c0 1.5 1.5 2.5 3 2.5s3-1 3-2.5L18 7z" />
-                  </svg>
-                  <div>
-                    <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80 leading-tight">
-                      Juris Doctor (2017 - 2021)
-                    </h4>
-                    <p className="text-xs text-[#341512]/80 font-inter">University of the Philippines - Cebu</p>
-                  </div>
-                </div>
-
-                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed pt-1 font-inter">
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Card 2: Bachelor of Arts in Political Science */}
-              <div className="neu-card-recessed-to-rise rounded-[20px] sm:rounded-[24px] p-6 space-y-3 cursor-default">
-                <div className="flex items-center gap-3.5">
-                  {/* Graduation Cap / Diploma Icon */}
-                  <svg className="w-8 h-8 text-[#341512]/80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                    <path d="M6 12v5c3 3 9 3 12 0v-5" />
-                  </svg>
-                  <div>
-                    <h4 className="font-lora font-bold text-base sm:text-lg text-[#341512]/80 leading-tight">
-                      Bachelor of Arts in Political Science (2013 - 2017)
-                    </h4>
-                    <p className="text-xs text-[#341512]/80 font-inter">University of San Carlos - Main Campus</p>
-                  </div>
-                </div>
-
-                <ul className="space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed pt-1 font-inter">
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[8px] mt-1.5 shrink-0 text-[#341512]/80">●</span>
-                    <span>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── TAB 2: REVIEWS (Matches Figma Specs) ───────────────────────────────── */}
-      {activeTab === 'reviews' && (
-        <div className="space-y-6 animate-in fade-in duration-150">
-          {reviewsLoading && <p role="status">Loading reviews…</p>}
-          {reviewsError && <p role="alert" className="text-red-700">{reviewsError}</p>}
-          {/* Main Large Reviews Outer Container (Recessed Look) */}
-          <div className="rounded-[28px] sm:rounded-[32px] p-6 sm:p-9 neu-recessed bg-[#E5D8CB] space-y-6 select-none">
-            {/* Score header: 4.9/5 ★★★★★ (53 Reviews) */}
-            <div className="flex flex-wrap items-baseline gap-2 sm:gap-3">
-              <span className="font-lora text-4xl sm:text-5xl font-bold text-[#341512]/80 leading-none">
-                {averageRating.toFixed(1)}
-              </span>
-              <span className="font-lora text-2xl sm:text-3xl font-bold text-[#341512]/80">
-                /5
-              </span>
-
-              {/* Stars */}
-              <div className="flex items-center gap-1 text-[#C58B3C] text-xl sm:text-2xl ml-2 sm:ml-4">
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <StarIcon key={s} filled={s <= Math.round(averageRating)} className="w-5 h-5 sm:w-6 sm:h-6" />
-                ))}
-              </div>
-
-              <span className="font-lora text-sm sm:text-base font-normal text-[#341512]/80 ml-2">
-                ({totalReviewsCount} Reviews)
-              </span>
-            </div>
-
-            {/* Filter pills: ★ 5, ★ 4, ★ 3, ★ 2, ★ 1 */}
-            <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-1">
-              {[5, 4, 3, 2, 1].map((s) => {
-                const isActive = selectedReviewStar === s;
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => {
-                      setSelectedReviewStar((prev) => (prev === s ? 'all' : s));
-                      setReviewPage(1);
-                    }}
-                    className={`rounded-[12px] px-5 py-1.5 sm:px-6 sm:py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer select-none inline-flex items-center gap-1.5 ${isActive
-                      ? 'neu-raised-highlight-sm text-[#341512]/80'
-                      : 'neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 text-[#341512]/80'
-                      }`}
-                  >
-                    <StarIcon filled className="w-3.5 h-3.5 text-[#C58B3C]" />
-                    <span className="font-lora font-bold text-[#341512]/80">{s}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Review Cards Stack */}
-            <div className="space-y-4 pt-1">
-              {pagedReviews.map((rev) => (
-                <div
-                  key={rev.id}
-                  className="neu-raised-highlight rounded-[18px] sm:rounded-[20px] p-5 sm:p-6 space-y-2.5 transition-all select-none"
-                >
-                  {/* Header: Avatar, Name, Stars, Date */}
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 flex items-center justify-center text-[#341512]/80">
-                      <svg className="w-full h-full" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="4.2">
-                        <circle cx="32" cy="32" r="28" />
-                        <circle cx="32" cy="24" r="8" />
-                        <path d="M16 48c0-8.837 7.163-14 16-14s16 5.163 16 14" strokeLinecap="round" />
-                      </svg>
-                    </div>
-
-                    <div>
-                      <h4 className="font-lora font-bold text-sm sm:text-base text-[#341512]/80 leading-tight">
-                        {rev.name}
-                      </h4>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <div className="flex items-center text-[#C58B3C]">
-                          {[1, 2, 3, 4, 5].map((st) => (
-                            <StarIcon key={st} filled={st <= rev.stars} className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                          ))}
-                        </div>
-                        <span className="text-[10px] sm:text-[11px] text-[#341512]/70 font-inter">
-                          {rev.date}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Body Text */}
-                  <p className="text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify font-inter">
-                    {rev.content}
-                  </p>
-
-                  {/* Helpful feedback */}
-                  <div className="flex items-center gap-4 pt-1 text-[11px] font-medium text-[#341512]/80 font-inter">
-                    <button
-                      type="button"
-                      onClick={() => toggleHelpful(rev.id)}
-                      className="inline-flex items-center gap-1.5 hover:text-[#341512] transition-colors cursor-pointer"
-                    >
-                      <svg
-                        className={`w-3.5 h-3.5 ${userVotedHelpful[rev.id] ? 'fill-current text-[#C58B3C]' : 'text-[#341512]/80'}`}
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
-                      </svg>
-                      <span>Helpful?</span>
-                    </button>
-                  </div>
-
-                  {/* Attorney Reply Bubble if present */}
-                  {rev.reply && (
-                    <div className="mt-2 p-3.5 rounded-[14px] bg-[#E5D8CB]/80 neu-recessed text-xs space-y-1">
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#341512]/80 font-lora">
-                        <ScalesIcon className="w-3.5 h-3.5 text-[#C58B3C]" />
-                        <span>Response from {lawyer.fullName}</span>
-                      </div>
-                      <p className="text-[#341512]/80 text-xs leading-relaxed font-inter">{rev.reply}</p>
-                    </div>
-                  )}
-
-                </div>
-              ))}
-
-              {filteredReviews.length === 0 && (
-                <div className="py-10 text-center text-xs text-[#341512]/80 font-lora">
-                  {reviewsLoading ? 'Loading reviews…' : reviewsError ? 'Reviews are currently unavailable.' : reviewsList.length === 0 ? 'No consultation reviews yet.' : 'No reviews match this rating.'}
                 </div>
               )}
-            </div>
-          </div>
+            </motion.div>
 
-          {/* Bottom Pagination matching Figma: < ● ● ● ● > */}
-          {totalReviewPages > 1 && (
-            <div className="flex items-center justify-center gap-4 pt-3 pb-4">
-              <button
-                type="button"
-                onClick={() => setReviewPage((p) => Math.max(1, p - 1))}
-                disabled={reviewPage <= 1}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 flex items-center justify-center text-[#341512]/80 hover:text-[#341512] disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
-                aria-label="Previous reviews page"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            {/* Lawyer Info */}
+            <div className="space-y-1">
+              {/* The name slides up out of a mask — the one "signature" moment on the page */}
+              <div className="overflow-hidden pb-1 -mb-1">
+                <motion.h1
+                  initial={{ y: '110%' }}
+                  animate={{ y: 0 }}
+                  transition={{ duration: 0.85, delay: 0.5, ease: EASE_OUT }}
+                  className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80 leading-snug"
+                >
+                  {lawyer.fullName}{lawyer.fullName.includes(',') ? '' : ', Ll.B.'}
+                </motion.h1>
+              </div>
+              <motion.p {...enter(0.62)} className="text-xs sm:text-[13px] text-[#341512]/80 font-inter font-normal leading-tight">
+                Roll No. {lawyer.rollNumber || '58942'} <span className="mx-2 text-[#341512]/80">|</span> IBP {lawyer.ibpChapter?.toUpperCase() || 'MAKATI'}
+              </motion.p>
+              <motion.div {...enter(0.7)} className="flex items-center gap-1.5 text-xs sm:text-[13px] text-[#341512]/80 font-inter">
+                <svg className="w-3.5 h-3.5 fill-transparent stroke-current text-[#341512]/80" viewBox="0 0 20 20" strokeWidth="1.6">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
-              </button>
-
-              <div className="flex items-center gap-2.5">
-                {Array.from({ length: totalReviewPages }).map((_, idx) => {
-                  const p = idx + 1;
-                  const isActive = p === reviewPage;
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setReviewPage(p)}
-                      className={`rounded-full transition-all cursor-pointer ${isActive
-                        ? 'w-2.5 h-2.5 bg-[#D39758] scale-125'
-                        : 'w-2 h-2 bg-[#341512]/70 hover:bg-[#341512]'
-                        }`}
-                      aria-label={`Go to review page ${p}`}
-                    />
-                  );
-                })}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setReviewPage((p) => Math.min(totalReviewPages, p + 1))}
-                disabled={reviewPage >= totalReviewPages}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 flex items-center justify-center text-[#341512]/80 hover:text-[#341512] disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
-                aria-label="Next reviews page"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ─── TAB 3: CONSULTATION BOOKING (Matches Image 3) ───────────────────── */}
-      {activeTab === 'booking' && (
-        <form onSubmit={handleSubmitBooking} className="space-y-8 animate-in fade-in duration-150">
-          {/* Confirmation Feedback */}
-          {bookingStatus === 'saved' && (
-            <div className="p-4 rounded-2xl bg-amber-100/90 border border-amber-300 text-amber-900 text-xs sm:text-sm flex items-center justify-between">
-              <span>✓ Consultation draft details saved. You can complete your submission anytime.</span>
-              <button type="button" onClick={() => setBookingStatus('idle')} className="font-bold">✕</button>
-            </div>
-          )}
-
-          {/* Calendar & Time Slots Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-            {/* Calendar Card (Left - 8 cols, matches Client Dashboard Calendar) */}
-            <div className="lg:col-span-8 rounded-[24px] neu-raised bg-[#E5D8CB] flex flex-col justify-center px-5 py-3.5 sm:px-6 sm:py-3.5">
-              <div className="w-full flex flex-col sm:flex-row items-center gap-5 sm:gap-6 lg:gap-8">
-                {/* Left column: month, giant day number, weekday */}
-                <div className="flex flex-col items-center justify-center sm:min-w-[120px] lg:min-w-[140px] shrink-0 select-none pl-1 sm:pl-2">
-                  {/* Month with left/right chevrons for navigation */}
-                  <div className="flex items-center justify-center gap-3">
-                    <button
-                      type="button"
-                      onClick={handlePrevMonth}
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-[#341512]/70 hover:text-[#341512] hover:bg-[#DDCFC0]/50 transition-all cursor-pointer active:scale-90"
-                      title="Previous Month"
-                      aria-label="Previous Month"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <span className="font-lora text-sm sm:text-base lg:text-[24px] font-semibold tracking-wide text-[#341512]/80 uppercase">
-                      {selectedMonthShort}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleNextMonth}
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-[#341512]/70 hover:text-[#341512] hover:bg-[#DDCFC0]/50 transition-all cursor-pointer active:scale-90"
-                      title="Next Month"
-                      aria-label="Next Month"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  <span className="font-lora text-5xl sm:text-6xl mb-0.5 lg:text-[130px] font-semibold text-[#D39758] leading-none mb-2 select-none">
-                    {String(selectedDay).padStart(2, '0')}
-                  </span>
-                  <span className="font-lora text-[11px] sm:text-sm lg:text-[20px] font-semibold tracking-wider text-[#341512]/80 uppercase pt-0.5">
-                    {selectedDayOfWeek}
-                  </span>
-                </div>
-
-                {/* Right column: month grid */}
-                <div className="flex-1 w-full min-w-0 pr-1 sm:pr-2">
-                  <div className="grid grid-cols-7 justify-items-center mb-1.5">
-                    {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => (
-                      <span
-                        key={d}
-                        className="font-lora text-xs sm:text-[15px] font-semibold text-[#341512]/80 tracking-wide text-center"
-                      >
-                        {d}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-7 justify-items-center gap-y-1">
-                    {daysInMonth.map((item, idx) => {
-                      if (!item.day) {
-                        return <div key={`empty-${idx}`} className="size-7 sm:size-8 lg:size-8.5" />;
-                      }
-                      const isSelected = item.day === selectedDay;
-
-                      return (
-                        <button
-                          key={`day-${item.day}`}
-                          type="button"
-                          onClick={() => setSelectedDay(item.day!)}
-                          className={`size-7 sm:size-8 lg:size-9 flex items-center justify-center rounded-full font-lora text-xs sm:text-[15px] select-none transition-all cursor-pointer ${isSelected
-                            ? 'neu-raised-sm bg-[#E5D8CB] text-[#D39758] font-bold'
-                            : 'text-[#341512]/80 hover:bg-[#DDCFC0]/60'
-                            }`}
-                        >
-                          {String(item.day).padStart(2, '0')}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Time Slots Card (Right - 4 cols, matching calendar height) */}
-            <div className="lg:col-span-4 flex flex-col h-full space-y-3">
-              {/* Header Badge - exact same width as container below */}
-              <div className="neu-raised-sm !bg-[#D39758]/30 w-full py-2.5 rounded-[16px] text-center shrink-0">
-                <span className="font-lora text-[11px] sm:text-xs font-bold tracking-wider text-[#341512] uppercase">
-                  Available Time Slots
+                <span>
+                  <CountUp value={averageRating} decimals={1} delay={0.8} /> (<CountUp value={totalReviewsCount} duration={0.7} delay={0.8} /> Reviews)
                 </span>
-              </div>
-
-              {/* Recessed Slots Container - scrollable with discrete scrollbar, fits 5 capsules */}
-              <div className="neu-recessed rounded-[24px] px-9 py-7 flex-1 min-h-0 max-h-[250px] overflow-y-auto neu-scrollbar-discrete flex flex-col gap-5 justify-start">
-                {timeSlots.map((slot) => {
-                  const isSelected = selectedTimeSlot === slot;
-                  const isBooked = isSlotBooked(slot);
-                  return (
-                    <button
-                      key={slot}
-                      type="button"
-                      disabled={isBooked}
-                      onClick={() => !isBooked && setSelectedTimeSlot(slot)}
-                      className={`w-full py-2 px-3 rounded-full text-xs font-lora font-medium transition-all text-center relative cursor-pointer shrink-0 ${isBooked
-                        ? 'opacity-40 cursor-not-allowed bg-stone-300 text-stone-500 line-through'
-                        : isSelected
-                          ? 'neu-raised-highlight-sm text-[#341512] font-bold scale-[1.01]'
-                          : 'neu-raised-sm bg-[#E5D8CB] text-[#341512]/80 hover:text-[#341512]'
-                        }`}
-                    >
-                      <span>{slot}</span>
-                      {isBooked && (
-                        <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-rose-700 not-italic no-underline">
-                          (Booked)
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                <span className="mx-1">•</span>
+                <span>{lawyer.experienceYears ?? 9} years of practice</span>
+              </motion.div>
+              <motion.p {...enter(0.78)} className="text-xs sm:text-[13px] text-[#341512]/80 font-inter">
+                {lawyer.practiceAreas && lawyer.practiceAreas.length > 0
+                  ? lawyer.practiceAreas.join(' • ')
+                  : 'Labor & Employment • Corporate • Civil Law'}
+              </motion.p>
             </div>
           </div>
 
-          {/* Mode of Communication Section */}
-          <div className="space-y-3">
-            <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512] mb-5">Mode of Communication</h2>
-            <div className="neu-recessed rounded-[24px] sm:rounded-[28px] p-6 sm:p-7 space-y-4 sm:space-y-5">
-              {/* Option 1: Video Consultation */}
-              <div
-                onClick={() => setCommunicationMode('video')}
-                className={`w-full flex items-start gap-3.5 p-4 sm:p-5 rounded-[20px] cursor-pointer transition-all ${communicationMode === 'video'
-                  ? 'neu-raised-highlight'
-                  : 'neu-recessed hover:bg-[#E5D8CB]/40'
-                  }`}
-              >
-                <div className="mt-0.5">
-                  <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${communicationMode === 'video' ? 'border-[#341512]' : 'border-[#341512]/60'
-                      }`}
-                  >
-                    {communicationMode === 'video' && <div className="w-2 h-2 rounded-full bg-[#341512]" />}
-                  </div>
-                </div>
+          {/* Rate on right side */}
+          <motion.div {...enter(0.75)} className="flex items-baseline md:justify-end gap-1 shrink-0 self-start md:self-center">
+            <span className="font-lora text-2xl sm:text-3xl font-bold text-[#341512]/80">
+              <CountUp value={standardFee} prefix="₱" duration={1.2} delay={0.85} />
+            </span>
+            <span className="text-xs sm:text-sm font-inter text-[#341512]/80 font-normal">/per hour</span>
+          </motion.div>
+        </motion.div>
 
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-[#341512]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    <span className="font-lora text-xs sm:text-sm font-bold text-[#341512]">Video Consultation</span>
-                    <span
-                      className={`text-[8px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ml-1 select-none transition-all duration-200 ${communicationMode === 'video'
-                        ? 'bg-[#D39758]/30 text-[#341512] shadow-[1.5px_1.5px_3px_rgba(145,110,75,0.35),-1px_-1px_2.5px_rgba(252,238,223,0.4)]'
-                        : 'bg-[#E5D8CB]/80 text-[#341512]/70 shadow-[1.5px_1.5px_3px_rgba(182,155,130,0.35),-1px_-1px_2px_rgba(252,238,223,0.35)]'
-                        }`}
-                    >
-                      Recommended
-                    </span>
-                  </div>
-                  <p className="text-[11px] sm:text-xs text-[#341512]/80 leading-normal font-inter">
-                    Connect face-to-face online via Google Meet with video camera and live screen sharing.
-                  </p>
-                </div>
-              </div>
-
-              {/* Option 2: Audio Call */}
-              <div
-                onClick={() => setCommunicationMode('audio')}
-                className={`w-full flex items-start gap-3.5 p-4 sm:p-5 rounded-[20px] cursor-pointer transition-all ${communicationMode === 'audio'
-                  ? 'neu-raised-highlight'
-                  : 'neu-recessed hover:bg-[#E5D8CB]/40'
-                  }`}
-              >
-                <div className="mt-0.5">
-                  <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${communicationMode === 'audio' ? 'border-[#341512]' : 'border-[#341512]/60'
-                      }`}
-                  >
-                    {communicationMode === 'audio' && <div className="w-2 h-2 rounded-full bg-[#341512]" />}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-[#341512]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                    <span className="font-lora text-xs sm:text-sm font-bold text-[#341512]">Audio Call</span>
-                  </div>
-                  <p className="text-[11px] sm:text-xs text-[#341512]/80 leading-normal font-inter">
-                    Speak with your attorney by voice only via private Google Meet audio call.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Purpose of Consultation Section */}
-          <div className="space-y-3">
-            <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512] mb-5">Purpose of Consultation</h2>
-            <div className="neu-raised rounded-[24px] sm:rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-5">
-              {/* Subject Input */}
-              <div className="space-y-1.5">
-                <label className="block font-lora text-sm font-medium text-[#341512] mb-2">Subject:</label>
-                <input
-                  type="text"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  placeholder="e.g., Makati Residential Lease Deposit Dispute & Formal Notice to Vacate"
-                  className="neu-input w-full rounded-full py-2.5 sm:py-3 px-5 text-xs sm:text-sm text-[#341512] placeholder:text-[#341512]/40 font-inter"
-                />
-              </div>
-
-              {/* Subject Description */}
-              <div className="space-y-1.5">
-                <label className="block font-lora text-sm font-medium text-[#341512] mb-2">Subject Description:</label>
-                <textarea
-                  rows={5}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Provide concise facts, key contract dates, and specific legal queries for counsel to review..."
-                  className="neu-input w-full rounded-[20px] p-4 sm:p-5 text-xs sm:text-sm text-[#341512] placeholder:text-[#341512]/40 font-inter resize-none h-36 sm:h-40"
-                />
-              </div>
-
-              {/* File Attachments Dropzone */}
-              <div className="space-y-2">
-                <label className="block font-lora text-sm font-medium text-[#341512] mb-2">File Attachments</label>
-                <label
-                  className={`neu-recessed w-full py-9 px-6 rounded-[20px] flex flex-col items-center justify-center text-center transition-all block relative ${isDraggingFiles ? 'bg-[#DECDBA]' : 'bg-[#E5D8CB] hover:bg-[#DECDBA]/40'
-                    } ${isUploadingAttachment ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (!isDraggingFiles) setIsDraggingFiles(true);
-                  }}
-                  onDragLeave={() => setIsDraggingFiles(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDraggingFiles(false);
-                    handleAttachLocalFiles(e.dataTransfer.files);
-                  }}
+        {/* ─── Navigation Tabs: a single raised pill glides between tabs ───── */}
+        <motion.div
+          variants={TAB_BAR_VARIANTS}
+          initial="hidden"
+          animate="show"
+          role="tablist"
+          aria-label="Lawyer profile sections"
+          onKeyDown={handleTabKeyDown}
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-6 pt-1 pb-1 select-none"
+        >
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <motion.div key={tab.key} variants={TAB_ITEM_VARIANTS} role="presentation" className="flex">
+                <Key
+                  id={`lawyer-tab-${tab.key}`}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`lawyer-panel-${tab.key}`}
+                  tabIndex={isActive ? 0 : -1}
+                  onClick={() => changeTab(tab.key)}
+                  className={`rounded-[12px] px-6 py-2 font-lora text-sm sm:text-base font-semibold cursor-pointer transition-colors ${isActive ? 'text-[#341512]' : 'text-[#341512]/70 hover:text-[#341512]'
+                    }`}
                 >
-                  <input
-                    type="file"
-                    multiple
-                    className="hidden"
-                    disabled={isUploadingAttachment}
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.txt,.mp4"
-                    onChange={(e) => {
-                      const input = e.target;
-                      handleAttachLocalFiles(input.files ? Array.from(input.files) : null).finally(() => {
-                        input.value = '';
-                      });
-                    }}
-                  />
-                  {/* Clean tray download/upload icon matching Image 2 */}
-                  <svg className="w-11 h-11 text-[#341512]/60 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                  <span className="font-lora text-xs sm:text-sm text-[#341512]/70 font-medium mt-3 block">
-                    {isUploadingAttachment
-                      ? 'Uploading to My Documents...'
-                      : 'Drag and Drop, or Attach Relevant Files'}
-                  </span>
-                </label>
-
-                {/* Attached Files List */}
-                {attachedFiles.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    {attachedFiles.map((file) => (
-                      <div key={file.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#E5D8CB]/60 text-xs text-[#341512]">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <PaperclipIcon className="w-3.5 h-3.5 text-[#C58B3C] shrink-0" />
-                          <span className="truncate">{file.name}</span>
-                          <span className="text-[10px] text-[#341512]/60 shrink-0">{file.size}</span>
-                        </div>
-                        <button
-                          type="button"
-                          aria-label={`Remove ${file.name}`}
-                          onClick={() => setAttachedFiles((prev) => prev.filter((f) => f.id !== file.id))}
-                          className="text-red-700 hover:text-red-900 font-bold ml-2 cursor-pointer"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="text-center py-2">
-                  <span className="font-lora text-xs sm:text-sm font-semibold tracking-wider text-[#341512]/70 uppercase">OR</span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleOpenDocPicker}
-                  className="neu-raised-highlight-sm px-7 py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-lora font-semibold text-[#341512] hover:brightness-105 active:scale-95 transition-all mx-auto block cursor-pointer select-none"
-                >
-                  Share Uploaded Files from your Documents
-                </button>
-              </div>
-
-              {bookingError && (
-                <div className="p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 text-xs font-semibold">
-                  <span className="flex items-center gap-1.5">
-                    <svg className="w-4 h-4 text-rose-600 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    <span>{bookingError}</span>
-                  </span>
-                </div>
-              )}
-
-              {/* Privilege Agreement Checkbox */}
-              <label className="flex items-start gap-3 cursor-pointer pt-3 select-none">
-                <div
-                  role="checkbox"
-                  aria-checked={agreedToTerms}
-                  tabIndex={0}
-                  onClick={() => setAgreedToTerms(!agreedToTerms)}
-                  onKeyDown={(e) => {
-                    if (e.key === ' ' || e.key === 'Enter') {
-                      e.preventDefault();
-                      setAgreedToTerms(!agreedToTerms);
-                    }
-                  }}
-                  className="mt-0.5 w-4 h-4 rounded border border-[#341512]/60 bg-transparent flex items-center justify-center shrink-0 cursor-pointer transition-colors"
-                >
-                  {agreedToTerms && (
-                    <svg className="w-3 h-3 text-[#D39758]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                  {isActive && (
+                    <HighlightPill layoutId="lawyer-tab-pill" radius={12} intro={introActive ? 1.35 : false} />
                   )}
-                </div>
-                <input
-                  type="checkbox"
-                  checked={agreedToTerms}
-                  onChange={(e) => setAgreedToTerms(e.target.checked)}
-                  className="sr-only"
-                  tabIndex={-1}
-                />
-                <span className="font-inter text-xs text-[#341512]/80 leading-relaxed">
-                  I agree that this intake form and attached records will be reviewed strictly under confidential attorney-client privilege prior to the scheduled consultation session.
-                </span>
-              </label>
-            </div>
-          </div>
+                  <span className="relative z-10">{tab.label}</span>
+                </Key>
+              </motion.div>
+            );
+          })}
+        </motion.div>
 
-          {/* Action Buttons Row */}
-          <div className="flex items-center justify-end gap-3 pt-1">
-            <button
-              type="button"
-              onClick={handleClearInputs}
-              className="rounded-xl border border-[#341512]/60 px-5 py-2 text-xs sm:text-sm font-lora font-semibold text-[#341512] hover:bg-[#341512]/5 transition-colors cursor-pointer select-none"
-            >
-              Clear All Inputs
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveDraft}
-              className="neu-raised-sm !bg-[#D39758]/70 rounded-xl px-7 py-2 text-xs sm:text-sm font-lora font-semibold text-[#341512] hover:brightness-105 active:scale-95 transition-all cursor-pointer select-none"
-            >
-              Save
-            </button>
-          </div>
-
-          {/* Divider Line separating Purpose of Consultation & Actions from Submit Booking */}
-          <hr className="border-t-2 border-[#C8B59E] my-8 sm:my-10" />
-
-          {/* Centered Large Submit Button */}
-          <div className="pt-2 pb-6">
-            <button
-              type="submit"
-              disabled={submittingBooking}
-              className="neu-raised-sm !bg-[#D39758]/70 w-full max-w-sm mx-auto block py-3.5 px-8 rounded-xl sm:rounded-2xl text-base font-lora font-bold text-[#341512] text-center transition-all cursor-pointer active:scale-95 shadow-none disabled:opacity-60"
-            >
-              {submittingBooking ? 'Submitting Request...' : 'Submit Booking'}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* ─── TAB 4: CASES HANDLED (Matches Figma Design) ───────────────────── */}
-      {activeTab === 'cases' && (
-        <div className="space-y-6 animate-in fade-in duration-150">
-          {/* Stack of Case Cards */}
-          {casesHandled.map((caseItem) => (
-            <div
-              key={caseItem.id}
-              className="neu-raised rounded-[24px] sm:rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-2.5 transition-all mb-10"
-            >
-              <div className="font-inter font-bold text-[10px] sm:text-[11px] text-[#D39758] uppercase tracking-wider">
-                {caseItem.docket}
-              </div>
-              <h3 className="font-lora text-lg sm:text-xl font-bold text-[#341512] leading-tight">
-                {caseItem.title}
-              </h3>
-              <p className="font-inter text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify">
-                {caseItem.content}
-              </p>
-            </div>
-          ))}
-
-          {/* Bottom Pagination matching Figma: < ● ● ● ● > */}
-          <div className="flex items-center justify-center gap-4 pt-3 pb-4">
-            <button
-              type="button"
-              onClick={() => setCasePage((p) => Math.max(1, p - 1))}
-              disabled={casePage <= 1}
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 flex items-center justify-center text-[#341512]/80 hover:text-[#341512] disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
-              aria-label="Previous cases page"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-
-            <div className="flex items-center gap-2.5">
-              {[1, 2, 3, 4].map((p) => {
-                const isActive = p === casePage;
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setCasePage(p)}
-                    className={`rounded-full transition-all cursor-pointer ${isActive
-                      ? 'w-2.5 h-2.5 bg-[#D39758] scale-125'
-                      : 'w-2 h-2 bg-[#341512]/70 hover:bg-[#341512]'
-                      }`}
-                    aria-label={`Go to case page ${p}`}
-                  />
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setCasePage((p) => Math.min(4, p + 1))}
-              disabled={casePage >= 4}
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20 flex items-center justify-center text-[#341512]/80 hover:text-[#341512] disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
-              aria-label="Next cases page"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Share From My Documents Vault Modal ─────────────────────────────── */}
-      {showDocPickerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
-          <div
-            className="w-full max-w-3xl rounded-[32px] p-6 sm:p-8 bg-[#E5D8CB] space-y-5 max-h-[90vh] flex flex-col"
-            style={{
-              boxShadow: '16px 16px 40px rgba(0,0,0,0.35), -8px -8px 24px #FFFFFF',
-            }}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-[#D1BEA8]/80">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-[#E5D8CB] flex items-center justify-center text-xl shadow-xs">
-
-                </div>
-                <div>
-                  <h3 className="font-lora text-2xl font-bold text-[#23150F] leading-tight">
-                    My Documents Vault
-                  </h3>
-                  <p className="text-xs text-[#5C4535]">
-                    Select records or upload documents from your vault to attach to this consultation.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowDocPickerModal(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#23150F] hover:bg-[#E5D8CB]/40 font-bold transition-colors"
+        {/* ─── Tab panels: slide in from the side you navigated toward ───── */}
+        <IntroContext.Provider value={introDelay}>
+          <AnimatePresence mode="wait" custom={panelCustom}>
+            {/* ─── TAB 1: ABOUT ─────────────────────────────────── */}
+            {activeTab === 'about' && (
+              <motion.div
+                key="about"
+                id="lawyer-panel-about"
+                role="tabpanel"
+                aria-labelledby="lawyer-tab-about"
+                custom={panelCustom}
+                variants={PANEL_VARIANTS}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                className="space-y-8"
               >
-                ✕
-              </button>
-            </div>
-
-            {/* Notification Notice */}
-            {pickerNotice && (
-              <div className="p-3 rounded-2xl bg-[#E2D4C1] border border-[#C5B099] text-xs font-medium text-[#23150F] flex items-center justify-between">
-                <span>{pickerNotice}</span>
-                <button
-                  type="button"
-                  onClick={() => setPickerNotice(null)}
-                  className="text-[#7D6855] hover:text-[#23150F] font-bold ml-2"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
-            {/* Quick Upload & Create Folder Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#E4D5C2]/80 border border-[#D5C2AB]">
-              {/* Left: Quick Upload File */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  ref={pickerFileInputRef}
-                  className="hidden"
-                  onChange={handlePickerFileUpload}
-                />
-                <button
-                  type="button"
-                  disabled={isUploadingPickerFile}
-                  onClick={() => pickerFileInputRef.current?.click()}
-                  className="px-4 py-2 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-bold hover:bg-[#34150F] transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-60"
-                >
-                  {isUploadingPickerFile ? (
-                    <>
-                      <svg className="w-3.5 h-3.5 animate-spin text-[#ded7cb]" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                      </svg>
-                      <span>Uploading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>+</span>
-                      <span>Upload to Vault</span>
-                    </>
-                  )}
-                </button>
-                <span className="text-[11px] text-[#7D6855] hidden sm:inline">
-                  (PDF, Word, Images, Evidence)
-                </span>
-              </div>
-
-              {/* Right: Quick Create Folder */}
-              <form onSubmit={handleCreatePickerFolder} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={pickerNewFolderName}
-                  onChange={(e) => setPickerNewFolderName(e.target.value)}
-                  placeholder="New folder name..."
-                  className="py-1.5 px-3 rounded-xl bg-[#EBE0D2] text-xs text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none w-40 sm:w-48 shadow-inner"
-                />
-                <button
-                  type="submit"
-                  disabled={isCreatingPickerFolder || !pickerNewFolderName.trim()}
-                  className="px-3 py-1.5 rounded-xl bg-[#E5D8CB] text-xs font-bold text-[#23150F] hover:bg-[#D4B892] disabled:opacity-50 transition-all shadow-xs"
-                >
-                  {isCreatingPickerFolder ? 'Creating...' : '+ Folder'}
-                </button>
-              </form>
-            </div>
-
-            {/* Folder & Files Browser Layout */}
-            <div className="flex-1 min-h-[260px] overflow-hidden flex flex-col sm:flex-row gap-4 border border-[#D1BEA8]/80 rounded-2xl p-3 bg-[#EAE0D2]/50">
-              {/* Folders List (Left Sidebar) */}
-              <div className="w-full sm:w-56 shrink-0 space-y-1.5 overflow-y-auto max-h-[280px] sm:max-h-full pr-1">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-[#7D6855] px-2 py-1">
-                  Folders ({docPickerFolders.length})
-                </div>
-
-                {loadingDocPicker ? (
-                  <div className="p-4 text-center text-xs text-[#7D6855]">Loading vault...</div>
-                ) : docPickerFolders.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-[#7D6855]">No folders yet.</div>
-                ) : (
-                  docPickerFolders.map((folder) => {
-                    const isActive = activePickerFolderId === folder.id;
-                    return (
-                      <button
-                        key={folder.id}
-                        type="button"
-                        onClick={() => setActivePickerFolderId(folder.id)}
-                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-all flex items-center justify-between ${isActive
-                          ? 'bg-[#23150F] text-[#ded7cb] shadow-sm font-bold'
-                          : 'bg-[#E5D8CB] text-[#23150F] hover:bg-[#E5D8CB]'
-                          }`}
+                {/* Top Row: Bio (flexible) & Consultation Rates (fixed width — edit the px value) */}
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_415px] gap-6 items-stretch">
+                  {/* Bio Card */}
+                  <Reveal className="h-full">
+                    <div className="relative h-full rounded-[20px] sm:rounded-[24px] neu-recessed bg-[#E5D8CB] flex flex-col max-h-[220px] sm:max-h-[235px] overflow-hidden">
+                      <div
+                        ref={bioRef}
+                        onScroll={updateBioFade}
+                        className="flex-1 min-h-0 overflow-y-auto neu-scrollbar-discrete space-y-3 py-6 sm:py-7 pl-6 sm:pl-7 pr-3 sm:pr-4 mr-1.5"
                       >
-                        <span className="truncate"> {folder.name}</span>
-                        <span className="text-[10px] opacity-75 shrink-0 ml-1">
-                          {folder.files?.length || 0}
-                        </span>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Files Grid / List (Right Content) */}
-              <div className="flex-1 overflow-y-auto max-h-[300px] sm:max-h-full pl-1">
-                {(() => {
-                  const currentFolder = docPickerFolders.find((f) => f.id === activePickerFolderId) || docPickerFolders[0];
-                  const files = currentFolder?.files || [];
-
-                  if (!currentFolder) {
-                    return (
-                      <div className="h-full flex flex-col items-center justify-center p-8 text-center text-xs text-[#7D6855]">
-                        <p>No folder selected. Use the buttons above to create a folder or upload a file.</p>
-                      </div>
-                    );
-                  }
-
-                  if (files.length === 0) {
-                    return (
-                      <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-2">
-                        <div className="text-[#7A6756]"><FileDocIcon className="w-8 h-8" /></div>
-                        <p className="text-xs font-semibold text-[#23150F]">No files in this folder</p>
-                        <p className="text-[11px] text-[#7D6855]">
-                          Use "Upload to Vault" above to add documents to this folder.
+                        <p className="text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify font-inter">
+                          {LOREM_BIO}
                         </p>
                       </div>
-                    );
-                  }
+                      {/* Soft fade appears only while there's more bio to scroll */}
+                      <AnimatePresence>
+                        {showBioFade && (
+                          <motion.div
+                            key="bio-fade"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.25 }}
+                            className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#E5D8CB] to-transparent"
+                          />
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </Reveal>
 
-                  return (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between pb-1 text-[11px] font-bold text-[#7D6855]">
-                        <span>FILES IN {currentFolder.name.toUpperCase()}</span>
-                        <span>{files.length} available</span>
+                  {/* Consultation Rates Card */}
+                  <Reveal className="h-full" delay={0.08}>
+                    <div className="h-full rounded-[20px] sm:rounded-[24px] px-6 py-6 sm:px-7 sm:py-7 neu-raised-highlight flex flex-col justify-center space-y-4 sm:space-y-5">
+                      <h3 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80 text-center">
+                        Consultation Rates:
+                      </h3>
+
+                      <motion.div
+                        className="space-y-3.5 sm:space-y-4 font-inter text-[#341512]/80"
+                        initial="hidden"
+                        whileInView="show"
+                        viewport={{ once: true, amount: 0.5 }}
+                        variants={{ hidden: {}, show: { transition: { staggerChildren: 0.12, delayChildren: 0.2 + introDelay } } }}
+                      >
+                        {rateRows.map((row) => (
+                          <motion.div
+                            key={row.label}
+                            variants={{
+                              hidden: { opacity: 0, x: 18 },
+                              show: { opacity: 1, x: 0, transition: { duration: 0.5, ease: EASE_OUT } },
+                            }}
+                            className="flex justify-between items-baseline gap-4"
+                          >
+                            <span className="text-xs sm:text-[15px] font-lora font-medium text-[#341512]/80">{row.label}</span>
+                            <div className="text-right shrink-0 whitespace-nowrap">
+                              <span className="font-lora font-bold text-sm sm:text-base text-[#341512]/80">
+                                <CountUp value={row.value} prefix="₱" />
+                              </span>
+                              <span className="text-xs sm:text-[13px] text-[#341512]/80 ml-0.5">/per hour</span>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </motion.div>
+                    </div>
+                  </Reveal>
+                </div>
+
+                {/* Professional Background Section */}
+                <div className="space-y-4">
+                  <Reveal>
+                    <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80">Professional Background</h2>
+                  </Reveal>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+                    <InfoCard
+                      title="Areas of Practice"
+                      icon={
+                        <LineIcon>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                        </LineIcon>
+                      }
+                    />
+                    <InfoCard
+                      title="Legal Experience"
+                      delay={0.08}
+                      icon={
+                        <LineIcon>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m14 13-7.5 7.5a2.12 2.12 0 1 1-3-3L11 10" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m16 16 6-6" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m8 8 6-6" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m9 7 8 8" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m21 11-8-8" />
+                        </LineIcon>
+                      }
+                    />
+                    <InfoCard
+                      title="Consultation Services"
+                      icon={
+                        <LineIcon>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 6.75 3.19-1.595A3 3 0 0 1 7.234 16H18a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v12.75Z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 16v2.25a2.25 2.25 0 0 1-2.25 2.25H9.75l-2.25 1.125" />
+                        </LineIcon>
+                      }
+                    />
+                    <InfoCard
+                      title={`Philippine Bar Examination Passer (${lawyer.barPasserYear ?? 2022})`}
+                      delay={0.08}
+                      icon={
+                        <LineIcon>
+                          <circle cx="12" cy="8" r="5.5" strokeLinecap="round" strokeLinejoin="round" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.5 13.5 17.5 21l-5.5-2.75L6.5 21l2-7.5" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 8 1.5 1.5 3-3" />
+                        </LineIcon>
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Educational Background Section */}
+                <div className="space-y-4">
+                  <Reveal>
+                    <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80">Educational Background</h2>
+                  </Reveal>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+                    <InfoCard
+                      title="Juris Doctor (2017 - 2021)"
+                      subtitle="University of the Philippines - Cebu"
+                      icon={<ScalesIcon className="w-8 h-8 text-[#341512]/80 shrink-0" />}
+                    />
+                    <InfoCard
+                      title="Bachelor of Arts in Political Science (2013 - 2017)"
+                      subtitle="University of San Carlos - Main Campus"
+                      delay={0.08}
+                      icon={
+                        <LineIcon>
+                          <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                          <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                        </LineIcon>
+                      }
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ─── TAB 2: REVIEWS ─────────────────────────────────── */}
+            {activeTab === 'reviews' && (
+              <motion.div
+                key="reviews"
+                id="lawyer-panel-reviews"
+                role="tabpanel"
+                aria-labelledby="lawyer-tab-reviews"
+                custom={panelCustom}
+                variants={PANEL_VARIANTS}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                className="space-y-6"
+              >
+                <AnimatePresence initial={false}>
+                  {reviewsError && (
+                    <Collapse key="reviews-error" gap={24}>
+                      <p role="alert" className="text-red-700">{reviewsError}</p>
+                    </Collapse>
+                  )}
+                </AnimatePresence>
+
+                {/* Main Large Reviews Outer Container (Recessed Look) */}
+                <Reveal>
+                  <div className="rounded-[28px] sm:rounded-[32px] p-6 sm:p-9 neu-recessed bg-[#E5D8CB] space-y-6 select-none">
+                    {reviewsLoading && <p role="status" className="sr-only">Loading reviews…</p>}
+
+                    {/* Score header: 4.9/5 ★★★★★ (53 Reviews) */}
+                    <div className="flex flex-wrap items-baseline gap-2 sm:gap-3">
+                      <span className="font-lora text-4xl sm:text-5xl font-bold text-[#341512]/80 leading-none">
+                        <CountUp value={averageRating} decimals={1} duration={1.1} />
+                      </span>
+                      <span className="font-lora text-2xl sm:text-3xl font-bold text-[#341512]/80">/5</span>
+
+                      {/* Stars pop in one by one */}
+                      <div className="flex items-center gap-1 text-[#C58B3C] text-xl sm:text-2xl ml-2 sm:ml-4">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <motion.span
+                            key={s}
+                            initial={{ scale: 0, rotate: -45, opacity: 0 }}
+                            animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 15, delay: 0.25 + s * 0.07 }}
+                            className="inline-flex"
+                          >
+                            <StarIcon filled={s <= Math.round(averageRating)} className="w-5 h-5 sm:w-6 sm:h-6" />
+                          </motion.span>
+                        ))}
                       </div>
 
-                      {files.map((file: any) => {
-                        const isSelected = selectedDocPickerFiles.includes(file.id);
+                      <span className="font-lora text-sm sm:text-base font-normal text-[#341512]/80 ml-2">
+                        (<CountUp value={totalReviewsCount} duration={0.7} /> Reviews)
+                      </span>
+                    </div>
+
+                    {/* Filter pills: the highlight glides between the selected rating */}
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-1">
+                      {[5, 4, 3, 2, 1].map((s) => {
+                        const isActive = selectedReviewStar === s;
                         return (
-                          <div
-                            key={file.id || file.name}
-                            onClick={() => handleToggleSelectDoc(file.id)}
-                            className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${isSelected
-                              ? 'bg-[#E5D8CB] border-[#C58B3C] shadow-sm text-[#23150F]'
-                              : 'bg-[#E8DDD0] border-[#D8C7B5] hover:bg-[#E2D4C3] text-[#34150F]'
-                              }`}
+                          <Key
+                            key={s}
+                            aria-pressed={isActive}
+                            onClick={() => {
+                              setSelectedReviewStar((prev) => (prev === s ? 'all' : s));
+                              setReviewPage(1);
+                            }}
+                            className={`rounded-[12px] px-5 py-1.5 sm:px-6 sm:py-2 text-xs sm:text-sm font-semibold cursor-pointer inline-flex items-center gap-1.5 ${isActive ? '' : 'neu-raised-sm bg-[#E5D8CB] hover:bg-[#D39758]/20'
+                              } text-[#341512]/80`}
                           >
-                            <div className="flex items-center gap-2.5 truncate">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => { }} // handled by parent onClick
-                                className="w-4 h-4 rounded text-[#C58B3C] accent-[#C58B3C]"
-                              />
-                              <FileDocIcon className="w-4 h-4 text-[#7A6756]" />
-                              <div className="truncate">
-                                <div className="text-xs font-semibold truncate">{file.name}</div>
-                                <div className="text-[10px] text-[#7D6855]">
-                                  {file.size} • {file.updatedAt || 'Recent'}
-                                </div>
-                              </div>
-                            </div>
-                            <span
-                              className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${isSelected ? 'bg-[#23150F] text-[#ded7cb]' : 'bg-[#D5C2AB] text-[#5C4535]'
-                                }`}
+                            {isActive && <HighlightPill layoutId="review-filter-pill" radius={12} />}
+                            <motion.span
+                              animate={isActive ? { rotate: [0, -20, 15, 0], scale: [1, 1.3, 1] } : { rotate: 0, scale: 1 }}
+                              transition={{ duration: 0.5 }}
+                              className="relative z-10 inline-flex"
                             >
-                              {isSelected ? 'Selected' : 'Select'}
-                            </span>
-                          </div>
+                              <StarIcon filled className="w-3.5 h-3.5 text-[#C58B3C]" />
+                            </motion.span>
+                            <span className="relative z-10 font-lora font-bold text-[#341512]/80">{s}</span>
+                          </Key>
                         );
                       })}
                     </div>
-                  );
-                })()}
-              </div>
-            </div>
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between pt-2 border-t border-[#D1BEA8]/80">
-              <span className="text-xs font-medium text-[#5C4535]">
-                {selectedDocPickerFiles.length} file{selectedDocPickerFiles.length === 1 ? '' : 's'} selected
-              </span>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowDocPickerModal(false)}
-                  className="px-5 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-semibold text-[#5C4535] hover:bg-[#E5D8CB]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmDocPicker}
-                  disabled={selectedDocPickerFiles.length === 0}
-                  className="px-6 py-2.5 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-bold hover:bg-[#34150F] transition-all shadow-md disabled:opacity-40"
-                >
-                  Attach Selected ({selectedDocPickerFiles.length})
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+                    {/* Review Cards Stack: re-staggers whenever the filter or page changes */}
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={
+                          reviewsLoading && reviewsList.length === 0
+                            ? 'loading'
+                            : `${selectedReviewStar}-${reviewPage}`
+                        }
+                        variants={STAGGER_VARIANTS}
+                        initial="hidden"
+                        animate="show"
+                        exit="exit"
+                        className="space-y-4 pt-1"
+                      >
+                        {reviewsLoading && reviewsList.length === 0 && (
+                          <>
+                            <ReviewSkeleton />
+                            <ReviewSkeleton />
+                          </>
+                        )}
 
-      {/* ─── Booking Submitted: Pending Confirmation Summary (design1) ─────── */}
-      {submittedConsultation && (
-        <ConsultationSummaryModal
-          data={clientConsultationToSummary(submittedConsultation)}
-          onClose={() => setSubmittedConsultation(null)}
-        />
-      )}
-    </div>
+                        {pagedReviews.map((rev) => {
+                          const voted = !!userVotedHelpful[rev.id];
+                          const helpfulCount = helpfulCounts[rev.id] || 0;
+                          return (
+                            <motion.div
+                              key={rev.id}
+                              variants={STAGGER_ITEM}
+                              whileHover={{ y: -2 }}
+                              className="neu-raised-highlight rounded-[18px] sm:rounded-[20px] p-5 sm:p-6 space-y-2.5 select-none"
+                            >
+                              {/* Header: Avatar, Name, Stars, Date */}
+                              <div className="flex items-center gap-3.5">
+                                <div className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 flex items-center justify-center text-[#341512]/80">
+                                  <svg className="w-full h-full" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="4.2">
+                                    <circle cx="32" cy="32" r="28" />
+                                    <circle cx="32" cy="24" r="8" />
+                                    <path d="M16 48c0-8.837 7.163-14 16-14s16 5.163 16 14" strokeLinecap="round" />
+                                  </svg>
+                                </div>
+
+                                <div>
+                                  <h4 className="font-lora font-bold text-sm sm:text-base text-[#341512]/80 leading-tight">
+                                    {rev.name}
+                                  </h4>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <div className="flex items-center text-[#C58B3C]">
+                                      {[1, 2, 3, 4, 5].map((st) => (
+                                        <StarIcon key={st} filled={st <= rev.stars} className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                      ))}
+                                    </div>
+                                    <span className="text-[10px] sm:text-[11px] text-[#341512]/70 font-inter">{rev.date}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Body Text */}
+                              <p className="text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify font-inter">
+                                {rev.content}
+                              </p>
+
+                              {/* Helpful feedback: thumb pops, count rolls */}
+                              <div className="flex items-center gap-4 pt-1 text-[11px] font-medium text-[#341512]/80 font-inter">
+                                <Key
+                                  aria-pressed={voted}
+                                  onClick={() => toggleHelpful(rev.id)}
+                                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 -ml-2.5 hover:text-[#341512] transition-colors cursor-pointer"
+                                >
+                                  <motion.svg
+                                    animate={voted ? { rotate: [0, -24, 10, 0], scale: [1, 1.4, 1] } : { rotate: 0, scale: 1 }}
+                                    transition={{ duration: 0.5, ease: EASE_OUT }}
+                                    className={`w-3.5 h-3.5 ${voted ? 'fill-current text-[#C58B3C]' : 'text-[#341512]/80'}`}
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+                                  </motion.svg>
+                                  <span>Helpful?</span>
+                                  {helpfulCount > 0 && <RollNumber value={helpfulCount} />}
+                                </Key>
+                              </div>
+
+                              {/* Attorney Reply Bubble if present */}
+                              {rev.reply && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -6 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ delay: 0.3, duration: 0.4, ease: EASE_OUT }}
+                                  className="mt-2 p-3.5 rounded-[14px] bg-[#E5D8CB]/80 neu-recessed text-xs space-y-1"
+                                >
+                                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#341512]/80 font-lora">
+                                    <ScalesIcon className="w-3.5 h-3.5 text-[#C58B3C]" />
+                                    <span>Response from {lawyer.fullName}</span>
+                                  </div>
+                                  <p className="text-[#341512]/80 text-xs leading-relaxed font-inter">{rev.reply}</p>
+                                </motion.div>
+                              )}
+                            </motion.div>
+                          );
+                        })}
+
+                        {filteredReviews.length === 0 && !(reviewsLoading && reviewsList.length === 0) && (
+                          <motion.div variants={STAGGER_ITEM} className="py-10 text-center text-xs text-[#341512]/80 font-lora">
+                            {reviewsError
+                              ? 'Reviews are currently unavailable.'
+                              : reviewsList.length === 0
+                                ? 'No consultation reviews yet.'
+                                : 'No reviews match this rating.'}
+                          </motion.div>
+                        )}
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                </Reveal>
+
+                {/* Bottom Pagination: < ● ● ● ● > */}
+                {totalReviewPages > 1 && (
+                  <PageControls
+                    total={totalReviewPages}
+                    current={reviewPage}
+                    onChange={setReviewPage}
+                    idPrefix="review"
+                    label="reviews"
+                  />
+                )}
+              </motion.div>
+            )}
+
+            {/* ─── TAB 3: CONSULTATION BOOKING ─────────────────────── */}
+            {activeTab === 'booking' && (
+              <motion.form
+                key="booking"
+                id="lawyer-panel-booking"
+                role="tabpanel"
+                aria-labelledby="lawyer-tab-booking"
+                onSubmit={handleSubmitBooking}
+                custom={panelCustom}
+                variants={PANEL_VARIANTS}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                className="space-y-8"
+              >
+                {/* Confirmation Feedback */}
+                <AnimatePresence initial={false}>
+                  {bookingStatus === 'saved' && (
+                    <Collapse key="draft-saved" gap={32}>
+                      <div className="p-4 rounded-2xl bg-amber-100/90 border border-amber-300 text-amber-900 text-xs sm:text-sm flex items-center justify-between">
+                        <span className="inline-flex items-center gap-2">
+                          <AnimatedCheck className="w-4 h-4" delay={0.15} />
+                          Consultation draft details saved. You can complete your submission anytime.
+                        </span>
+                        <Key
+                          aria-label="Dismiss"
+                          onClick={() => setBookingStatus('idle')}
+                          className="w-6 h-6 rounded-full flex items-center justify-center font-bold cursor-pointer"
+                        >
+                          <CloseIcon />
+                        </Key>
+                      </div>
+                    </Collapse>
+                  )}
+                </AnimatePresence>
+
+                {/* Calendar & Time Slots Grid */}
+                <Reveal>
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+                    {/* Calendar Card (Left - 8 cols) */}
+                    <div className="lg:col-span-8 rounded-[24px] neu-raised bg-[#E5D8CB] flex flex-col justify-center px-5 py-3.5 sm:px-6 sm:py-3.5">
+                      <div className="w-full flex flex-col sm:flex-row items-center gap-5 sm:gap-6 lg:gap-8">
+                        {/* Left column: month, giant day number, weekday */}
+                        <div className="flex flex-col items-center justify-center sm:min-w-[120px] lg:min-w-[140px] shrink-0 select-none pl-1 sm:pl-2">
+                          {/* Month with left/right chevrons; the label rolls in the direction you navigate */}
+                          <div className="flex items-center justify-center gap-3">
+                            <Key
+                              onClick={handlePrevMonth}
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-[#341512]/70 hover:text-[#341512] hover:bg-[#DDCFC0]/50 transition-colors cursor-pointer"
+                              title="Previous Month"
+                              aria-label="Previous Month"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                              </svg>
+                            </Key>
+
+                            <div className="relative overflow-hidden h-7 lg:h-9 min-w-[4.5rem] flex items-center justify-center">
+                              <AnimatePresence mode="popLayout" custom={monthDir} initial={false}>
+                                <motion.span
+                                  key={`${currentYear}-${currentMonth}`}
+                                  custom={monthDir}
+                                  variants={LABEL_ROLL}
+                                  initial="enter"
+                                  animate="center"
+                                  exit="exit"
+                                  className="font-lora text-sm sm:text-base lg:text-[24px] font-semibold tracking-wide text-[#341512]/80 uppercase"
+                                >
+                                  {selectedMonthShort}
+                                </motion.span>
+                              </AnimatePresence>
+                            </div>
+
+                            <Key
+                              onClick={handleNextMonth}
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-[#341512]/70 hover:text-[#341512] hover:bg-[#DDCFC0]/50 transition-colors cursor-pointer"
+                              title="Next Month"
+                              aria-label="Next Month"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
+                            </Key>
+                          </div>
+
+                          {/* Giant day number rolls like an odometer */}
+                          <div className="relative overflow-hidden flex justify-center px-1 mb-2">
+                            <AnimatePresence mode="popLayout" custom={dayDir} initial={false}>
+                              <motion.span
+                                key={selectedDay}
+                                custom={dayDir}
+                                variants={DAY_ROLL}
+                                initial="enter"
+                                animate="center"
+                                exit="exit"
+                                className="font-lora text-5xl sm:text-6xl lg:text-[130px] font-semibold text-[#D39758] leading-none select-none"
+                              >
+                                {String(selectedDay).padStart(2, '0')}
+                              </motion.span>
+                            </AnimatePresence>
+                          </div>
+
+                          <span className="font-lora text-[11px] sm:text-sm lg:text-[20px] font-semibold tracking-wider text-[#341512]/80 uppercase pt-0.5">
+                            {selectedDayOfWeek}
+                          </span>
+
+                          {/* "Today" shortcut appears only when you've wandered off today */}
+                          <div className="h-7 mt-1 flex items-center justify-center">
+                            <AnimatePresence>
+                              {!isTodaySelected && (
+                                <motion.div
+                                  key="today-btn"
+                                  initial={{ opacity: 0, y: -6, scale: 0.9 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: -6, scale: 0.9 }}
+                                  transition={{ duration: 0.2 }}
+                                >
+                                  <Key
+                                    onClick={handleGoToToday}
+                                    className="neu-raised-sm bg-[#E5D8CB] rounded-full px-3 py-0.5 font-lora text-[11px] font-semibold text-[#341512]/80 hover:text-[#341512] cursor-pointer"
+                                  >
+                                    Jump to today
+                                  </Key>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        </div>
+
+                        {/* Right column: month grid slides when the month changes */}
+                        <div className="flex-1 w-full min-w-0 pr-1 sm:pr-2">
+                          <div className="grid grid-cols-7 justify-items-center mb-1.5">
+                            {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => (
+                              <span
+                                key={d}
+                                className="font-lora text-xs sm:text-[15px] font-semibold text-[#341512]/80 tracking-wide text-center"
+                              >
+                                {d}
+                              </span>
+                            ))}
+                          </div>
+
+                          <AnimatePresence mode="wait" custom={monthDir} initial={false}>
+                            <motion.div
+                              key={`${currentYear}-${currentMonth}`}
+                              custom={monthDir}
+                              variants={SLIDE_VARIANTS}
+                              initial="enter"
+                              animate="center"
+                              exit="exit"
+                              className="grid grid-cols-7 justify-items-center gap-y-1"
+                            >
+                              {daysInMonth.map((item, idx) => {
+                                if (!item.day) {
+                                  return <div key={`empty-${idx}`} className="size-7 sm:size-8 lg:size-8.5" />;
+                                }
+                                const isSelected = item.day === selectedDay;
+                                const isToday =
+                                  item.day === todayPH.day &&
+                                  currentMonth === todayPH.month &&
+                                  currentYear === todayPH.year;
+
+                                return (
+                                  <Key
+                                    key={`day-${item.day}`}
+                                    aria-pressed={isSelected}
+                                    aria-current={isToday ? 'date' : undefined}
+                                    onClick={() => setSelectedDay(item.day!)}
+                                    className={`size-7 sm:size-8 lg:size-9 flex items-center justify-center rounded-full font-lora text-xs sm:text-[15px] select-none cursor-pointer transition-colors ${isSelected ? 'text-[#D39758] font-bold' : 'text-[#341512]/80 hover:bg-[#DDCFC0]/60'
+                                      }`}
+                                  >
+                                    {isSelected && <HighlightPill layoutId="booking-day-pill" radius={9999} variant="neu-raised-sm" />}
+                                    <span className="relative z-10">{String(item.day).padStart(2, '0')}</span>
+                                    {isToday && (
+                                      <span className="absolute bottom-[3px] left-1/2 z-10 h-1 w-1 -translate-x-1/2 rounded-full bg-[#D39758]" />
+                                    )}
+                                  </Key>
+                                );
+                              })}
+                            </motion.div>
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Time Slots Card (Right - 4 cols, matching calendar height) */}
+                    <div className="lg:col-span-4 flex flex-col h-full space-y-3">
+                      {/* Header Badge */}
+                      <div className="neu-raised-sm !bg-[#D39758]/30 w-full py-2.5 rounded-[16px] text-center shrink-0">
+                        <span className="font-lora text-[11px] sm:text-xs font-bold tracking-wider text-[#341512] uppercase">
+                          Available Time Slots
+                        </span>
+                      </div>
+
+                      {/* Recessed Slots Container — slots re-stagger each time the date changes */}
+                      <motion.div
+                        aria-busy={loadingSlots}
+                        animate={{ opacity: loadingSlots ? 0.55 : 1 }}
+                        transition={{ duration: 0.2 }}
+                        className="neu-recessed rounded-[24px] px-9 py-7 flex-1 min-h-0 max-h-[250px] overflow-y-auto neu-scrollbar-discrete"
+                      >
+                        <motion.div
+                          key={`${currentYear}-${currentMonth}-${selectedDay}`}
+                          initial="hidden"
+                          animate="show"
+                          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
+                          className="flex flex-col gap-5 justify-start"
+                        >
+                          {TIME_SLOTS.map((slot) => {
+                            const isSelected = selectedTimeSlot === slot;
+                            const isBooked = isSlotBooked(slot);
+                            return (
+                              <motion.div
+                                key={slot}
+                                variants={{
+                                  hidden: { opacity: 0, x: 16 },
+                                  show: { opacity: 1, x: 0, transition: { duration: 0.35, ease: EASE_OUT } },
+                                }}
+                                className="shrink-0"
+                              >
+                                <Key
+                                  disabled={isBooked}
+                                  aria-pressed={isSelected}
+                                  onClick={() => !isBooked && setSelectedTimeSlot(slot)}
+                                  className={`w-full py-2 px-3 rounded-full text-xs font-lora font-medium text-center transition-colors ${isBooked
+                                      ? 'opacity-40 cursor-not-allowed bg-stone-300 text-stone-500 line-through'
+                                      : isSelected
+                                        ? 'text-[#341512] font-bold cursor-pointer'
+                                        : 'neu-raised-sm bg-[#E5D8CB] text-[#341512]/80 hover:text-[#341512] cursor-pointer'
+                                    }`}
+                                >
+                                  {isSelected && !isBooked && <HighlightPill layoutId="slot-pill" radius={9999} />}
+                                  <span className="relative z-10">{slot}</span>
+                                  {isBooked && (
+                                    <motion.span
+                                      initial={{ opacity: 0, scale: 0.6 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                      transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+                                      className="relative z-10 ml-2 inline-block text-[10px] font-bold uppercase tracking-wider text-rose-700 not-italic no-underline"
+                                    >
+                                      (Booked)
+                                    </motion.span>
+                                  )}
+                                </Key>
+                              </motion.div>
+                            );
+                          })}
+                        </motion.div>
+                      </motion.div>
+                    </div>
+                  </div>
+                </Reveal>
+
+                {/* Mode of Communication Section */}
+                <Reveal>
+                  <div className="space-y-3">
+                    <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512] mb-5">Mode of Communication</h2>
+                    <div
+                      role="radiogroup"
+                      aria-label="Mode of communication"
+                      className="neu-recessed rounded-[24px] sm:rounded-[28px] p-6 sm:p-7 space-y-4 sm:space-y-5"
+                    >
+                      <ModeCard
+                        selected={communicationMode === 'video'}
+                        onSelect={() => setCommunicationMode('video')}
+                        title="Video Consultation"
+                        badge="Recommended"
+                        description="Connect face-to-face online via Google Meet with video camera and live screen sharing."
+                        icon={
+                          <svg className="w-4 h-4 text-[#341512]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        }
+                      />
+                      <ModeCard
+                        selected={communicationMode === 'audio'}
+                        onSelect={() => setCommunicationMode('audio')}
+                        title="Audio Call"
+                        description="Speak with your attorney by voice only via private Google Meet audio call."
+                        icon={
+                          <svg className="w-4 h-4 text-[#341512]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                        }
+                      />
+                    </div>
+                  </div>
+                </Reveal>
+
+                {/* Purpose of Consultation Section */}
+                <Reveal>
+                  <div className="space-y-3">
+                    <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512] mb-5">Purpose of Consultation</h2>
+                    <div className="neu-raised rounded-[24px] sm:rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-5">
+                      {/* Subject Input */}
+                      <div className="group/field space-y-1.5">
+                        <label className="block font-lora text-sm font-medium text-[#341512] mb-2 transition-colors group-focus-within/field:text-[#9A5F22]">
+                          Subject:
+                        </label>
+                        <motion.div animate={subjectShake} className="rounded-full">
+                          <input
+                            type="text"
+                            value={subject}
+                            onChange={(e) => {
+                              setSubject(e.target.value);
+                              if (invalidField === 'subject') setInvalidField(null);
+                            }}
+                            placeholder="e.g., Makati Residential Lease Deposit Dispute & Formal Notice to Vacate"
+                            className={`neu-input select-text w-full rounded-full py-2.5 sm:py-3 px-5 text-xs sm:text-sm text-[#341512] placeholder:text-[#341512]/40 font-inter transition-shadow duration-300 ${fieldRing(invalidField === 'subject')}`}
+                          />
+                        </motion.div>
+                      </div>
+
+                      {/* Subject Description */}
+                      <div className="group/field space-y-1.5">
+                        <label className="block font-lora text-sm font-medium text-[#341512] mb-2 transition-colors group-focus-within/field:text-[#9A5F22]">
+                          Subject Description:
+                        </label>
+                        <textarea
+                          rows={5}
+                          value={description}
+                          onChange={(e) => setDescription(e.target.value)}
+                          placeholder="Provide concise facts, key contract dates, and specific legal queries for counsel to review..."
+                          className="neu-input select-text w-full rounded-[20px] p-4 sm:p-5 text-xs sm:text-sm text-[#341512] placeholder:text-[#341512]/40 font-inter resize-none h-36 sm:h-40 transition-shadow duration-300"
+                        />
+                      </div>
+
+                      {/* File Attachments Dropzone */}
+                      <div className="space-y-2">
+                        <label className="block font-lora text-sm font-medium text-[#341512] mb-2">File Attachments</label>
+                        <motion.label
+                          animate={isDraggingFiles ? { scale: 1.015 } : { scale: 1 }}
+                          whileTap={{ scale: 0.99 }}
+                          transition={{ type: 'spring', stiffness: 400, damping: 24 }}
+                          className={`neu-recessed w-full py-9 px-6 rounded-[20px] flex flex-col items-center justify-center text-center transition-colors block relative overflow-hidden ${isDraggingFiles ? 'bg-[#DECDBA]' : 'bg-[#E5D8CB] hover:bg-[#DECDBA]/40'
+                            } ${isUploadingAttachment ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            if (!isDraggingFiles) setIsDraggingFiles(true);
+                          }}
+                          onDragLeave={() => setIsDraggingFiles(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setIsDraggingFiles(false);
+                            handleAttachLocalFiles(e.dataTransfer.files);
+                          }}
+                        >
+                          <input
+                            type="file"
+                            multiple
+                            className="hidden"
+                            disabled={isUploadingAttachment}
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.txt,.mp4"
+                            onChange={(e) => {
+                              const input = e.target;
+                              handleAttachLocalFiles(input.files ? Array.from(input.files) : null).finally(() => {
+                                input.value = '';
+                              });
+                            }}
+                          />
+                          {/* The tray icon bobs while you're dragging files over it */}
+                          <motion.div
+                            animate={isDraggingFiles ? { y: [0, -8, 0] } : { y: 0 }}
+                            transition={
+                              isDraggingFiles
+                                ? { duration: 0.9, repeat: Infinity, ease: 'easeInOut' }
+                                : { duration: 0.2 }
+                            }
+                            className="mx-auto"
+                          >
+                            {isUploadingAttachment ? (
+                              <Spinner className="w-11 h-11 text-[#341512]/60" />
+                            ) : (
+                              <svg className="w-11 h-11 text-[#341512]/60 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                              </svg>
+                            )}
+                          </motion.div>
+                          <span className="relative mt-3 block h-5 w-full">
+                            <AnimatePresence mode="wait" initial={false}>
+                              <motion.span
+                                key={isUploadingAttachment ? 'uploading' : isDraggingFiles ? 'dragging' : 'idle'}
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -6 }}
+                                transition={{ duration: 0.15 }}
+                                className="absolute inset-0 font-lora text-xs sm:text-sm text-[#341512]/70 font-medium"
+                              >
+                                {isUploadingAttachment
+                                  ? 'Uploading to My Documents...'
+                                  : isDraggingFiles
+                                    ? 'Drop to attach'
+                                    : 'Drag and Drop, or Attach Relevant Files'}
+                              </motion.span>
+                            </AnimatePresence>
+                          </span>
+
+                          {/* Indeterminate progress bar while uploading */}
+                          <AnimatePresence>
+                            {isUploadingAttachment && (
+                              <motion.span
+                                key="upload-bar"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="absolute inset-x-0 bottom-0 h-1 overflow-hidden"
+                              >
+                                <motion.span
+                                  animate={{ x: ['-100%', '260%'] }}
+                                  transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+                                  className="block h-full w-2/5 rounded-full bg-[#D39758]"
+                                />
+                              </motion.span>
+                            )}
+                          </AnimatePresence>
+                        </motion.label>
+
+                        {/* Attached Files List: files slide in and collapse out */}
+                        <div className="pt-1">
+                          <AnimatePresence initial={false}>
+                            {attachedFiles.map((file) => (
+                              <motion.div
+                                key={file.id}
+                                layout="position"
+                                initial={{ opacity: 0, height: 0, x: -16 }}
+                                animate={{ opacity: 1, height: 'auto', x: 0 }}
+                                exit={{ opacity: 0, height: 0, x: 16 }}
+                                transition={{ duration: 0.28, ease: EASE_OUT }}
+                                className="overflow-hidden"
+                              >
+                                <div className="pb-1.5">
+                                  <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#E5D8CB]/60 text-xs text-[#341512]">
+                                    <div className="flex items-center gap-1.5 truncate">
+                                      <motion.span
+                                        initial={{ rotate: -35, scale: 0.6 }}
+                                        animate={{ rotate: 0, scale: 1 }}
+                                        transition={{ type: 'spring', stiffness: 400, damping: 12, delay: 0.1 }}
+                                        className="inline-flex"
+                                      >
+                                        <PaperclipIcon className="w-3.5 h-3.5 text-[#C58B3C] shrink-0" />
+                                      </motion.span>
+                                      <span className="truncate">{file.name}</span>
+                                      <span className="text-[10px] text-[#341512]/60 shrink-0">{file.size}</span>
+                                    </div>
+                                    <Key
+                                      aria-label={`Remove ${file.name}`}
+                                      onClick={() => setAttachedFiles((prev) => prev.filter((f) => f.id !== file.id))}
+                                      className="w-5 h-5 rounded-full flex items-center justify-center text-red-700 hover:text-red-900 ml-2 cursor-pointer transition-colors"
+                                    >
+                                      <CloseIcon className="w-2.5 h-2.5" />
+                                    </Key>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            ))}
+                          </AnimatePresence>
+                        </div>
+
+                        <div className="text-center py-2">
+                          <span className="font-lora text-xs sm:text-sm font-semibold tracking-wider text-[#341512]/70 uppercase">OR</span>
+                        </div>
+
+                        <Key
+                          onClick={handleOpenDocPicker}
+                          className="neu-raised-highlight-sm px-7 py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-lora font-semibold text-[#341512] mx-auto block cursor-pointer select-none"
+                        >
+                          Share Uploaded Files from your Documents
+                        </Key>
+                      </div>
+
+                      <AnimatePresence initial={false}>
+                        {bookingError && (
+                          <Collapse key="booking-error" gap={20}>
+                            <div role="alert" className="p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 text-xs font-semibold">
+                              <span className="flex items-center gap-1.5">
+                                <motion.svg
+                                  initial={{ scale: 0, rotate: -30 }}
+                                  animate={{ scale: 1, rotate: 0 }}
+                                  transition={{ type: 'spring', stiffness: 500, damping: 14, delay: 0.1 }}
+                                  className="w-4 h-4 text-rose-600 shrink-0"
+                                  viewBox="0 0 20 20"
+                                  fill="currentColor"
+                                >
+                                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </motion.svg>
+                                <span>{bookingError}</span>
+                              </span>
+                            </div>
+                          </Collapse>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Privilege Agreement Checkbox */}
+                      <motion.label animate={termsShake} className="flex items-start gap-3 cursor-pointer pt-3 select-none">
+                        <motion.div
+                          role="checkbox"
+                          aria-checked={agreedToTerms}
+                          tabIndex={0}
+                          onClick={() => {
+                            setAgreedToTerms(!agreedToTerms);
+                            if (invalidField === 'terms') setInvalidField(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === ' ' || e.key === 'Enter') {
+                              e.preventDefault();
+                              setAgreedToTerms(!agreedToTerms);
+                              if (invalidField === 'terms') setInvalidField(null);
+                            }
+                          }}
+                          whileHover={{ scale: 1.12 }}
+                          whileTap={{ scale: 0.82, y: 1 }}
+                          animate={{
+                            backgroundColor: agreedToTerms ? 'rgba(211,151,88,0.22)' : 'rgba(211,151,88,0)',
+                            borderColor: invalidField === 'terms' ? 'rgb(251,113,133)' : 'rgba(52,21,18,0.6)',
+                          }}
+                          transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                          className="mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 cursor-pointer"
+                        >
+                          <AnimatePresence initial={false}>
+                            {agreedToTerms && (
+                              <motion.span
+                                key="tick"
+                                initial={{ scale: 0.4, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.4, opacity: 0 }}
+                                transition={{ duration: 0.15 }}
+                                className="flex text-[#D39758]"
+                              >
+                                <AnimatedCheck className="w-3 h-3" />
+                              </motion.span>
+                            )}
+                          </AnimatePresence>
+                        </motion.div>
+                        <input
+                          type="checkbox"
+                          checked={agreedToTerms}
+                          onChange={(e) => setAgreedToTerms(e.target.checked)}
+                          className="sr-only"
+                          tabIndex={-1}
+                        />
+                        <span className="font-inter text-xs text-[#341512]/80 leading-relaxed">
+                          I agree that this intake form and attached records will be reviewed strictly under confidential attorney-client privilege prior to the scheduled consultation session.
+                        </span>
+                      </motion.label>
+                    </div>
+                  </div>
+                </Reveal>
+
+                {/* Action Buttons Row */}
+                <Reveal>
+                  <div className="flex items-center justify-end gap-3 pt-1">
+                    <Key
+                      onClick={handleClearInputs}
+                      className="rounded-xl border border-[#341512]/60 px-5 py-2 text-xs sm:text-sm font-lora font-semibold text-[#341512] hover:bg-[#341512]/5 transition-colors cursor-pointer select-none"
+                    >
+                      Clear All Inputs
+                    </Key>
+                    <Key
+                      onClick={handleSaveDraft}
+                      className="neu-raised-sm !bg-[#D39758]/70 rounded-xl px-7 py-2 min-w-[96px] text-xs sm:text-sm font-lora font-semibold text-[#341512] cursor-pointer select-none"
+                    >
+                      <AnimatePresence mode="wait" initial={false}>
+                        {bookingStatus === 'saved' ? (
+                          <motion.span
+                            key="saved"
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={{ duration: 0.15 }}
+                            className="inline-flex items-center gap-1.5"
+                          >
+                            <AnimatedCheck className="w-3.5 h-3.5" />
+                            Saved
+                          </motion.span>
+                        ) : (
+                          <motion.span
+                            key="save"
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={{ duration: 0.15 }}
+                            className="inline-block"
+                          >
+                            Save
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </Key>
+                  </div>
+                </Reveal>
+
+                {/* Divider draws outward from the center */}
+                <motion.hr
+                  initial={{ scaleX: 0 }}
+                  whileInView={{ scaleX: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.6, ease: EASE_OUT }}
+                  className="border-t-2 border-[#C8B59E] my-8 sm:my-10 origin-center"
+                />
+
+                {/* Centered Large Submit Button */}
+                <Reveal className="pt-2 pb-6">
+                  <Key
+                    type="submit"
+                    disabled={submittingBooking}
+                    className="neu-raised-sm !bg-[#D39758]/70 w-full max-w-sm mx-auto block py-3.5 px-8 rounded-xl sm:rounded-2xl text-base font-lora font-bold text-[#341512] text-center cursor-pointer shadow-none disabled:opacity-60 disabled:cursor-wait"
+                  >
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.span
+                        key={submittingBooking ? 'submitting' : 'idle'}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        transition={{ duration: 0.15 }}
+                        className="inline-flex items-center justify-center gap-2.5"
+                      >
+                        {submittingBooking && <Spinner className="w-4 h-4" />}
+                        {submittingBooking ? 'Submitting Request...' : 'Submit Booking'}
+                      </motion.span>
+                    </AnimatePresence>
+                  </Key>
+                </Reveal>
+              </motion.form>
+            )}
+
+            {/* ─── TAB 4: CASES HANDLED ────────────────────────────── */}
+            {activeTab === 'cases' && (
+              <motion.div
+                key="cases"
+                id="lawyer-panel-cases"
+                role="tabpanel"
+                aria-labelledby="lawyer-tab-cases"
+                custom={panelCustom}
+                variants={PANEL_VARIANTS}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                className="space-y-6"
+              >
+                {/* Stack of Case Cards: paging slides the whole stack and staggers the cards */}
+                <AnimatePresence mode="wait" custom={caseDir} initial={false}>
+                  <motion.div
+                    key={casePage}
+                    custom={caseDir}
+                    variants={CASE_PAGE_VARIANTS}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    className="space-y-6"
+                  >
+                    {casesHandled.map((caseItem) => (
+                      <motion.div
+                        key={caseItem.id}
+                        variants={CASE_CARD_VARIANTS}
+                        whileHover={{ y: -4, transition: { type: 'spring', stiffness: 400, damping: 22 } }}
+                        className="neu-raised rounded-[24px] sm:rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-2.5 mb-10"
+                      >
+                        <div className="font-inter font-bold text-[10px] sm:text-[11px] text-[#D39758] uppercase tracking-wider">
+                          {caseItem.docket}
+                        </div>
+                        <h3 className="font-lora text-lg sm:text-xl font-bold text-[#341512] leading-tight">
+                          {caseItem.title}
+                        </h3>
+                        <p className="font-inter text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify">
+                          {caseItem.content}
+                        </p>
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                </AnimatePresence>
+
+                {/* Bottom Pagination: < ● ● ● ● > */}
+                <PageControls
+                  total={4}
+                  current={casePage}
+                  onChange={(p) => {
+                    setCaseDir(p >= casePage ? 1 : -1);
+                    setCasePage(p);
+                  }}
+                  idPrefix="case"
+                  label="case"
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </IntroContext.Provider>
+
+        {/* ─── Share From My Documents Vault Modal ─────────────────────────────── */}
+        <AnimatePresence>
+          {showDocPickerModal && (
+            <motion.div
+              key="doc-picker-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setShowDocPickerModal(false)}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            >
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                aria-label="My Documents Vault"
+                onClick={(e) => e.stopPropagation()}
+                initial={{ opacity: 0, y: 32, scale: 0.94 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                className="w-full max-w-3xl rounded-[32px] p-6 sm:p-8 bg-[#E5D8CB] space-y-5 max-h-[90vh] flex flex-col"
+                style={{
+                  boxShadow: '16px 16px 40px rgba(0,0,0,0.35), -8px -8px 24px #FFFFFF',
+                }}
+              >
+                {/* Modal Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-[#D1BEA8]/80">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-[#E5D8CB] flex items-center justify-center shadow-xs">
+                      <FolderIcon className="w-5 h-5 text-[#C58B3C]" />
+                    </div>
+                    <div>
+                      <h3 className="font-lora text-2xl font-bold text-[#23150F] leading-tight">My Documents Vault</h3>
+                      <p className="text-xs text-[#5C4535]">
+                        Select records or upload documents from your vault to attach to this consultation.
+                      </p>
+                    </div>
+                  </div>
+                  <Key
+                    aria-label="Close"
+                    onClick={() => setShowDocPickerModal(false)}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#23150F] hover:bg-[#E5D8CB]/40 transition-colors cursor-pointer"
+                  >
+                    <CloseIcon className="w-3.5 h-3.5" />
+                  </Key>
+                </div>
+
+                {/* Notification Notice */}
+                <AnimatePresence initial={false}>
+                  {pickerNotice && (
+                    <Collapse key="picker-notice" gap={20}>
+                      <div className="p-3 rounded-2xl bg-[#E2D4C1] border border-[#C5B099] text-xs font-medium text-[#23150F] flex items-center justify-between">
+                        <span>{pickerNotice}</span>
+                        <Key
+                          aria-label="Dismiss"
+                          onClick={() => setPickerNotice(null)}
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-[#7D6855] hover:text-[#23150F] ml-2 cursor-pointer transition-colors"
+                        >
+                          <CloseIcon className="w-2.5 h-2.5" />
+                        </Key>
+                      </div>
+                    </Collapse>
+                  )}
+                </AnimatePresence>
+
+                {/* Quick Upload & Create Folder Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#E4D5C2]/80 border border-[#D5C2AB]">
+                  {/* Left: Quick Upload File */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      ref={pickerFileInputRef}
+                      className="hidden"
+                      onChange={handlePickerFileUpload}
+                    />
+                    <Key
+                      disabled={isUploadingPickerFile}
+                      onClick={() => pickerFileInputRef.current?.click()}
+                      className="px-4 py-2 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-bold hover:bg-[#34150F] transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-60 cursor-pointer"
+                    >
+                      {isUploadingPickerFile ? (
+                        <>
+                          <Spinner className="w-3.5 h-3.5 text-[#ded7cb]" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>+</span>
+                          <span>Upload to Vault</span>
+                        </>
+                      )}
+                    </Key>
+                    <span className="text-[11px] text-[#7D6855] hidden sm:inline">(PDF, Word, Images, Evidence)</span>
+                  </div>
+
+                  {/* Right: Quick Create Folder */}
+                  <form onSubmit={handleCreatePickerFolder} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={pickerNewFolderName}
+                      onChange={(e) => setPickerNewFolderName(e.target.value)}
+                      placeholder="New folder name..."
+                      className="select-text py-1.5 px-3 rounded-xl bg-[#EBE0D2] text-xs text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none focus:ring-2 focus:ring-[#C58B3C]/50 transition-shadow w-40 sm:w-48 shadow-inner"
+                    />
+                    <Key
+                      type="submit"
+                      disabled={isCreatingPickerFolder || !pickerNewFolderName.trim()}
+                      className="px-3 py-1.5 rounded-xl bg-[#E5D8CB] text-xs font-bold text-[#23150F] hover:bg-[#D4B892] disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+                    >
+                      {isCreatingPickerFolder ? 'Creating...' : '+ Folder'}
+                    </Key>
+                  </form>
+                </div>
+
+                {/* Folder & Files Browser Layout */}
+                <div className="flex-1 min-h-[260px] overflow-hidden flex flex-col sm:flex-row gap-4 border border-[#D1BEA8]/80 rounded-2xl p-3 bg-[#EAE0D2]/50">
+                  {/* Folders List (Left Sidebar) — the dark pill glides to the active folder */}
+                  <div className="w-full sm:w-56 shrink-0 space-y-1.5 overflow-y-auto max-h-[280px] sm:max-h-full pr-1">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-[#7D6855] px-2 py-1">
+                      Folders ({docPickerFolders.length})
+                    </div>
+
+                    {loadingDocPicker ? (
+                      <div className="p-4 text-center text-xs text-[#7D6855] animate-pulse motion-reduce:animate-none">
+                        Loading vault...
+                      </div>
+                    ) : docPickerFolders.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-[#7D6855]">No folders yet.</div>
+                    ) : (
+                      docPickerFolders.map((folder) => {
+                        const isActive = activePickerFolderId === folder.id;
+                        return (
+                          <Key
+                            key={folder.id}
+                            onClick={() => setActivePickerFolderId(folder.id)}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between cursor-pointer transition-colors ${isActive ? 'text-[#ded7cb] font-bold' : 'bg-[#E5D8CB] text-[#23150F]'
+                              }`}
+                          >
+                            {isActive && (
+                              <motion.span
+                                aria-hidden
+                                layoutId="picker-folder-pill"
+                                transition={SPRING_PILL}
+                                style={{ borderRadius: 12 }}
+                                className="absolute inset-0 z-0 bg-[#23150F] shadow-sm"
+                              />
+                            )}
+                            <span className="relative z-10 flex items-center gap-1.5 truncate">
+                              <FolderIcon className="w-3.5 h-3.5 shrink-0 text-current opacity-80" />
+                              <span className="truncate">{folder.name}</span>
+                            </span>
+                            <span className="relative z-10 text-[10px] opacity-75 shrink-0 ml-1">
+                              {folder.files?.length || 0}
+                            </span>
+                          </Key>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Files Grid / List (Right Content) — re-staggers per folder */}
+                  <div className="flex-1 overflow-y-auto max-h-[300px] sm:max-h-full pl-1">
+                    <AnimatePresence mode="wait" initial={false}>
+                      {!currentPickerFolder ? (
+                        <motion.div
+                          key="no-folder"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="h-full flex flex-col items-center justify-center p-8 text-center text-xs text-[#7D6855]"
+                        >
+                          <p>No folder selected. Use the buttons above to create a folder or upload a file.</p>
+                        </motion.div>
+                      ) : pickerFiles.length === 0 ? (
+                        <motion.div
+                          key={`empty-${currentPickerFolder.id}`}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="h-full flex flex-col items-center justify-center p-8 text-center space-y-2"
+                        >
+                          <motion.div
+                            animate={{ y: [0, -4, 0] }}
+                            transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                            className="text-[#7A6756]"
+                          >
+                            <FileDocIcon className="w-8 h-8" />
+                          </motion.div>
+                          <p className="text-xs font-semibold text-[#23150F]">No files in this folder</p>
+                          <p className="text-[11px] text-[#7D6855]">
+                            Use "Upload to Vault" above to add documents to this folder.
+                          </p>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key={currentPickerFolder.id}
+                          variants={{
+                            hidden: {},
+                            show: { transition: { staggerChildren: 0.045 } },
+                            exit: { opacity: 0, transition: { duration: 0.12 } },
+                          }}
+                          initial="hidden"
+                          animate="show"
+                          exit="exit"
+                          className="space-y-2"
+                        >
+                          <div className="flex items-center justify-between pb-1 text-[11px] font-bold text-[#7D6855]">
+                            <span>FILES IN {currentPickerFolder.name.toUpperCase()}</span>
+                            <span>{pickerFiles.length} available</span>
+                          </div>
+
+                          {pickerFiles.map((file) => {
+                            const isSelected = selectedDocPickerFiles.includes(file.id);
+                            return (
+                              <motion.div
+                                key={file.id || file.name}
+                                variants={{
+                                  hidden: { opacity: 0, x: 14 },
+                                  show: { opacity: 1, x: 0, transition: { duration: 0.3, ease: EASE_OUT } },
+                                }}
+                                whileHover={{ y: -1 }}
+                                whileTap={{ scale: 0.985, y: 1.5, transition: { duration: 0.06 } }}
+                                onClick={() => handleToggleSelectDoc(file.id)}
+                                className={`flex items-center justify-between p-3 rounded-xl border transition-colors cursor-pointer ${isSelected
+                                    ? 'bg-[#E5D8CB] border-[#C58B3C] shadow-sm text-[#23150F]'
+                                    : 'bg-[#E8DDD0] border-[#D8C7B5] hover:bg-[#E2D4C3] text-[#34150F]'
+                                  }`}
+                              >
+                                <div className="flex items-center gap-2.5 truncate">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => { }} // handled by parent onClick
+                                    className="w-4 h-4 rounded text-[#C58B3C] accent-[#C58B3C]"
+                                  />
+                                  <FileDocIcon className="w-4 h-4 text-[#7A6756]" />
+                                  <div className="truncate">
+                                    <div className="text-xs font-semibold truncate">{file.name}</div>
+                                    <div className="text-[10px] text-[#7D6855]">
+                                      {file.size} • {file.updatedAt || 'Recent'}
+                                    </div>
+                                  </div>
+                                </div>
+                                <span
+                                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 transition-colors ${isSelected ? 'bg-[#23150F] text-[#ded7cb]' : 'bg-[#D5C2AB] text-[#5C4535]'
+                                    }`}
+                                >
+                                  {isSelected ? 'Selected' : 'Select'}
+                                </span>
+                              </motion.div>
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="flex items-center justify-between pt-2 border-t border-[#D1BEA8]/80">
+                  <span className="text-xs font-medium text-[#5C4535]">
+                    <RollNumber value={selectedDocPickerFiles.length} /> file
+                    {selectedDocPickerFiles.length === 1 ? '' : 's'} selected
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <Key
+                      onClick={() => setShowDocPickerModal(false)}
+                      className="px-5 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-semibold text-[#5C4535] hover:bg-[#E5D8CB] transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </Key>
+                    <Key
+                      onClick={handleConfirmDocPicker}
+                      disabled={selectedDocPickerFiles.length === 0}
+                      className="px-6 py-2.5 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-bold hover:bg-[#34150F] transition-colors shadow-md disabled:opacity-40 cursor-pointer"
+                    >
+                      Attach Selected (<RollNumber value={selectedDocPickerFiles.length} />)
+                    </Key>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ─── Booking Submitted: Pending Confirmation Summary (design1) ─────── */}
+        {submittedConsultation && (
+          <ConsultationSummaryModal
+            data={clientConsultationToSummary(submittedConsultation)}
+            onClose={() => setSubmittedConsultation(null)}
+          />
+        )}
+      </div>
+    </MotionConfig>
   );
 }
 
