@@ -2,7 +2,27 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useLawyerReviews } from './useLawyerReviews';
+import { getPublicLawyerDetailsAction, type LawyerOwnProfileDetails } from '@/app/actions/lawyerProfileActions';
+import { getLawyerUnavailabilityAction, type UnavailabilityBlock } from '@/app/actions/availabilityActions';
+import { LawyerUnavailabilityManager } from '@/components/lawyer/LawyerUnavailabilityManager';
+
+const LAWYER_UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EMPTY_DETAILS: LawyerOwnProfileDetails = {
+  practiceAreaDetails: [],
+  experiences: [],
+  services: [],
+  education: [],
+  caseSummaries: [],
+};
+import {
+  EditProfileModal,
+  ManageCasesModal,
+  CaseDetailModal,
+  caseDocketLabel,
+  type CaseDetailItem,
+} from '@/components/lawyer/LawyerProfileEditModals';
 import {
   motion,
   AnimatePresence,
@@ -102,6 +122,13 @@ interface LawyerDetailViewProps {
   onBack?: () => void;
   defaultTab?: 'about' | 'reviews' | 'booking' | 'cases';
   onEdit?: () => void;
+  /**
+   * 'owner' = the signed-in lawyer viewing their own profile (Lawyer portal → Lawyer Profile):
+   * no back link, editable About / Cases Handled, read-only Reviews, Availability tab instead of booking.
+   */
+  mode?: 'client' | 'owner';
+  /** Persisted About / Cases Handled data. When provided it replaces the placeholder content. */
+  details?: LawyerOwnProfileDetails;
 }
 
 type TabType = 'about' | 'reviews' | 'booking' | 'cases';
@@ -557,8 +584,19 @@ const BULLETS = [
 ];
 
 /** Bullets that slide in one after another when the list scrolls into view. */
-function BulletList({ items = BULLETS, className = '' }: { items?: string[]; className?: string }) {
+function BulletList({
+  items = BULLETS,
+  className = '',
+  emptyText = 'Nothing added yet.',
+}: {
+  items?: string[];
+  className?: string;
+  emptyText?: string;
+}) {
   const introDelay = useContext(IntroContext);
+  if (items.length === 0) {
+    return <p className={`text-xs sm:text-[13px] text-[#341512]/60 italic font-inter ${className}`}>{emptyText}</p>;
+  }
   return (
     <motion.ul
       className={`space-y-1.5 text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed font-inter ${className}`}
@@ -567,9 +605,9 @@ function BulletList({ items = BULLETS, className = '' }: { items?: string[]; cla
       viewport={{ once: true, amount: 0.4 }}
       variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09, delayChildren: 0.15 + introDelay } } }}
     >
-      {items.map((t) => (
+      {items.map((t, i) => (
         <motion.li
-          key={t}
+          key={`${i}-${t}`}
           variants={{
             hidden: { opacity: 0, x: -10 },
             show: { opacity: 1, x: 0, transition: { duration: 0.4, ease: EASE_OUT } },
@@ -590,11 +628,16 @@ function InfoCard({
   title,
   subtitle,
   delay = 0,
+  items,
+  emptyText,
 }: {
   icon: React.ReactNode;
   title: React.ReactNode;
   subtitle?: string;
   delay?: number;
+  /** Bullet lines; omit to keep the placeholder bullets. */
+  items?: string[];
+  emptyText?: string;
 }) {
   const introDelay = useContext(IntroContext);
   return (
@@ -619,7 +662,7 @@ function InfoCard({
           {subtitle && <p className="text-xs text-[#341512]/80 font-inter">{subtitle}</p>}
         </div>
       </div>
-      <BulletList className={subtitle ? 'pt-1' : ''} />
+      <BulletList className={subtitle ? 'pt-1' : ''} items={items} emptyText={emptyText} />
     </motion.div>
   );
 }
@@ -805,7 +848,47 @@ export function LawyerDetailView({
   onBack,
   defaultTab = 'about',
   onEdit,
+  mode = 'client',
+  details: detailsProp,
 }: LawyerDetailViewProps) {
+  const isOwner = mode === 'owner';
+
+  // Real (database) lawyers opened without server-loaded details — e.g. inline from the Find Lawyer
+  // list — load their persisted About / Cases data here. Mock/demo lawyers keep the placeholder content.
+  const shouldFetchDetails = !detailsProp && LAWYER_UUID_REGEX.test(lawyer.userId);
+  const [fetchedDetails, setFetchedDetails] = useState<{ id: string; details: LawyerOwnProfileDetails | null } | null>(null);
+  useEffect(() => {
+    if (!shouldFetchDetails) return;
+    let active = true;
+    getPublicLawyerDetailsAction(lawyer.userId)
+      .then((d) => active && setFetchedDetails({ id: lawyer.userId, details: d }))
+      .catch(() => active && setFetchedDetails({ id: lawyer.userId, details: null }));
+    return () => {
+      active = false;
+    };
+  }, [shouldFetchDetails, lawyer.userId]);
+  const detailsLoading = shouldFetchDetails && fetchedDetails?.id !== lawyer.userId;
+  const details: LawyerOwnProfileDetails | undefined =
+    detailsProp ??
+    (shouldFetchDetails
+      ? (fetchedDetails?.id === lawyer.userId ? fetchedDetails.details : null) ?? EMPTY_DETAILS
+      : undefined);
+  const router = useRouter();
+  // Owner mode: the booking tab becomes "Availability" — the same calendar, used to block off dates/times.
+  const tabs = isOwner
+    ? TABS.map((t) => (t.key === 'booking' ? { ...t, label: 'Availability' } : t))
+    : TABS;
+  const keyboardTabOrder = TAB_ORDER;
+
+  const [showEditProfile, setShowEditProfile] = useState<boolean>(false);
+  const [showManageCases, setShowManageCases] = useState<boolean>(false);
+  const [ownerNotice, setOwnerNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!ownerNotice) return;
+    const t = setTimeout(() => setOwnerNotice(null), 4500);
+    return () => clearTimeout(t);
+  }, [ownerNotice]);
+
   const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
   const [tabDir, setTabDir] = useState<number>(1);
 
@@ -826,10 +909,11 @@ export function LawyerDetailView({
   };
 
   const handleTabKeyDown = (e: React.KeyboardEvent) => {
-    const i = TAB_ORDER.indexOf(activeTab);
+    const order = keyboardTabOrder;
+    const i = order.indexOf(activeTab);
     let next: TabType;
-    if (e.key === 'ArrowRight') next = TAB_ORDER[(i + 1) % TAB_ORDER.length];
-    else if (e.key === 'ArrowLeft') next = TAB_ORDER[(i - 1 + TAB_ORDER.length) % TAB_ORDER.length];
+    if (e.key === 'ArrowRight') next = order[(i + 1) % order.length];
+    else if (e.key === 'ArrowLeft') next = order[(i - 1 + order.length) % order.length];
     else return;
     e.preventDefault();
     changeTab(next);
@@ -1124,6 +1208,38 @@ export function LawyerDetailView({
   const [slotsRefreshKey, setSlotsRefreshKey] = useState<number>(0);
   const isSlotBooked = (slot: string) => bookedSlots.some((booked) => slotsOverlap(booked, slot));
 
+  // ─── Lawyer unavailability (blocked days / time ranges) ──────────────────────
+  const [monthBlocks, setMonthBlocks] = useState<UnavailabilityBlock[]>([]);
+  const [availabilityRefreshKey, setAvailabilityRefreshKey] = useState<number>(0);
+  useEffect(() => {
+    if (!LAWYER_UUID_REGEX.test(lawyer.userId)) return;
+    let stale = false;
+    const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const mm = String(currentMonth + 1).padStart(2, '0');
+    getLawyerUnavailabilityAction(lawyer.userId, `${currentYear}-${mm}-01`, `${currentYear}-${mm}-${String(lastDay).padStart(2, '0')}`)
+      .then((blocks) => {
+        if (!stale) setMonthBlocks(blocks);
+      })
+      .catch(() => {
+        if (!stale) setMonthBlocks([]);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [lawyer.userId, currentYear, currentMonth, availabilityRefreshKey]);
+
+  const isoForDay = (day: number) =>
+    `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const blocksForDay = (day: number) => monthBlocks.filter((b) => b.date === isoForDay(day));
+  const isDayFullyUnavailable = (day: number) => blocksForDay(day).some((b) => b.startMinutes === null);
+  const selectedDayBlocks = blocksForDay(selectedDay);
+  const selectedDayFullyBlocked = selectedDayBlocks.some((b) => b.startMinutes === null);
+  const isSlotUnavailable = (slot: string) => {
+    if (selectedDayFullyBlocked) return true;
+    const r = parseSlotMinutes(slot);
+    return !!r && selectedDayBlocks.some((b) => b.startMinutes !== null && b.endMinutes !== null && r.start < b.endMinutes && b.startMinutes < r.end);
+  };
+
   useEffect(() => {
     if (!lawyer.userId) return;
     let stale = false;
@@ -1151,6 +1267,7 @@ export function LawyerDetailView({
   // ─── Cases State ──────────────────────────────────────────────────────────────
   const [casePage, setCasePage] = useState<number>(1);
   const [caseDir, setCaseDir] = useState<number>(1);
+  const [viewingCase, setViewingCase] = useState<CaseDetailItem | null>(null);
 
   const todayPH = getTodayPH();
   const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -1282,6 +1399,14 @@ export function LawyerDetailView({
       setBookingError('This time slot is already booked. Please choose another time slot.');
       return;
     }
+    if (isSlotUnavailable(selectedTimeSlot)) {
+      setBookingError(
+        selectedDayFullyBlocked
+          ? 'The attorney is unavailable on this date. Please choose another day.'
+          : 'The attorney is unavailable at this time. Please choose another time slot.'
+      );
+      return;
+    }
 
     setSubmittingBooking(true);
     try {
@@ -1325,11 +1450,56 @@ export function LawyerDetailView({
     }));
   };
 
-  const standardFee = lawyer.feeStandard60min ?? 1500;
-  const initialFee = lawyer.feeInitial30min ?? 700;
-  const extendedFee = lawyer.feeExtended120min ?? 2300;
+  // With persisted data (owner mode) unset fees stay unset instead of showing sample prices.
+  const isLive = !!details;
+  const standardFee: number | null = isLive ? lawyer.feeStandard60min ?? null : lawyer.feeStandard60min ?? 1500;
+  const initialFee: number | null = isLive ? lawyer.feeInitial30min ?? null : lawyer.feeInitial30min ?? 700;
+  const extendedFee: number | null = isLive ? lawyer.feeExtended120min ?? null : lawyer.feeExtended120min ?? 2300;
 
-  const rateRows = [
+  const bioText = isLive
+    ? lawyer.about?.trim() || (isOwner ? 'You haven’t written an introduction yet. Click “Edit Information” to tell clients about your practice.' : 'No bio available.')
+    : LOREM_BIO;
+  const ownerEmpty = (what: string) =>
+    detailsLoading
+      ? 'Loading…'
+      : isOwner
+        ? `No ${what} added yet. Click “Edit Information” to add some.`
+        : `No ${what} listed.`;
+
+  const practiceAreaItems = details
+    ? details.practiceAreaDetails.length
+      ? details.practiceAreaDetails.map((p) => (p.description ? `${p.area}: ${p.description}` : p.area))
+      : lawyer.practiceAreas || []
+    : undefined;
+  const experienceItems = details?.experiences.map((e) =>
+    [
+      [e.title, e.organization].filter(Boolean).join(' — '),
+      e.years ? `(${e.years})` : '',
+      e.description ? `· ${e.description}` : '',
+    ].filter(Boolean).join(' ')
+  );
+  const serviceItems = details?.services.map((s) => (s.description ? `${s.name}: ${s.description}` : s.name));
+  const barItems = details
+    ? [
+        lawyer.rollNumber ? `Roll of Attorneys No. ${lawyer.rollNumber}` : '',
+        lawyer.ibpChapter ? `Member, Integrated Bar of the Philippines — ${lawyer.ibpChapter} Chapter` : '',
+        lawyer.experienceYears != null ? `${lawyer.experienceYears} year${lawyer.experienceYears === 1 ? '' : 's'} of legal practice` : '',
+      ].filter(Boolean)
+    : undefined;
+  const barTitle = isLive
+    ? lawyer.barPasserYear
+      ? `Philippine Bar Examination Passer (${lawyer.barPasserYear})`
+      : 'Philippine Bar Examination Passer'
+    : `Philippine Bar Examination Passer (${lawyer.barPasserYear ?? 2022})`;
+  const educationCards = details?.education.map((edu) => ({
+    id: edu.id,
+    title: `${edu.degree}${edu.start_year || edu.end_year ? ` (${[edu.start_year, edu.end_year].filter(Boolean).join(' - ')})` : ''}`,
+    subtitle: edu.school || undefined,
+    items: (edu.description || '').split('\n').map((l) => l.trim()).filter(Boolean),
+    isLaw: /juris|law|ll\.?\s?[bm]/i.test(edu.degree),
+  }));
+
+  const rateRows: { label: string; value: number | null }[] = [
     { label: 'Initial Consultation (30 mins)', value: initialFee },
     { label: 'Standard Consultation (1 hr)', value: standardFee },
     { label: 'Extended Consultation (2 hrs)', value: extendedFee },
@@ -1354,13 +1524,26 @@ export function LawyerDetailView({
     reviewPage * REVIEWS_PER_PAGE
   );
 
-  // Cases handled matching Figma design
-  const casesHandled = [1, 2, 3, 4].map((id) => ({
-    id,
-    docket: 'SUBJECT MATTER & CASE DOCKET',
-    title: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
-    content: LOREM_CASE,
-  }));
+  // Cases handled matching Figma design (persisted cases when available, 4 per page)
+  const CASES_PER_PAGE = 4;
+  const allCases: Array<{ id: number | string; docket: string; title: string; content: string }> = details
+    ? details.caseSummaries.map((c) => ({
+        id: c.id,
+        docket: caseDocketLabel(c),
+        title: c.title,
+        content: c.anonymized_summary,
+      }))
+    : [1, 2, 3, 4].map((id) => ({
+        id,
+        docket: 'SUBJECT MATTER & CASE DOCKET',
+        title: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
+        content: LOREM_CASE,
+      }));
+  const totalCasePages = details ? Math.max(1, Math.ceil(allCases.length / CASES_PER_PAGE)) : 4;
+  const safeCasePage = Math.min(casePage, totalCasePages);
+  const casesHandled = details
+    ? allCases.slice((safeCasePage - 1) * CASES_PER_PAGE, safeCasePage * CASES_PER_PAGE)
+    : allCases;
 
   // Documents vault: current folder + its files
   const currentPickerFolder =
@@ -1390,6 +1573,7 @@ export function LawyerDetailView({
     <MotionConfig reducedMotion="user">
       <div className="space-y-6 sm:space-y-7 select-none" style={{ zoom: SCREEN_SCALE }}>
         {/* ─── Back Navigation ────────────────── */}
+        {!isOwner && (
         <motion.div {...enter(0, 10)} className="flex items-center justify-start pb-1">
           {onBack ? (
             <Key onClick={onBack} className={backClasses}>
@@ -1403,6 +1587,28 @@ export function LawyerDetailView({
             </KeyLink>
           )}
         </motion.div>
+        )}
+
+        {/* ─── Owner: save confirmation notice ─── */}
+        <AnimatePresence initial={false}>
+          {isOwner && ownerNotice && (
+            <Collapse key="owner-notice" gap={24}>
+              <div role="status" className="p-4 rounded-2xl bg-amber-100/90 border border-amber-300 text-amber-900 text-xs sm:text-sm flex items-center justify-between">
+                <span className="inline-flex items-center gap-2">
+                  <AnimatedCheck className="w-4 h-4" delay={0.15} />
+                  {ownerNotice}
+                </span>
+                <Key
+                  aria-label="Dismiss"
+                  onClick={() => setOwnerNotice(null)}
+                  className="w-6 h-6 rounded-full flex items-center justify-center font-bold cursor-pointer"
+                >
+                  <CloseIcon />
+                </Key>
+              </div>
+            </Collapse>
+          )}
+        </AnimatePresence>
 
         {/* ─── Lawyer Banner Header Card ───────── */}
         <motion.div
@@ -1460,7 +1666,7 @@ export function LawyerDetailView({
                 </motion.h1>
               </div>
               <motion.p {...enter(0.62)} className="text-xs sm:text-[13px] text-[#341512]/80 font-inter font-normal leading-tight">
-                Roll No. {lawyer.rollNumber || '58942'} <span className="mx-2 text-[#341512]/80">|</span> IBP {lawyer.ibpChapter?.toUpperCase() || 'MAKATI'}
+                Roll No. {lawyer.rollNumber || (isLive ? '—' : '58942')} <span className="mx-2 text-[#341512]/80">|</span> IBP {lawyer.ibpChapter?.toUpperCase() || (isLive ? '—' : 'MAKATI')}
               </motion.p>
               <motion.div {...enter(0.7)} className="flex items-center gap-1.5 text-xs sm:text-[13px] text-[#341512]/80 font-inter">
                 <svg className="w-3.5 h-3.5 fill-transparent stroke-current text-[#341512]/80" viewBox="0 0 20 20" strokeWidth="1.6">
@@ -1469,13 +1675,19 @@ export function LawyerDetailView({
                 <span>
                   <CountUp value={averageRating} decimals={1} delay={0.8} /> (<CountUp value={totalReviewsCount} duration={0.7} delay={0.8} /> Reviews)
                 </span>
-                <span className="mx-1">•</span>
-                <span>{lawyer.experienceYears ?? 9} years of practice</span>
+                {(!isLive || lawyer.experienceYears != null) && (
+                  <>
+                    <span className="mx-1">•</span>
+                    <span>{lawyer.experienceYears ?? 9} years of practice</span>
+                  </>
+                )}
               </motion.div>
               <motion.p {...enter(0.78)} className="text-xs sm:text-[13px] text-[#341512]/80 font-inter">
                 {lawyer.practiceAreas && lawyer.practiceAreas.length > 0
                   ? lawyer.practiceAreas.join(' • ')
-                  : 'Labor & Employment • Corporate • Civil Law'}
+                  : isLive
+                    ? ''
+                    : 'Labor & Employment • Corporate • Civil Law'}
               </motion.p>
             </div>
           </div>
@@ -1483,13 +1695,14 @@ export function LawyerDetailView({
           {/* Rate on right side */}
           <motion.div {...enter(0.75)} className="flex items-baseline md:justify-end gap-1 shrink-0 self-start md:self-center">
             <span className="font-lora text-2xl sm:text-3xl font-bold text-[#341512]/80">
-              <CountUp value={standardFee} prefix="₱" duration={1.2} delay={0.85} />
+              {standardFee != null ? <CountUp value={standardFee} prefix="₱" duration={1.2} delay={0.85} /> : '₱—'}
             </span>
             <span className="text-xs sm:text-sm font-inter text-[#341512]/80 font-normal">/per hour</span>
           </motion.div>
         </motion.div>
 
         {/* ─── Navigation Tabs: a single raised pill glides between tabs ───── */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
         <motion.div
           variants={TAB_BAR_VARIANTS}
           initial="hidden"
@@ -1499,7 +1712,7 @@ export function LawyerDetailView({
           onKeyDown={handleTabKeyDown}
           className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-6 pt-1 pb-1 select-none"
         >
-          {TABS.map((tab) => {
+          {tabs.map((tab) => {
             const isActive = activeTab === tab.key;
             return (
               <motion.div key={tab.key} variants={TAB_ITEM_VARIANTS} role="presentation" className="flex">
@@ -1522,6 +1735,27 @@ export function LawyerDetailView({
             );
           })}
         </motion.div>
+
+          {/* Owner-only edit action on the right of the tab bar (Figma: "Edit Information" / "Edit Visible Cases") */}
+          <AnimatePresence mode="wait" initial={false}>
+            {isOwner && details && (activeTab === 'about' || activeTab === 'cases') && (
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0, transition: { duration: 0.35, delay: introActive ? 1.2 : 0, ease: EASE_OUT } }}
+                exit={{ opacity: 0, y: -6, transition: { duration: 0.15 } }}
+                className="flex ml-auto"
+              >
+                <Key
+                  onClick={() => (activeTab === 'about' ? setShowEditProfile(true) : setShowManageCases(true))}
+                  className="neu-raised-highlight-sm rounded-[12px] px-6 py-2 font-lora text-sm sm:text-base font-semibold text-[#341512]/80 hover:text-[#341512] cursor-pointer transition-colors"
+                >
+                  <span className="relative z-10">{activeTab === 'about' ? 'Edit Information' : 'Edit Visible Cases'}</span>
+                </Key>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* ─── Tab panels: slide in from the side you navigated toward ───── */}
         <IntroContext.Provider value={introDelay}>
@@ -1550,8 +1784,8 @@ export function LawyerDetailView({
                         onScroll={updateBioFade}
                         className="flex-1 min-h-0 overflow-y-auto neu-scrollbar-discrete space-y-3 py-6 sm:py-7 pl-6 sm:pl-7 pr-3 sm:pr-4 mr-1.5"
                       >
-                        <p className="text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify font-inter">
-                          {LOREM_BIO}
+                        <p className="text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify font-inter whitespace-pre-line">
+                          {bioText}
                         </p>
                       </div>
                       {/* Soft fade appears only while there's more bio to scroll */}
@@ -1595,10 +1829,16 @@ export function LawyerDetailView({
                           >
                             <span className="text-xs sm:text-[15px] font-lora font-medium text-[#341512]/80">{row.label}</span>
                             <div className="text-right shrink-0 whitespace-nowrap">
-                              <span className="font-lora font-bold text-sm sm:text-base text-[#341512]/80">
-                                <CountUp value={row.value} prefix="₱" />
-                              </span>
-                              <span className="text-xs sm:text-[13px] text-[#341512]/80 ml-0.5">/per hour</span>
+                              {row.value != null ? (
+                                <>
+                                  <span className="font-lora font-bold text-sm sm:text-base text-[#341512]/80">
+                                    <CountUp value={row.value} prefix="₱" />
+                                  </span>
+                                  <span className="text-xs sm:text-[13px] text-[#341512]/80 ml-0.5">/per hour</span>
+                                </>
+                              ) : (
+                                <span className="text-xs sm:text-[13px] italic text-[#341512]/60">Not set</span>
+                              )}
                             </div>
                           </motion.div>
                         ))}
@@ -1615,6 +1855,8 @@ export function LawyerDetailView({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
                     <InfoCard
                       title="Areas of Practice"
+                      items={practiceAreaItems}
+                      emptyText={ownerEmpty('areas of practice')}
                       icon={
                         <LineIcon>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
@@ -1624,6 +1866,8 @@ export function LawyerDetailView({
                     <InfoCard
                       title="Legal Experience"
                       delay={0.08}
+                      items={experienceItems}
+                      emptyText={ownerEmpty('legal experience')}
                       icon={
                         <LineIcon>
                           <path strokeLinecap="round" strokeLinejoin="round" d="m14 13-7.5 7.5a2.12 2.12 0 1 1-3-3L11 10" />
@@ -1636,6 +1880,8 @@ export function LawyerDetailView({
                     />
                     <InfoCard
                       title="Consultation Services"
+                      items={serviceItems}
+                      emptyText={ownerEmpty('consultation services')}
                       icon={
                         <LineIcon>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 6.75 3.19-1.595A3 3 0 0 1 7.234 16H18a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v12.75Z" />
@@ -1644,8 +1890,10 @@ export function LawyerDetailView({
                       }
                     />
                     <InfoCard
-                      title={`Philippine Bar Examination Passer (${lawyer.barPasserYear ?? 2022})`}
+                      title={barTitle}
                       delay={0.08}
+                      items={barItems}
+                      emptyText={ownerEmpty('bar details')}
                       icon={
                         <LineIcon>
                           <circle cx="12" cy="8" r="5.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -1662,6 +1910,36 @@ export function LawyerDetailView({
                   <Reveal>
                     <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80">Educational Background</h2>
                   </Reveal>
+                  {educationCards ? (
+                    educationCards.length === 0 ? (
+                      <Reveal>
+                        <p className="text-xs sm:text-[13px] text-[#341512]/60 italic font-inter">{ownerEmpty('educational background')}</p>
+                      </Reveal>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+                        {educationCards.map((edu, i) => (
+                          <InfoCard
+                            key={edu.id}
+                            title={edu.title}
+                            subtitle={edu.subtitle}
+                            delay={i % 2 ? 0.08 : 0}
+                            items={edu.items}
+                            emptyText=" "
+                            icon={
+                              edu.isLaw ? (
+                                <ScalesIcon className="w-8 h-8 text-[#341512]/80 shrink-0" />
+                              ) : (
+                                <LineIcon>
+                                  <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                                  <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                                </LineIcon>
+                              )
+                            }
+                          />
+                        ))}
+                      </div>
+                    )
+                  ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
                     <InfoCard
                       title="Juris Doctor (2017 - 2021)"
@@ -1680,6 +1958,7 @@ export function LawyerDetailView({
                       }
                     />
                   </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -1829,6 +2108,14 @@ export function LawyerDetailView({
                               </p>
 
                               {/* Helpful feedback: thumb pops, count rolls */}
+                              {isOwner ? (
+                                // Reviews are view-only for the lawyer: show the persisted helpful count, no interactions.
+                                (rev.helpfulCount ?? 0) > 0 && (
+                                  <div className="pt-1 text-[11px] font-medium text-[#341512]/70 font-inter">
+                                    {rev.helpfulCount} client{rev.helpfulCount === 1 ? '' : 's'} found this helpful
+                                  </div>
+                                )
+                              ) : (
                               <div className="flex items-center gap-4 pt-1 text-[11px] font-medium text-[#341512]/80 font-inter">
                                 <Key
                                   aria-pressed={voted}
@@ -1852,6 +2139,7 @@ export function LawyerDetailView({
                                   {helpfulCount > 0 && <RollNumber value={helpfulCount} />}
                                 </Key>
                               </div>
+                              )}
 
                               {/* Attorney Reply Bubble if present */}
                               {rev.reply && (
@@ -1906,7 +2194,7 @@ export function LawyerDetailView({
                 id="lawyer-panel-booking"
                 role="tabpanel"
                 aria-labelledby="lawyer-tab-booking"
-                onSubmit={handleSubmitBooking}
+                onSubmit={isOwner ? (e) => e.preventDefault() : handleSubmitBooking}
                 custom={panelCustom}
                 variants={PANEL_VARIANTS}
                 initial="enter"
@@ -2060,20 +2348,33 @@ export function LawyerDetailView({
                                   item.day === todayPH.day &&
                                   currentMonth === todayPH.month &&
                                   currentYear === todayPH.year;
+                                const fullyBlocked = isDayFullyUnavailable(item.day);
+                                const hasBlocks = fullyBlocked || blocksForDay(item.day).length > 0;
+                                // Clients cannot pick a day the attorney blocked entirely; the owner can (to review / remove it).
+                                const clientDisabled = !isOwner && fullyBlocked;
 
                                 return (
                                   <Key
                                     key={`day-${item.day}`}
                                     aria-pressed={isSelected}
                                     aria-current={isToday ? 'date' : undefined}
-                                    onClick={() => setSelectedDay(item.day!)}
-                                    className={`size-7 sm:size-8 lg:size-9 flex items-center justify-center rounded-full font-lora text-xs sm:text-[15px] select-none cursor-pointer transition-colors ${isSelected ? 'text-[#D39758] font-bold' : 'text-[#341512]/80 hover:bg-[#DDCFC0]/60'
+                                    disabled={clientDisabled}
+                                    title={fullyBlocked ? 'Unavailable' : hasBlocks && isOwner ? 'Partly unavailable' : undefined}
+                                    onClick={() => !clientDisabled && setSelectedDay(item.day!)}
+                                    className={`size-7 sm:size-8 lg:size-9 flex items-center justify-center rounded-full font-lora text-xs sm:text-[15px] select-none transition-colors ${clientDisabled
+                                      ? 'text-[#341512]/30 line-through cursor-not-allowed'
+                                      : isSelected
+                                        ? 'text-[#D39758] font-bold cursor-pointer'
+                                        : `${isOwner && fullyBlocked ? 'text-rose-800/70 line-through' : 'text-[#341512]/80'} hover:bg-[#DDCFC0]/60 cursor-pointer`
                                       }`}
                                   >
                                     {isSelected && <HighlightPill layoutId="booking-day-pill" radius={9999} variant="neu-raised-sm" />}
                                     <span className="relative z-10">{String(item.day).padStart(2, '0')}</span>
                                     {isToday && (
                                       <span className="absolute bottom-[3px] left-1/2 z-10 h-1 w-1 -translate-x-1/2 rounded-full bg-[#D39758]" />
+                                    )}
+                                    {isOwner && hasBlocks && (
+                                      <span className="absolute top-[2px] right-[2px] z-10 h-1.5 w-1.5 rounded-full bg-rose-700/80" />
                                     )}
                                   </Key>
                                 );
@@ -2109,7 +2410,10 @@ export function LawyerDetailView({
                         >
                           {TIME_SLOTS.map((slot) => {
                             const isSelected = selectedTimeSlot === slot;
-                            const isBooked = isSlotBooked(slot);
+                            const isBookedSlot = isSlotBooked(slot);
+                            const isUnavailableSlot = !isBookedSlot && isSlotUnavailable(slot);
+                            // Owner: booked slots stay locked, but any other slot can be picked to prefill "Set Unavailability".
+                            const isBooked = isOwner ? isBookedSlot : isBookedSlot || isUnavailableSlot;
                             return (
                               <motion.div
                                 key={slot}
@@ -2131,15 +2435,15 @@ export function LawyerDetailView({
                                     }`}
                                 >
                                   {isSelected && !isBooked && <HighlightPill layoutId="slot-pill" radius={9999} />}
-                                  <span className="relative z-10">{slot}</span>
-                                  {isBooked && (
+                                  <span className={`relative z-10 ${isOwner && isUnavailableSlot ? 'line-through opacity-60' : ''}`}>{slot}</span>
+                                  {(isBookedSlot || isUnavailableSlot) && (
                                     <motion.span
                                       initial={{ opacity: 0, scale: 0.6 }}
                                       animate={{ opacity: 1, scale: 1 }}
                                       transition={{ type: 'spring', stiffness: 500, damping: 20 }}
                                       className="relative z-10 ml-2 inline-block text-[10px] font-bold uppercase tracking-wider text-rose-700 not-italic no-underline"
                                     >
-                                      (Booked)
+                                      {isBookedSlot ? '(Booked)' : '(Unavailable)'}
                                     </motion.span>
                                   )}
                                 </Key>
@@ -2152,6 +2456,22 @@ export function LawyerDetailView({
                   </div>
                 </Reveal>
 
+                {isOwner ? (
+                  /* Owner: block off days / time ranges + list of all upcoming unavailability */
+                  <LawyerUnavailabilityManager
+                    selectedDateIso={isoForDay(Math.min(selectedDay, totalDaysInMonth))}
+                    selectedDateLabel={`${selectedDayOfWeek.charAt(0)}${selectedDayOfWeek.slice(1).toLowerCase()}, ${selectedMonthName} ${selectedDay}, ${currentYear}`}
+                    selectedSlot={selectedTimeSlot}
+                    onChanged={() => setAvailabilityRefreshKey((k) => k + 1)}
+                    onJumpToDate={(iso) => {
+                      const [y, m, d] = iso.split('-').map(Number);
+                      setCurrentYear(y);
+                      setCurrentMonth(m - 1);
+                      setSelectedDay(d);
+                    }}
+                  />
+                ) : (
+                <>
                 {/* Mode of Communication Section */}
                 <Reveal>
                   <div className="space-y-3">
@@ -2523,6 +2843,8 @@ export function LawyerDetailView({
                     </AnimatePresence>
                   </Key>
                 </Reveal>
+                </>
+                )}
               </motion.form>
             )}
 
@@ -2543,7 +2865,7 @@ export function LawyerDetailView({
                 {/* Stack of Case Cards: paging slides the whole stack and staggers the cards */}
                 <AnimatePresence mode="wait" custom={caseDir} initial={false}>
                   <motion.div
-                    key={casePage}
+                    key={safeCasePage}
                     custom={caseDir}
                     variants={CASE_PAGE_VARIANTS}
                     initial="enter"
@@ -2551,12 +2873,36 @@ export function LawyerDetailView({
                     exit="exit"
                     className="space-y-6"
                   >
+                    {casesHandled.length === 0 && (
+                      <motion.div
+                        variants={CASE_CARD_VARIANTS}
+                        className="neu-recessed rounded-[24px] sm:rounded-[28px] p-8 sm:p-10 bg-[#E5D8CB] text-center text-xs sm:text-sm text-[#341512]/70 font-lora"
+                      >
+                        {detailsLoading
+                          ? 'Loading cases…'
+                          : isOwner
+                            ? 'No cases on your profile yet. Click “Edit Visible Cases” to add the matters you’ve handled.'
+                            : 'No case summaries available.'}
+                      </motion.div>
+                    )}
                     {casesHandled.map((caseItem) => (
                       <motion.div
                         key={caseItem.id}
                         variants={CASE_CARD_VARIANTS}
                         whileHover={{ y: -4, transition: { type: 'spring', stiffness: 400, damping: 22 } }}
-                        className="neu-raised rounded-[24px] sm:rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-2.5 mb-10"
+                        whileTap={{ scale: 0.99, y: 1, transition: { duration: 0.06 } }}
+                        role="button"
+                        tabIndex={0}
+                        aria-haspopup="dialog"
+                        aria-label={`View full case: ${caseItem.title}`}
+                        onClick={() => setViewingCase(caseItem)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setViewingCase(caseItem);
+                          }
+                        }}
+                        className="neu-raised rounded-[24px] sm:rounded-[28px] p-6 sm:p-8 bg-[#E5D8CB] space-y-2.5 mb-10 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D39758]/70"
                       >
                         <div className="font-inter font-bold text-[10px] sm:text-[11px] text-[#D39758] uppercase tracking-wider">
                           {caseItem.docket}
@@ -2564,25 +2910,33 @@ export function LawyerDetailView({
                         <h3 className="font-lora text-lg sm:text-xl font-bold text-[#341512] leading-tight">
                           {caseItem.title}
                         </h3>
-                        <p className="font-inter text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify">
+                        <p className="font-inter text-xs sm:text-[13px] text-[#341512]/80 leading-relaxed text-justify line-clamp-5">
                           {caseItem.content}
                         </p>
+                        <span className="inline-flex items-center gap-1 pt-1 font-inter text-[11px] font-semibold text-[#341512]/60">
+                          Read full case
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </span>
                       </motion.div>
                     ))}
                   </motion.div>
                 </AnimatePresence>
 
                 {/* Bottom Pagination: < ● ● ● ● > */}
-                <PageControls
-                  total={4}
-                  current={casePage}
-                  onChange={(p) => {
-                    setCaseDir(p >= casePage ? 1 : -1);
-                    setCasePage(p);
-                  }}
-                  idPrefix="case"
-                  label="case"
-                />
+                {totalCasePages > 1 && (
+                  <PageControls
+                    total={totalCasePages}
+                    current={safeCasePage}
+                    onChange={(p) => {
+                      setCaseDir(p >= safeCasePage ? 1 : -1);
+                      setCasePage(p);
+                    }}
+                    idPrefix="case"
+                    label="case"
+                  />
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -2873,6 +3227,36 @@ export function LawyerDetailView({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* ─── Cases Handled: full case view (clients and owner) ─── */}
+        <CaseDetailModal caseItem={viewingCase} onClose={() => setViewingCase(null)} />
+
+        {/* ─── Owner: Edit Information (+ "Update Lawyer Profile?" confirmation) & Edit Visible Cases ─── */}
+        {isOwner && details && (
+          <>
+            <EditProfileModal
+              open={showEditProfile}
+              onClose={() => setShowEditProfile(false)}
+              onSaved={() => {
+                setShowEditProfile(false);
+                setOwnerNotice('Your lawyer profile has been updated.');
+                router.refresh();
+              }}
+              lawyer={lawyer}
+              details={details}
+            />
+            <ManageCasesModal
+              open={showManageCases}
+              onClose={() => setShowManageCases(false)}
+              cases={details.caseSummaries}
+              practiceAreaSuggestions={lawyer.practiceAreas || []}
+              onChanged={(message) => {
+                setOwnerNotice(message);
+                router.refresh();
+              }}
+            />
+          </>
+        )}
 
         {/* ─── Booking Submitted: Pending Confirmation Summary (design1) ─────── */}
         {submittedConsultation && (
