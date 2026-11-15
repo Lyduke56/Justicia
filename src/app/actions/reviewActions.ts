@@ -87,11 +87,28 @@ export async function addLawyerReviewAction(input: {
     const { data: { user } } = await auth.auth.getUser();
     if (!user) return { success: false, error: 'Please sign in to submit a review.' };
     const db = await createServiceClient();
-    const { data: consultation, error: lookupError } = await db.from('consultations')
-      .select('id,client_id,lawyer_id,status').eq('id', input.consultationId).eq('client_id', user.id).maybeSingle();
+    // scheduled_end exists in the live schema but not in the generated Database type.
+    const { data: lookup, error: lookupError } = await db.from('consultations')
+      .select('id,client_id,lawyer_id,status,scheduled_end' as 'id,client_id,lawyer_id,status')
+      .eq('id', input.consultationId).eq('client_id', user.id).maybeSingle();
     if (lookupError) throw lookupError;
-    if (!consultation || consultation.status !== 'completed') {
+    const consultation = lookup as
+      | { id: string; client_id: string; lawyer_id: string; status: string; scheduled_end?: string | null }
+      | null;
+    if (!consultation) {
       return { success: false, error: 'You can only rate your own completed consultation.' };
+    }
+    // A confirmed consultation whose scheduled time has ended is complete; record that before rating
+    // (the reviews trigger only accepts completed consultations).
+    const endedAt = consultation.scheduled_end;
+    if (consultation.status === 'confirmed' && endedAt && new Date(endedAt).getTime() <= Date.now()) {
+      const { error: completeError } = await db.from('consultations')
+        .update({ status: 'completed' } as never).eq('id', consultation.id).eq('status', 'confirmed');
+      if (completeError) throw completeError;
+      consultation.status = 'completed';
+    }
+    if (consultation.status !== 'completed') {
+      return { success: false, error: 'You can rate this consultation once it has taken place.' };
     }
     const { error } = await db.from('reviews').insert({
       consultation_id: consultation.id, client_id: user.id, lawyer_id: consultation.lawyer_id,
