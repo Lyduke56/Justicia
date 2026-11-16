@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   getLawyerConsultationsAction,
@@ -60,6 +61,14 @@ function matchesPeriod(c: DetailedConsultation, period: PeriodFilter): boolean {
   return when >= weekStart && when < weekStart + 7 * 86400000;
 }
 
+function compactAppointmentTime(timeTag: string): string {
+  return timeTag
+    .split('•')[0]
+    .replace(/:00(?=\s*(?:AM|PM))/gi, '')
+    .replace(/[–—]/g, '-')
+    .trim();
+}
+
 /** Status pill text for the details modal (designs use client-facing wording). */
 const DETAIL_STATUS_LABELS: Record<DetailedConsultation['status'], string> = {
   pending: 'PENDING CONFIRMATION',
@@ -71,35 +80,120 @@ const DETAIL_STATUS_LABELS: Record<DetailedConsultation['status'], string> = {
   cancelled: 'CANCELLED',
 };
 
-/* ─── Inline Icons ─────────────────────────────────────────────────────────── */
+const FIGMA_PREVIEW_PARAGRAPH = [
+  'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+  'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+  'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.',
+  'Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
+].join(' ');
+const FIGMA_PREVIEW_DESCRIPTION = `${FIGMA_PREVIEW_PARAGRAPH} ${FIGMA_PREVIEW_PARAGRAPH}\n\n${FIGMA_PREVIEW_PARAGRAPH} Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.`;
 
-function SearchIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-  );
-}
+// The signed-out demo session has no consultation records. Keep its Figma preview
+// separate from the signed-in lawyer's real records and server actions.
+type PreviewConsultationBase = Pick<
+  DetailedConsultation,
+  'id' | 'status' | 'statusLabel' | 'client' | 'timeRange' | 'subjectTitle' | 'caseDescription'
+>;
 
-function VideoCamIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="2" y="5" width="14" height="14" rx="2" />
-      <polygon points="16 10 22 7 22 17 16 14 16 10" fill="currentColor" />
-    </svg>
-  );
-}
+const PREVIEW_CONSULTATION_BASE: PreviewConsultationBase[] = [
+  {
+    id: 'demo-clyde',
+    status: 'confirmed',
+    statusLabel: 'CONFIRMED APPOINTMENT',
+    client: {
+      name: 'Clyde Justine B. Rosal',
+      age: 21,
+      sex: 'Male',
+      address: 'M. Aliganga St., Purok Proper III, Brgy. Tangke, City of Naga, Cebu, Philippines, 6037',
+      email: 'clydejustinerosal@gmail.com',
+      phone: '+63 998 875 6587',
+    },
+    timeRange: '9:00 AM - 10:00 AM',
+    subjectTitle: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
+    caseDescription: FIGMA_PREVIEW_DESCRIPTION,
+  },
+  {
+    id: 'demo-axziel',
+    status: 'pending',
+    statusLabel: 'PENDING YOUR APPROVAL',
+    client: {
+      name: 'Axziel Jay A. Bartolabac',
+      age: 28,
+      sex: 'Male',
+      address: 'Cebu City, Philippines',
+      email: 'preview@justicia.ph',
+      phone: null,
+    },
+    timeRange: '10:00 AM - 11:00 AM',
+    subjectTitle: 'Employment Contract and Non-Compete Review',
+    caseDescription: 'Client requests a review of an employment contract and guidance on a restrictive covenant.',
+  },
+  {
+    id: 'demo-benideck',
+    status: 'completed',
+    statusLabel: 'COMPLETED',
+    client: {
+      name: 'Benideck J. Longakit',
+      age: 32,
+      sex: 'Male',
+      address: 'Muntinlupa City, Philippines',
+      email: 'preview@justicia.ph',
+      phone: null,
+    },
+    timeRange: '1:00 PM - 2:00 PM',
+    subjectTitle: 'Constructive Dismissal and Unpaid Commissions',
+    caseDescription: 'Client seeks advice about unpaid commissions and changes to employment responsibilities.',
+  },
+  {
+    id: 'demo-christopher',
+    status: 'cancelled',
+    statusLabel: 'CANCELLED',
+    client: {
+      name: 'Christopher John G. Rubio',
+      age: 35,
+      sex: 'Male',
+      address: 'Pasig City, Philippines',
+      email: 'preview@justicia.ph',
+      phone: null,
+    },
+    timeRange: '2:00 PM - 3:00 PM',
+    subjectTitle: 'Software Licensing and Trademark Notice',
+    caseDescription: 'Client asks about software licensing terms and a trademark infringement notice.',
+  },
+];
 
-function AvatarSilhouetteIcon({ className = 'w-18 h-18 sm:w-20 sm:h-20' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 80 80" className={className} fill="none">
-      <circle cx="40" cy="40" r="36" stroke="#4E3227" strokeWidth="4.5" />
-      <circle cx="40" cy="30" r="9" stroke="#4E3227" strokeWidth="4" />
-      <path d="M22 58 C22 47, 30 44, 40 44 C50 44, 58 47, 58 58" stroke="#4E3227" strokeWidth="4" strokeLinecap="round" />
-    </svg>
-  );
-}
+const PREVIEW_CONSULTATIONS: DetailedConsultation[] = PREVIEW_CONSULTATION_BASE.map((preview) => ({
+  ...preview,
+  rawStatus: preview.status,
+  dateTag: 'TODAY, SEPTEMBER 23, 2026',
+  timeTag: `${preview.timeRange} • PST, GMT+8`,
+  day: 23,
+  month: 8,
+  year: 2026,
+  scheduledStart: null,
+  communicationMode: 'video',
+  clientId: preview.id,
+  subjectCategory: 'SUBJECT MATTER & CASE DOCKET',
+  fee: 1500,
+  attachedFiles: [],
+  meetingLink: 'https://meet.justicia.ph',
+  declineReason: null,
+  cancellationReason: null,
+  dateLong: 'Wednesday, September 23, 2026',
+  durationLabel: '1 hour',
+  lawyerSummary: { name: 'Atty. Maria Santos', rollNumber: '78910', ibpChapter: 'Quezon City' },
+  paymentDetails: {
+    state: preview.status === 'confirmed' || preview.status === 'completed' ? 'verified' : 'none',
+    proofDocumentId: null,
+    proofFileName: null,
+    submittedAt: null,
+    reviewedAt: null,
+    rejectionReason: null,
+    sessionFee: 1500,
+    platformFee: 0,
+    total: 1500,
+  },
+}));
 
 /* ─── Main Component ──────────────────────────────────────────────────────── */
 
@@ -114,7 +208,9 @@ export function LawyerConsultationsView({
   const [loadingConsultations, setLoadingConsultations] = useState(true);
   const [activeTab, setActiveTab] = useState<ConsultationTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all');
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>(
+    lawyerUserId?.startsWith('demo-') ? 'month' : 'all'
+  );
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [decision, setDecision] = useState<{ mode: DecisionMode; id: string } | null>(null);
@@ -140,19 +236,22 @@ export function LawyerConsultationsView({
     loadConsultations();
   }, [loadConsultations, lawyerUserId]);
 
+  const isDemoPreview = !!lawyerUserId?.startsWith('demo-') && !loadingConsultations && dbConsultations.length === 0;
+  const consultations = isDemoPreview ? PREVIEW_CONSULTATIONS : dbConsultations;
+
   const dateKey = (c: { year: number; month: number; day: number }) => `${c.year}-${c.month}-${c.day}`;
 
   // Filter by status tab, client name search, calendar date and period
   const appointmentsToDisplay = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return dbConsultations.filter(
+    return consultations.filter(
       (c) =>
         matchesTab(c, activeTab) &&
         (!q || c.client.name.toLowerCase().includes(q)) &&
         (!selectedDateKey || dateKey(c) === selectedDateKey) &&
-        (activeTab !== 'pending' || matchesPeriod(c, periodFilter))
+        (activeTab !== 'pending' || isDemoPreview || matchesPeriod(c, periodFilter))
     );
-  }, [dbConsultations, activeTab, searchQuery, selectedDateKey, periodFilter]);
+  }, [consultations, activeTab, searchQuery, selectedDateKey, periodFilter, isDemoPreview]);
 
   const selectedConsultation: DetailedConsultation | null = useMemo(
     () =>
@@ -183,11 +282,12 @@ export function LawyerConsultationsView({
     return cells;
   }, [calendarYear, calendarMonth]);
   const daysWithConsultations = useMemo(
-    () => new Set(dbConsultations.filter((c) => matchesTab(c, activeTab)).map(dateKey)),
-    [dbConsultations, activeTab]
+    () => new Set(consultations.filter((c) => matchesTab(c, activeTab)).map(dateKey)),
+    [consultations, activeTab]
   );
 
   const openDecision = (mode: DecisionMode, id: string) => {
+    if (id.startsWith('demo-')) return;
     setDecisionError(null);
     setDecision({ mode, id });
   };
@@ -221,10 +321,11 @@ export function LawyerConsultationsView({
   };
 
   const openMessages = (consultationId: string) => {
+    if (consultationId.startsWith('demo-')) return;
     router.push(`/lawyer/messages?thread=${consultationId}`);
   };
 
-  const decisionTarget = decision ? dbConsultations.find((c) => c.id === decision.id) : null;
+  const decisionTarget = decision ? consultations.find((c) => c.id === decision.id) : null;
 
   const openProof = async (documentId: string) => {
     const res = await getDocumentAccessUrlAction(documentId);
@@ -270,6 +371,7 @@ export function LawyerConsultationsView({
         },
       ];
     }
+    if (c.id.startsWith('demo-')) actions = [{ label: 'Close', variant: 'caramel', onClick: close }];
 
     const proofId = pd.proofDocumentId;
     const modeLine = c.communicationMode === 'video' ? 'Video Consultation (Google Meet)' : 'Audio Call (Google Meet)';
@@ -294,7 +396,7 @@ export function LawyerConsultationsView({
           c.client.address ?? modeLine,
           c.client.email + '  |  ' + (c.client.phone ?? 'No phone on file'),
         ],
-        onMessage: c.status === 'declined' || c.status === 'cancelled' ? undefined : () => openMessages(c.id),
+        onMessage: c.id.startsWith('demo-') || c.status === 'declined' || c.status === 'cancelled' ? undefined : () => openMessages(c.id),
       },
       docket: c.subjectCategory,
       caseTitle: c.subjectTitle,
@@ -325,11 +427,11 @@ export function LawyerConsultationsView({
   };
 
   const tabs: { key: ConsultationTab; label: string; count: number }[] = [
-    { key: 'all',       label: 'All Inquires',       count: dbConsultations.length },
-    { key: 'pending',   label: 'Pending Approval',   count: dbConsultations.filter((c) => matchesTab(c, 'pending')).length },
-    { key: 'upcoming',  label: 'Upcoming',           count: dbConsultations.filter((c) => matchesTab(c, 'upcoming')).length },
-    { key: 'completed', label: 'Completed',          count: dbConsultations.filter((c) => matchesTab(c, 'completed')).length },
-    { key: 'cancelled', label: 'Cancelled',          count: dbConsultations.filter((c) => matchesTab(c, 'cancelled')).length },
+    { key: 'all',       label: 'All Inquires',       count: isDemoPreview ? 50 : consultations.length },
+    { key: 'pending',   label: 'Pending Approval',   count: isDemoPreview ? 17 : consultations.filter((c) => matchesTab(c, 'pending')).length },
+    { key: 'upcoming',  label: 'Upcoming',           count: isDemoPreview ? 33 : consultations.filter((c) => matchesTab(c, 'upcoming')).length },
+    { key: 'completed', label: 'Completed',          count: isDemoPreview ? 39 : consultations.filter((c) => matchesTab(c, 'completed')).length },
+    { key: 'cancelled', label: 'Cancelled',          count: isDemoPreview ? 3 : consultations.filter((c) => matchesTab(c, 'cancelled')).length },
   ];
 
   return (
@@ -337,7 +439,7 @@ export function LawyerConsultationsView({
       {/* ── Top Status Tabs & Search Section ─────────────────────────────────── */}
       <div className="space-y-4">
         {/* Status Tab Pills */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="lawyer-consultations-tabs">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.key;
             return (
@@ -346,11 +448,7 @@ export function LawyerConsultationsView({
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
                 aria-pressed={isActive}
-                className={`lawyer-consultations-tab rounded-2xl px-5 py-2.5 text-xs font-semibold transition-all cursor-pointer ${
-                  isActive
-                    ? 'neu-plate text-[#381F17] font-bold shadow-[inset_2px_2px_4px_rgba(165,135,105,0.45),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
-                    : 'neu-btn text-[#5C4535] hover:text-[#381F17]'
-                }`}
+                className="lawyer-consultations-tab"
               >
                 {tab.label} ({tab.count})
               </button>
@@ -374,9 +472,9 @@ export function LawyerConsultationsView({
           {/* Raised Search Button */}
           <button
             type="button"
-            className="lawyer-consultations-search-button neu-plate-sm rounded-2xl px-7 py-3 text-xs font-semibold text-[#381F17] flex items-center justify-center gap-2 cursor-pointer hover:filter hover:brightness-105 transition-all"
+            className="lawyer-consultations-search-button flex items-center cursor-pointer"
           >
-            <SearchIcon className="w-3.5 h-3.5 text-[#381F17]" />
+            <Image src="/figma-consultations-search.svg" width={14} height={14} loading="eager" alt="" aria-hidden="true" />
             <span>Search</span>
           </button>
 
@@ -389,9 +487,7 @@ export function LawyerConsultationsView({
               <option>Family & Civil Status</option>
               <option>Intellectual Property</option>
             </select>
-            <svg className="lawyer-consultations-area-arrow" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m7 10 5 5 5-5z" fill="currentColor" />
-            </svg>
+            <Image className="lawyer-consultations-area-arrow" src="/figma-consultations-dropdown.svg" width={26} height={26} loading="eager" alt="" aria-hidden="true" />
           </div>
         </div>
       </div>
@@ -406,9 +502,9 @@ export function LawyerConsultationsView({
           </div>
 
           {/* Mini Calendar Widget */}
-          <div className="neu-card-md rounded-[26px] p-5 space-y-4">
+          <div className="neu-card-md rounded-[26px] p-5 space-y-4" data-weeks={Math.ceil(calendarCells.length / 7)}>
             {/* Month header pill */}
-            <div className="neu-inset-sm rounded-full py-1.5 px-6 text-xs font-bold uppercase tracking-wider text-[#C58B3C] text-center w-fit mx-auto">
+            <div className="lawyer-consultations-month-pill neu-inset-sm rounded-full py-1.5 px-6 text-xs font-bold uppercase tracking-wider text-[#C58B3C] text-center w-fit mx-auto">
               {MONTH_LABELS[calendarMonth]} {calendarYear}
             </div>
 
@@ -442,13 +538,14 @@ export function LawyerConsultationsView({
                     disabled={!hasConsultation && !isFiltered}
                     onClick={() => setSelectedDateKey(isFiltered ? null : key)}
                     title={hasConsultation ? (isFiltered ? 'Show all dates' : 'Show consultations on this date') : undefined}
-                    className={`relative w-7 h-7 rounded-full flex items-center justify-center mx-auto ${
-                      isFiltered || isSelectedDay ? 'border-2 border-[#C58B3C] font-bold' : ''
-                    } ${hasConsultation ? 'cursor-pointer hover:text-[#C58B3C]' : 'cursor-default'}`}
+                    aria-pressed={hasConsultation ? isFiltered : undefined}
+                    data-current={isSelectedDay}
+                    data-filtered={isFiltered}
+                    className="lawyer-consultations-calendar-day relative w-7 h-7 rounded-full flex items-center justify-center mx-auto"
                   >
                     {String(day).padStart(2, '0')}
                     {hasConsultation && !isSelectedDay && !isFiltered && (
-                      <span className="absolute bottom-0 w-1 h-1 rounded-full bg-[#C58B3C]" />
+                      <span className="lawyer-consultations-calendar-dot" />
                     )}
                   </button>
                 );
@@ -470,44 +567,22 @@ export function LawyerConsultationsView({
               ) : (
                 appointmentsToDisplay.map((apt) => {
                   const isSelected = selectedConsultation?.id === apt.id;
-                  const isPending = apt.status === 'pending' || apt.status === 'pending_payment' || apt.status === 'payment_review';
-                  const isConfirmed = apt.status === 'confirmed' || apt.status === 'completed';
-                  const shortLabel =
-                    apt.status === 'pending'
-                      ? 'Pending'
-                      : apt.status === 'pending_payment'
-                        ? 'Pending Payment'
-                        : apt.status === 'payment_review'
-                          ? 'Review Payment'
-                          : apt.status.charAt(0).toUpperCase() + apt.status.slice(1);
                   return (
                     <button
                       key={apt.id}
                       type="button"
                       onClick={() => setSelectedAppointmentId(apt.id)}
-                      aria-label={`${apt.client.name}, ${apt.timeTag}, ${apt.status}`}
+                      aria-label={`${apt.client.name}, ${apt.timeTag}, ${apt.statusLabel}`}
                       aria-pressed={isSelected}
                       data-selected={isSelected}
-                      className="lawyer-consultations-appointment-pill w-full flex items-center justify-between rounded-xl text-left transition-all cursor-pointer"
+                      title={`${apt.client.name} · ${apt.statusLabel}`}
+                      className="lawyer-consultations-appointment-pill"
                     >
-                      <div className="flex items-center justify-between w-full">
-                        <span className="text-xs font-semibold text-[#381F17] truncate">
-                          {apt.client.name}
-                        </span>
-                        <span
-                          className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
-                            isPending
-                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                              : isConfirmed
-                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                              : 'bg-stone-200 text-stone-700'
-                          }`}
-                        >
-                          {shortLabel}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-[#685042] font-medium truncate">
-                        {apt.timeTag}
+                      <span className="lawyer-consultations-appointment-name">
+                        {apt.client.name}
+                      </span>
+                      <span className="lawyer-consultations-appointment-time">
+                        {compactAppointmentTime(apt.timeRange || apt.timeTag)}
                       </span>
                     </button>
                   );
@@ -546,27 +621,16 @@ export function LawyerConsultationsView({
                 </div>
               </div>
 
-              {selectedConsultation.status === 'pending' ? (
-                <div className="lawyer-consultations-status-pill rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider bg-amber-400 text-[#23150F] shadow-sm shrink-0 self-start sm:self-auto border border-amber-500">
-                  PENDING YOUR APPROVAL
-                </div>
-              ) : selectedConsultation.status === 'confirmed' ? (
-                <div className="lawyer-consultations-status-pill neu-badge-green rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider text-white shrink-0 self-start sm:self-auto">
-                  CONFIRMED APPOINTMENT
-                </div>
-              ) : selectedConsultation.status === 'pending_payment' || selectedConsultation.status === 'payment_review' ? (
-                <div className="rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider bg-[#D49E56] text-white shadow-sm shrink-0 self-start sm:self-auto">
-                  {selectedConsultation.statusLabel}
-                </div>
-              ) : (
-                <div className={`rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider shrink-0 self-start sm:self-auto ${
-                  selectedConsultation.status === 'declined' || selectedConsultation.status === 'cancelled'
-                    ? 'bg-red-700 text-white'
-                    : 'bg-stone-300 text-stone-800'
-                }`}>
-                  {selectedConsultation.statusLabel}
-                </div>
-              )}
+              <div
+                className="lawyer-consultations-status-pill shrink-0 self-start sm:self-auto"
+                data-status={selectedConsultation.status}
+              >
+                {selectedConsultation.status === 'pending'
+                  ? 'PENDING YOUR APPROVAL'
+                  : selectedConsultation.status === 'confirmed'
+                    ? 'CONFIRMED APPOINTMENT'
+                    : selectedConsultation.statusLabel}
+              </div>
             </div>
 
             {/* Client Profile Sub-Card (Extruded Warm Peach Plate) */}
@@ -574,7 +638,7 @@ export function LawyerConsultationsView({
               <div className="flex items-center gap-5 sm:gap-6 min-w-0">
                 {/* Custom Avatar Icon matching Figma mockup */}
                 <div className="shrink-0">
-                  <AvatarSilhouetteIcon className="w-18 h-18 sm:w-20 sm:h-20" />
+                  <Image src="/figma-consultations-avatar.svg" width={96} height={96} loading="eager" alt="" aria-hidden="true" />
                 </div>
 
                 <div className="space-y-0.5 min-w-0">
@@ -597,9 +661,11 @@ export function LawyerConsultationsView({
               <button
                 type="button"
                 onClick={() => openMessages(selectedConsultation.id)}
-                className="neu-btn-peach rounded-full px-8 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-[#4E3227] tracking-wide shrink-0 self-start md:self-center cursor-pointer hover:brightness-105 transition-all"
+                aria-disabled={isDemoPreview}
+                title={isDemoPreview ? 'Sample consultation — messaging is unavailable' : undefined}
+                className="lawyer-consultations-message-pill neu-btn-peach rounded-full px-8 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-[#4E3227] tracking-wide shrink-0 self-start md:self-center cursor-pointer hover:brightness-105 transition-all"
               >
-                Message Client
+                Message
               </button>
             </div>
 
@@ -626,7 +692,11 @@ export function LawyerConsultationsView({
 
             {/* Bottom Action Row */}
             <div className="pt-2 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              {selectedConsultation.attachedFiles.length > 0 ? (
+              {isDemoPreview ? (
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[#C58B3C]">
+                  THIS CLIENT HAS SHARED THEIR DOCUMENTS WITH YOU. <span className="underline">View Documents</span>
+                </p>
+              ) : selectedConsultation.attachedFiles.length > 0 ? (
                 <p className="text-[11px] font-bold uppercase tracking-wider text-[#C58B3C]">
                   THIS CLIENT HAS SHARED {selectedConsultation.attachedFiles.length} DOCUMENT{selectedConsultation.attachedFiles.length === 1 ? '' : 'S'} WITH YOU.{' '}
                   <span
@@ -648,7 +718,9 @@ export function LawyerConsultationsView({
                     <button
                       type="button"
                       onClick={() => openDecision('decline', selectedConsultation.id)}
-                      className="neu-btn rounded-2xl border-[1.5px] border-[#55382D] bg-[#ECE1D2] px-6 py-2.5 text-xs sm:text-sm font-semibold text-[#381F17] shadow-[2px_2px_6px_rgba(180,155,130,0.25)] hover:bg-red-50 hover:text-red-700 transition-all cursor-pointer disabled:opacity-50"
+                      aria-disabled={isDemoPreview}
+                      title={isDemoPreview ? 'Sample consultation — actions are unavailable' : undefined}
+                      className="lawyer-consultations-cancel-pill neu-btn rounded-2xl border-[1.5px] border-[#55382D] bg-[#ECE1D2] px-6 py-2.5 text-xs sm:text-sm font-semibold text-[#381F17] shadow-[2px_2px_6px_rgba(180,155,130,0.25)] hover:bg-red-50 hover:text-red-700 transition-all cursor-pointer disabled:opacity-50"
                     >
                       Decline
                     </button>
@@ -656,7 +728,7 @@ export function LawyerConsultationsView({
                     <button
                       type="button"
                       onClick={() => { setDetailsError(null); setShowDetails(true); }}
-                      className="neu-btn-espresso rounded-2xl px-6 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all cursor-pointer hover:brightness-110"
+                      className="lawyer-consultations-details-pill neu-btn-espresso rounded-2xl px-6 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all cursor-pointer hover:brightness-110"
                     >
                       View Details
                     </button>
@@ -664,21 +736,34 @@ export function LawyerConsultationsView({
                     <button
                       type="button"
                       onClick={() => openDecision('approve', selectedConsultation.id)}
-                      className="px-7 py-2.5 rounded-2xl bg-[#23150F] hover:bg-[#381F17] text-[#ded7cb] text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                      aria-disabled={isDemoPreview}
+                      title={isDemoPreview ? 'Sample consultation — actions are unavailable' : undefined}
+                      className="lawyer-consultations-approve-pill px-7 py-2.5 rounded-2xl bg-[#23150F] hover:bg-[#381F17] text-[#ded7cb] text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                     >
                       <span>Approve Consultation</span>
                     </button>
                   </>
                 ) : (
                   <>
-                    {(selectedConsultation.status === 'pending_payment' ||
+                    {selectedConsultation.status === 'confirmed' ? (
+                      <button
+                        type="button"
+                        onClick={() => openDecision('cancel', selectedConsultation.id)}
+                        aria-disabled={isDemoPreview}
+                        title={isDemoPreview ? 'Sample consultation — actions are unavailable' : undefined}
+                        className="lawyer-consultations-cancel-pill neu-btn rounded-2xl border-[1.5px] border-[#55382D] bg-[#ECE1D2] px-6 py-2.5 text-xs sm:text-sm font-semibold text-[#381F17] cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    ) : (selectedConsultation.status === 'pending_payment' ||
                       selectedConsultation.status === 'payment_review' ||
-                      selectedConsultation.status === 'confirmed' ||
                       selectedConsultation.status === 'completed') && (
                       <button
                         type="button"
                         onClick={() => openMessages(selectedConsultation.id)}
-                        className="neu-btn-espresso rounded-2xl px-6 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all cursor-pointer hover:brightness-110 flex items-center gap-2"
+                        aria-disabled={isDemoPreview}
+                        title={isDemoPreview ? 'Sample consultation — messaging is unavailable' : undefined}
+                        className="lawyer-consultations-details-pill neu-btn-espresso rounded-2xl px-6 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all cursor-pointer hover:brightness-110 flex items-center gap-2"
                       >
                         <span>💬</span>
                         <span>Message Channel</span>
@@ -688,7 +773,7 @@ export function LawyerConsultationsView({
                     <button
                       type="button"
                       onClick={() => { setDetailsError(null); setShowDetails(true); }}
-                      className="neu-btn rounded-2xl border-[1.5px] border-[#55382D] bg-[#ECE1D2] px-6 py-2.5 text-xs sm:text-sm font-semibold text-[#381F17] transition-all cursor-pointer"
+                      className="lawyer-consultations-details-pill neu-btn-espresso rounded-2xl px-6 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all cursor-pointer"
                     >
                       View Details
                     </button>
@@ -696,10 +781,15 @@ export function LawyerConsultationsView({
                     {selectedConsultation.status === 'confirmed' && selectedConsultation.meetingLink && (
                       <button
                         type="button"
-                        onClick={() => window.open(selectedConsultation.meetingLink!, '_blank', 'noopener,noreferrer')}
-                        className="neu-btn-caramel rounded-2xl px-7 py-2.5 text-xs sm:text-sm font-bold text-[#381F17] flex items-center gap-2.5 transition-all cursor-pointer hover:brightness-105"
+                        onClick={() => {
+                          if (!selectedConsultation.id.startsWith('demo-'))
+                            window.open(selectedConsultation.meetingLink!, '_blank', 'noopener,noreferrer');
+                        }}
+                        aria-disabled={isDemoPreview}
+                        title={isDemoPreview ? 'Sample consultation — meeting is unavailable' : undefined}
+                        className="lawyer-consultations-join-pill flex items-center cursor-pointer"
                       >
-                        <VideoCamIcon className="w-4 h-4 text-[#381F17]" />
+                        <Image src="/figma-consultations-video.svg" width={22} height={22} loading="eager" alt="" aria-hidden="true" />
                         <span>Join Meet</span>
                       </button>
                     )}
@@ -715,10 +805,10 @@ export function LawyerConsultationsView({
               type="button"
               onClick={() => goToIndex(carouselIndex > 0 ? carouselIndex - 1 : appointmentsToDisplay.length - 1)}
               disabled={appointmentsToDisplay.length <= 1}
-              className="neu-btn w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold text-[#381F17] hover:text-[#C58B3C] cursor-pointer disabled:opacity-40"
+              className="lawyer-consultations-prev-pill neu-btn w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold text-[#381F17] hover:text-[#C58B3C] cursor-pointer disabled:opacity-40"
               aria-label="Previous"
             >
-              ‹
+              <Image src="/figma-consultations-prev.svg" width={49} height={49} loading="eager" alt="" aria-hidden="true" />
             </button>
 
             <div className="flex items-center gap-2.5">
@@ -741,10 +831,10 @@ export function LawyerConsultationsView({
               type="button"
               onClick={() => goToIndex(carouselIndex < appointmentsToDisplay.length - 1 ? carouselIndex + 1 : 0)}
               disabled={appointmentsToDisplay.length <= 1}
-              className="neu-btn w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold text-[#381F17] hover:text-[#C58B3C] cursor-pointer disabled:opacity-40"
+              className="lawyer-consultations-next-pill neu-btn w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold text-[#381F17] hover:text-[#C58B3C] cursor-pointer disabled:opacity-40"
               aria-label="Next"
             >
-              ›
+              <Image src="/figma-consultations-next.svg" width={49} height={49} loading="eager" alt="" aria-hidden="true" />
             </button>
           </div>
           </>
@@ -763,15 +853,13 @@ export function LawyerConsultationsView({
             setPeriodFilter(e.target.value as PeriodFilter);
             setActiveTab('pending');
           }}
-          className="neu-inset-sm text-[#381F17]"
+          className="lawyer-consultations-period-pill neu-inset-sm text-[#381F17]"
         >
           <option value="all">Filter By: All</option>
           <option value="month">Filter By: Month</option>
           <option value="week">Filter By: Week</option>
         </select>
-        <svg className="lawyer-consultations-period-arrow" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m7 10 5 5 5-5z" fill="currentColor" />
-        </svg>
+        <Image className="lawyer-consultations-period-arrow" src="/figma-consultations-dropdown.svg" width={26} height={26} loading="eager" alt="" aria-hidden="true" />
       </div>
 
       {/* View Details (design1) */}

@@ -13,7 +13,6 @@ import {
   EarningsPayoutsIcon,
   ConsultationChatIcon,
   MessagesIcon,
-  CalendarGridIcon,
   ClientDocumentsIcon,
   UserPersonIcon,
   LogoutIcon,
@@ -61,19 +60,17 @@ interface LawyerShellProps {
  * 1. Lawyer Dashboard
  * 2. Consultations
  * 3. Messages
- * 4. Calendar
- * 5. Client Documents
- * 6. Lawyer Profile
- * 7. Earnings & Payouts
+ * 4. Client Documents
+ * 5. Lawyer Profile
+ * 6. Earnings & Payouts
  * ── Divider ──
- * 8. Settings
- * 9. Logout
+ * 7. Settings
+ * 8. Logout
  */
 const LAWYER_NAV_ITEMS: LawyerNavItem[] = [
   { key: 'dashboard',      name: 'Lawyer Dashboard',  href: '/lawyer/dashboard',      icon: DashboardGridIcon },
   { key: 'consultations',  name: 'Consultations',     href: '/lawyer/consultations',  icon: ConsultationChatIcon },
   { key: 'messages',       name: 'Messages',          href: '/lawyer/messages',       icon: MessagesIcon },
-  { key: 'calendar',       name: 'Calendar',          href: '/lawyer/calendar',       icon: CalendarGridIcon },
   { key: 'documents',      name: 'Client Documents',  href: '/lawyer/documents',      icon: ClientDocumentsIcon },
   { key: 'profile',        name: 'Lawyer Profile',    href: '/lawyer/profile',        icon: UserPersonIcon },
   { key: 'earnings',       name: 'Earnings & Payouts', href: '/lawyer/earnings',      icon: EarningsPayoutsIcon },

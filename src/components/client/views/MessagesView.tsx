@@ -43,6 +43,7 @@ function minutesUntil(iso: string, now: number): number {
 }
 
 export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' } = {}) {
+  const isLawyer = role === 'lawyer';
   const [threads, setThreads] = useState<ThreadItem[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [inputMessage, setInputMessage] = useState<string>('');
