@@ -1,7 +1,37 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
+import { animate, motion, useMotionValue, useTransform, type Variants } from 'motion/react';
+import { useReducedMotionPreference } from '@/components/lawyer/useReducedMotionPreference';
+
+const EASE = [0.16, 1, 0.3, 1] as const;
+const dashboardEntrance: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.14, delayChildren: 0.08 } },
+};
+const dashboardItem: Variants = {
+  hidden: { opacity: 0, y: 22, scale: 0.985 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.65, ease: EASE } },
+};
+
+function AnimatedKPI({ value, format }: { value: number; format: (value: number) => string }) {
+  const reduceMotion = useReducedMotionPreference();
+  const progress = useMotionValue(0);
+  const display = useTransform(progress, format);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      progress.set(value);
+      return;
+    }
+    const controls = animate(progress, value, { duration: 0.9, delay: 0.28, ease: EASE });
+    return () => controls.stop();
+  }, [progress, reduceMotion, value]);
+
+  if (reduceMotion) return <span>{format(value)}</span>;
+  return <motion.span>{display}</motion.span>;
+}
 
 /* ─── Types ────────────────────────────────────────────────────────────────── */
 
@@ -188,7 +218,7 @@ function FigmaKPICard({
   href,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   subtitle: string;
   icon: React.ReactNode;
   href?: string;
@@ -346,6 +376,7 @@ export function LawyerDashboardView({
   clientRating?: number;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const reduceMotion = useReducedMotionPreference();
   const totalCards = MOCK_CONSULTATIONS.length;
 
   const goNext = useCallback(() => {
@@ -362,41 +393,54 @@ export function LawyerDashboardView({
   };
 
   return (
-    <div className="lawyer-dashboard p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-7">
+    <motion.div
+      variants={dashboardEntrance}
+      initial={reduceMotion ? false : 'hidden'}
+      animate="show"
+      className="lawyer-dashboard p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-7"
+    >
       {/* ── 4 Top KPI Cards (Matching Figma Layout) ─────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        <FigmaKPICard
-          label="Today's Consultations"
-          value={String(todaysConsultations)}
-          subtitle="There are 3 scheduled consultations today."
-          icon={<CalendarClockIcon className="w-6 h-6 text-[#34150F]" />}
-        />
-        <FigmaKPICard
-          label="Pending Requests"
-          value={String(pendingRequests)}
-          subtitle="13 people are still waiting for your approval."
-          icon={<BriefcaseClockIcon className="w-6 h-6 text-[#34150F]" />}
-        />
-        <FigmaKPICard
-          label="October's Earnings"
-          value={formatEarnings(monthlyEarnings)}
-          subtitle="A raise of 18% vs the month of September."
-          icon={<BarChartIcon className="w-6 h-6 text-[#34150F]" />}
-        />
-        <FigmaKPICard
-          label="Client Ratings"
-          value={clientRating.toFixed(2)}
-          subtitle="124 reviews, 99% response rate as of Oct. 2026."
-          icon={<StarCircleIcon className="w-6 h-6 text-[#34150F]" />}
-          href="/lawyer/reviews"
-        />
-      </div>
+      <motion.div variants={dashboardEntrance} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+        <motion.div data-lawyer-motion variants={dashboardItem} className="h-full">
+          <FigmaKPICard
+            label="Today's Consultations"
+            value={<AnimatedKPI value={todaysConsultations} format={(n) => String(Math.round(n))} />}
+            subtitle="There are 3 scheduled consultations today."
+            icon={<CalendarClockIcon className="w-6 h-6 text-[#34150F]" />}
+          />
+        </motion.div>
+        <motion.div data-lawyer-motion variants={dashboardItem} className="h-full">
+          <FigmaKPICard
+            label="Pending Requests"
+            value={<AnimatedKPI value={pendingRequests} format={(n) => String(Math.round(n))} />}
+            subtitle="13 people are still waiting for your approval."
+            icon={<BriefcaseClockIcon className="w-6 h-6 text-[#34150F]" />}
+          />
+        </motion.div>
+        <motion.div data-lawyer-motion variants={dashboardItem} className="h-full">
+          <FigmaKPICard
+            label="October's Earnings"
+            value={<AnimatedKPI value={monthlyEarnings} format={(n) => formatEarnings(Math.round(n))} />}
+            subtitle="A raise of 18% vs the month of September."
+            icon={<BarChartIcon className="w-6 h-6 text-[#34150F]" />}
+          />
+        </motion.div>
+        <motion.div data-lawyer-motion variants={dashboardItem} className="h-full">
+          <FigmaKPICard
+            label="Client Ratings"
+            value={<AnimatedKPI value={clientRating} format={(n) => n.toFixed(2)} />}
+            subtitle="124 reviews, 99% response rate as of Oct. 2026."
+            icon={<StarCircleIcon className="w-6 h-6 text-[#34150F]" />}
+            href="/lawyer/reviews"
+          />
+        </motion.div>
+      </motion.div>
 
       {/* ── Section Divider ─────────────────────────────────────────────────── */}
       <hr className="border-[#C8B59E]/40" />
 
       {/* ── Carousel Header: Extruded Heading Pill + Filter Controls ────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <motion.div data-lawyer-motion variants={dashboardItem} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Extruded warm heading pill */}
         <div className="lawyer-dashboard-heading-pill neu-plate rounded-full px-6 py-2.5 text-sm font-bold text-[#34150F] inline-flex items-center self-start">
           Today&apos;s Scheduled Consultations
@@ -428,12 +472,12 @@ export function LawyerDashboardView({
             </svg>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* ── Consultation Card Viewport ──────────────────────────────────────── */}
-      <div className="overflow-hidden p-6 -m-6">
+      <motion.div data-lawyer-motion variants={dashboardItem} className="overflow-hidden p-6 -m-6">
         <div
-          className="flex transition-transform duration-500 ease-out"
+          className={`flex ${reduceMotion ? '' : 'transition-transform duration-500 ease-out'}`}
           style={{ transform: `translateX(-${currentIndex * 100}%)` }}
         >
           {MOCK_CONSULTATIONS.map((c) => (
@@ -442,7 +486,7 @@ export function LawyerDashboardView({
             </div>
           ))}
         </div>
-      </div>
+      </motion.div>
 
       {/* ── Carousel Controls: Extruded Arrows + Indicator Dots ─────────────── */}
       <div className="flex items-center justify-center gap-5 pt-2">
@@ -463,7 +507,7 @@ export function LawyerDashboardView({
               key={i}
               type="button"
               onClick={() => setCurrentIndex(i)}
-              className={`rounded-full transition-all duration-300 ${
+              className={`rounded-full transition-all duration-300 motion-reduce:transition-none ${
                 i === currentIndex
                   ? 'w-[14px] h-[14px] bg-[#D39758]'
                   : 'w-2.5 h-2.5 bg-[#341512] hover:bg-[#5C342A]'
@@ -483,7 +527,7 @@ export function LawyerDashboardView({
           ›
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

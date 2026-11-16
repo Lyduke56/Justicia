@@ -1,8 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
+import { AnimatePresence, motion, type Variants } from 'motion/react';
+import { useReducedMotionPreference } from '@/components/lawyer/useReducedMotionPreference';
 import { addReviewReplyAction } from '@/app/actions/reviewActions';
 import { useLawyerReviews } from '@/components/client/useLawyerReviews';
+
+const EASE = [0.16, 1, 0.3, 1] as const;
+const reviewsEntrance: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.12, delayChildren: 0.05 } },
+};
+const reviewsSection: Variants = {
+  hidden: { opacity: 0, y: 18 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE } },
+};
 
 interface LawyerReviewItem {
   id: string;
@@ -16,6 +28,7 @@ interface LawyerReviewItem {
 }
 
 export function LawyerReviewsView() {
+  const reduceMotion = useReducedMotionPreference();
   const { reviews: savedReviews, setReviews: setSavedReviews, loading, error } = useLawyerReviews();
   const reviews: LawyerReviewItem[] = savedReviews.map(r => ({
     id: r.id, clientName: r.name, category: 'Legal Consultation', stars: r.stars,
@@ -50,21 +63,21 @@ export function LawyerReviewsView() {
   };
 
   return (
-    <div className="p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-7">
+    <motion.div variants={reviewsEntrance} initial={reduceMotion ? false : 'hidden'} animate="show" className="p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-7">
       {loading && <p role="status">Loading reviews…</p>}
       {error && <p role="alert" className="text-red-700">{error}</p>}
       {/* ── Top Header Title ────────────────────────────────────────────────── */}
-      <div className="space-y-1">
+      <motion.div data-lawyer-motion variants={reviewsSection} className="space-y-1">
         <h1 className="font-cormorant text-3xl sm:text-4xl font-bold text-[#34150F]">
           Client Reviews &amp; Ratings
         </h1>
         <p className="text-xs sm:text-sm text-[#5C4535]">
           Track client feedback, satisfaction metrics, and reply to client testimonials.
         </p>
-      </div>
+      </motion.div>
 
       {/* ── 4 KPI Cards (Matching Figma Layout) ──────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <motion.div data-lawyer-motion variants={reviewsSection} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="neu-card-md rounded-[28px] p-5 flex flex-col justify-between">
           <h3 className="font-cormorant text-base sm:text-lg font-bold text-[#34150F]">
             Overall Rating
@@ -132,7 +145,7 @@ export function LawyerReviewsView() {
             </p>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* ── Section Divider ─────────────────────────────────────────────────── */}
       <hr className="border-[#C8B59E]/40" />
@@ -146,7 +159,7 @@ export function LawyerReviewsView() {
       )}
 
       {/* ── Filter Controls ─────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <motion.div data-lawyer-motion variants={reviewsSection} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="neu-plate rounded-full px-6 py-2.5 text-sm font-bold text-[#34150F] inline-flex items-center self-start">
           Client Feedback Feed
         </div>
@@ -197,13 +210,20 @@ export function LawyerReviewsView() {
             Needs Response ({reviews.filter((r) => !r.reply).length})
           </button>
         </div>
-      </div>
+      </motion.div>
 
       {/* ── Review Cards List ───────────────────────────────────────────────── */}
-      <div className="space-y-4">
+      <motion.div data-lawyer-motion variants={reviewsSection} className="space-y-4">
+        <AnimatePresence initial={false} mode="popLayout">
         {filteredReviews.map((rev) => (
-          <div
+          <motion.div
+            data-lawyer-motion
             key={rev.id}
+            layout={!reduceMotion}
+            initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduceMotion ? undefined : { opacity: 0, y: -10 }}
+            transition={{ duration: reduceMotion ? 0 : 0.3, ease: EASE }}
             className="neu-card-md rounded-[28px] p-6 space-y-4"
           >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -306,16 +326,17 @@ export function LawyerReviewsView() {
                 </div>
               </div>
             )}
-          </div>
+          </motion.div>
         ))}
+        </AnimatePresence>
 
         {filteredReviews.length === 0 && (
           <div className="py-12 text-center text-xs text-[#7D6855]">
             {loading ? 'Loading reviews…' : error ? 'Reviews are currently unavailable.' : reviews.length === 0 ? 'No consultation reviews yet.' : 'No reviews match this filter.'}
           </div>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

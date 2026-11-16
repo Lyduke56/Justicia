@@ -2,7 +2,19 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { AnimatePresence, motion, type Variants } from "motion/react";
+import { useReducedMotionPreference } from "@/components/lawyer/useReducedMotionPreference";
 import styles from "./LawyerEarningsView.module.css";
+
+const EASE = [0.16, 1, 0.3, 1] as const;
+const earningsEntrance: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.16, delayChildren: 0.06 } },
+};
+const earningsItem: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE } },
+};
 
 const MONTHS = [
   "Jan",
@@ -127,6 +139,7 @@ const STATUS_LABELS: Record<InquiryStatus, string> = {
 };
 
 export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
+  const reduceMotion = useReducedMotionPreference();
   const [selectedMonth, setSelectedMonth] = useState(0);
   const [activeInquiryTab, setActiveInquiryTab] = useState<InquiryTab>("all");
   const [draftSearch, setDraftSearch] = useState("");
@@ -142,10 +155,10 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
   });
 
   return (
-    <div className={styles.page}>
-      <section className={styles.metrics} aria-label="Earnings summary">
+    <motion.div variants={earningsEntrance} initial={reduceMotion ? false : "hidden"} animate="show" className={styles.page}>
+      <motion.section variants={earningsEntrance} className={styles.metrics} aria-label="Earnings summary">
         {METRICS.map((metric) => (
-          <article className={styles.metricCard} key={metric.title}>
+          <motion.article data-lawyer-motion variants={earningsItem} className={styles.metricCard} key={metric.title}>
             <h2>
               {isDemo
                 ? metric.title
@@ -167,13 +180,15 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
                 {isDemo ? metric.detail : "Financial data is being connected."}
               </p>
             </div>
-          </article>
+          </motion.article>
         ))}
-      </section>
+      </motion.section>
 
       <div className={styles.divider} aria-hidden="true" />
 
-      <section
+      <motion.section
+        data-lawyer-motion
+        variants={earningsItem}
         className={styles.chartSection}
         aria-labelledby="earnings-chart-heading"
       >
@@ -307,7 +322,7 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
             </div>
           )}
         </div>
-      </section>
+      </motion.section>
 
       <section
         className={styles.exportCard}
@@ -347,7 +362,9 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
 
       <div className={styles.divider} aria-hidden="true" />
 
-      <section
+      <motion.section
+        data-lawyer-motion
+        variants={earningsItem}
         className={styles.inquiriesSection}
         aria-label="Consultation inquiries"
       >
@@ -438,11 +455,18 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
               <span role="columnheader">CONSULTATION AREA</span>
               <span role="columnheader">STATUS</span>
             </div>
+            <AnimatePresence initial={false}>
             {visibleInquiries.map((inquiry) => (
-              <div
+              <motion.div
+                data-lawyer-motion
                 className={`${styles.inquiryTableRow} ${styles.inquiryTableBody}`}
                 role="row"
                 key={`${inquiry.name}-${inquiry.date}`}
+                layout={!reduceMotion}
+                initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+                transition={{ duration: reduceMotion ? 0 : 0.25, ease: EASE }}
               >
                 <span role="cell">{inquiry.name}</span>
                 <span role="cell">{inquiry.date}</span>
@@ -454,14 +478,15 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
                     {STATUS_LABELS[inquiry.status]}
                   </span>
                 </span>
-              </div>
+              </motion.div>
             ))}
+            </AnimatePresence>
             {visibleInquiries.length === 0 && (
               <p className={styles.inquiryEmpty}>No matching consultations.</p>
             )}
           </div>
         </div>
-      </section>
-    </div>
+      </motion.section>
+    </motion.div>
   );
 }

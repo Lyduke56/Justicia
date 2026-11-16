@@ -32,6 +32,7 @@ export type LawyerViewKey =
   | 'calendar'
   | 'documents'
   | 'earnings'
+  | 'reviews'
   | 'profile'
   | 'settings'
   | 'other';
@@ -84,6 +85,7 @@ function pathnameToView(pathname: string): LawyerViewKey {
   if (pathname === '/lawyer/calendar' || pathname.startsWith('/lawyer/calendar/') || pathname.startsWith('/lawyer/availability')) return 'calendar';
   if (pathname === '/lawyer/documents' || pathname.startsWith('/lawyer/documents/')) return 'documents';
   if (pathname === '/lawyer/earnings' || pathname.startsWith('/lawyer/earnings/')) return 'earnings';
+  if (pathname === '/lawyer/reviews' || pathname.startsWith('/lawyer/reviews/')) return 'reviews';
   if (pathname === '/lawyer/profile' || pathname.startsWith('/lawyer/profile/')) return 'profile';
   if (pathname === '/lawyer/settings' || pathname.startsWith('/lawyer/settings/')) return 'settings';
   return 'dashboard';
@@ -148,6 +150,8 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
         return <DocumentsView role="lawyer" />;
       case 'earnings':
         return <LawyerEarningsView isDemo={user.id.startsWith('demo-')} />;
+      case 'reviews':
+        return children ?? <LawyerDashboardView />;
       default:
         return children ?? <LawyerDashboardView />;
     }
@@ -229,7 +233,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
 
             {/* Notifications Popover */}
             {notificationsOpen && (
-              <div className="absolute right-0 mt-3 w-80 rounded-2xl bg-[#2A1810] border border-[#3E271D] shadow-2xl p-4 text-xs z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="lawyer-popover-enter absolute right-0 mt-3 w-80 rounded-2xl bg-[#2A1810] border border-[#3E271D] shadow-2xl p-4 text-xs z-50">
                 <div className="flex items-center justify-between pb-2 border-b border-[#3E271D]">
                   <span className="font-semibold text-[#ded7cb]">Lawyer Notifications</span>
                   <span className="text-[10px] text-[#C58B3C]">Active</span>
@@ -299,7 +303,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
             </button>
 
             {userDropdownOpen && (
-              <div className="absolute right-0 mt-3 w-60 rounded-2xl bg-[#2A1810] border border-[#3E271D] shadow-2xl p-2 z-50 text-xs animate-in fade-in zoom-in-95 duration-150">
+              <div className="lawyer-popover-enter absolute right-0 mt-3 w-60 rounded-2xl bg-[#2A1810] border border-[#3E271D] shadow-2xl p-2 z-50 text-xs">
                 <div className="px-3 py-2 border-b border-[#3E271D]">
                   <p className="font-medium text-[#ded7cb] truncate">{user.fullName}</p>
                   <p className="text-[11px] text-[#A69584] truncate">{user.email}</p>

@@ -3,6 +3,8 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { AnimatePresence, motion, type Variants } from 'motion/react';
+import { useReducedMotionPreference } from '@/components/lawyer/useReducedMotionPreference';
 import {
   getLawyerConsultationsAction,
   respondToConsultationAction,
@@ -15,6 +17,20 @@ import { ConsultationDetailsModal } from '@/components/shared/ConsultationDetail
 import type { ConsultationDetailsModalProps } from '@/components/shared/ConsultationDetailsModal';
 import { ConsultationDecisionModal } from '@/components/lawyer/ConsultationDecisionModal';
 import type { DecisionMode } from '@/components/lawyer/ConsultationDecisionModal';
+
+const EASE = [0.16, 1, 0.3, 1] as const;
+const consultationEntrance: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.14, delayChildren: 0.05 } },
+};
+const consultationTop: Variants = {
+  hidden: { opacity: 0, y: -16, filter: 'blur(5px)' },
+  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.6, ease: EASE } },
+};
+const consultationColumn: Variants = {
+  hidden: { opacity: 0, y: 22 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: EASE } },
+};
 
 /* ─── Types ────────────────────────────────────────────────────────────────── */
 
@@ -204,6 +220,7 @@ export function LawyerConsultationsView({
   lawyerName?: string;
 } = {}) {
   const router = useRouter();
+  const reduceMotion = useReducedMotionPreference();
   const [dbConsultations, setDbConsultations] = useState<DetailedConsultation[]>([]);
   const [loadingConsultations, setLoadingConsultations] = useState(true);
   const [activeTab, setActiveTab] = useState<ConsultationTab>('all');
@@ -435,9 +452,14 @@ export function LawyerConsultationsView({
   ];
 
   return (
-    <div className="lawyer-consultations p-6 sm:p-9 lg:p-10 max-w-7xl mx-auto space-y-7">
+    <motion.div
+      variants={consultationEntrance}
+      initial={reduceMotion ? false : 'hidden'}
+      animate="show"
+      className="lawyer-consultations p-6 sm:p-9 lg:p-10 max-w-7xl mx-auto space-y-7"
+    >
       {/* ── Top Status Tabs & Search Section ─────────────────────────────────── */}
-      <div className="space-y-4">
+      <motion.div data-lawyer-motion variants={consultationTop} className="space-y-4">
         {/* Status Tab Pills */}
         <div className="lawyer-consultations-tabs">
           {tabs.map((tab) => {
@@ -448,7 +470,7 @@ export function LawyerConsultationsView({
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
                 aria-pressed={isActive}
-                className="lawyer-consultations-tab"
+                className="lawyer-consultations-tab active:scale-[0.98] motion-reduce:transition-none"
               >
                 {tab.label} ({tab.count})
               </button>
@@ -490,12 +512,12 @@ export function LawyerConsultationsView({
             <Image className="lawyer-consultations-area-arrow" src="/figma-consultations-dropdown.svg" width={26} height={26} loading="eager" alt="" aria-hidden="true" />
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* ── Two-Column Main Content Layout ──────────────────────────────────── */}
-      <div className="grid grid-cols-1 xl:grid-cols-[330px_1fr] gap-8 items-start">
+      <motion.div variants={consultationEntrance} className="grid grid-cols-1 xl:grid-cols-[330px_1fr] gap-8 items-start">
         {/* ── Left Column: Calendar & Appointments List ─────────────────────── */}
-        <div className="w-full xl:w-[330px] space-y-6 shrink-0">
+        <motion.div data-lawyer-motion variants={consultationColumn} className="w-full xl:w-[330px] space-y-6 shrink-0">
           {/* Extruded "Upcoming Consultations" heading pill */}
           <div className="lawyer-consultations-heading-pill neu-plate rounded-full px-7 py-2.5 text-xs sm:text-sm font-bold text-[#381F17] inline-flex items-center">
             Upcoming Consultations
@@ -591,10 +613,20 @@ export function LawyerConsultationsView({
             </div>
           </div>
 
-        </div>
+        </motion.div>
 
         {/* ── Right Column: Consultation Detail Hero Card ───────────────────── */}
-        <div className="flex-1 min-w-0 space-y-6">
+        <motion.div data-lawyer-motion variants={consultationColumn} className="flex-1 min-w-0 space-y-6">
+          <AnimatePresence mode="popLayout" initial={false}>
+          <motion.div
+            data-lawyer-motion
+            key={loadingConsultations ? 'loading' : selectedConsultation?.id ?? 'empty'}
+            initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduceMotion || loadingConsultations ? undefined : { opacity: 0, y: -10 }}
+            transition={{ duration: reduceMotion ? 0 : 0.32, ease: EASE }}
+            className="space-y-6"
+          >
           {!selectedConsultation ? (
             <div className="neu-card rounded-[36px] sm:rounded-[40px] p-10 text-center space-y-2">
               <h3 className="font-cormorant text-2xl font-bold text-[#381F17]">
@@ -818,7 +850,7 @@ export function LawyerConsultationsView({
                   type="button"
                   onClick={() => goToIndex(i)}
                   aria-label={`Go to consultation ${i + 1}`}
-                  className={`rounded-full transition-all duration-300 ${
+                  className={`rounded-full transition-all duration-300 motion-reduce:transition-none ${
                     i === carouselIndex
                       ? 'w-[14px] h-[14px] bg-[#D39758]'
                       : 'w-2.5 h-2.5 bg-[#341512]'
@@ -839,10 +871,12 @@ export function LawyerConsultationsView({
           </div>
           </>
           )}
-        </div>
-      </div>
+          </motion.div>
+          </AnimatePresence>
+        </motion.div>
+      </motion.div>
 
-      <div className="lawyer-consultations-pending-header flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+      <motion.div data-lawyer-motion variants={consultationColumn} className="lawyer-consultations-pending-header flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
         <button type="button" onClick={() => setActiveTab('pending')} className="lawyer-consultations-pending-pill neu-plate rounded-full text-[#381F17]">
           Pending Approval for Consultations
         </button>
@@ -860,7 +894,7 @@ export function LawyerConsultationsView({
           <option value="week">Filter By: Week</option>
         </select>
         <Image className="lawyer-consultations-period-arrow" src="/figma-consultations-dropdown.svg" width={26} height={26} loading="eager" alt="" aria-hidden="true" />
-      </div>
+      </motion.div>
 
       {/* View Details (design1) */}
       {showDetails && selectedConsultation && (
@@ -881,7 +915,7 @@ export function LawyerConsultationsView({
         />
       )}
 
-    </div>
+    </motion.div>
   );
 }
 
