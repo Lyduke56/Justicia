@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { motion, useReducedMotion, type Variants } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion, type Variants } from 'motion/react';
 import { createClient } from '@/lib/supabase/client';
 import { LawyerGrid } from '@/components/client/LawyerGrid';
 import { LawyerSearchFilters } from '@/components/client/LawyerSearchFilters';
@@ -373,28 +373,74 @@ const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
   },
 ];
 
-// Motion Variants matching DashboardView & AIAssistantChat
+// ─── Motion ──────────────────────────────────────────────────────────────────
 const EASE = [0.16, 1, 0.3, 1] as const;
 
+/**
+ * Page choreography (list view):
+ *   search & filters drop in (blur → sharp) → results section rises in → the grid's own cards cascade.
+ * The grid section deliberately has no initial/animate of its own, so LawyerGrid's inner variants
+ * keep inheriting the "hidden" → "show" labels from this root exactly as before.
+ */
 const pageVariants: Variants = {
   hidden: {},
   show: {
     transition: {
-      staggerChildren: 0.12,
+      staggerChildren: 0.14,
       delayChildren: 0.05,
     },
+  },
+  exit: {
+    opacity: 0,
+    y: -10,
+    transition: { duration: 0.22, ease: 'easeIn' },
   },
 };
 
 const topSectionVariants: Variants = {
-  hidden: { opacity: 0, y: -18, filter: 'blur(5px)' },
+  hidden: { opacity: 0, y: -20, scale: 0.985, filter: 'blur(6px)' },
   show: {
     opacity: 1,
     y: 0,
+    scale: 1,
     filter: 'blur(0px)',
-    transition: { duration: 0.55, ease: EASE },
+    transition: { duration: 0.7, ease: EASE },
   },
 };
+
+const gridSectionVariants: Variants = {
+  hidden: { opacity: 0, y: 28 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.75, ease: EASE },
+  },
+};
+
+/** Thin sweeping line above the results while a new filter/page is loading. */
+function RefreshBar({ active }: { active: boolean }) {
+  return (
+    <AnimatePresence>
+      {active && (
+        <motion.div
+          key="refresh-bar"
+          aria-hidden
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="absolute inset-x-0 -top-3 h-[3px] overflow-hidden rounded-full bg-[#341512]/10"
+        >
+          <motion.span
+            animate={{ x: ['-100%', '260%'] }}
+            transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+            className="block h-full w-2/5 rounded-full bg-[#D39758]"
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
   const searchParams = useSearchParams();
@@ -424,6 +470,12 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
   );
   const [totalCount, setTotalCount] = useState(DEFAULT_LAWYERS.length);
   const [loading, setLoading] = useState(false);
+
+  // Results transitions: `refreshing` dims the grid while a new filter/page loads;
+  // `resultsVersion` bumps when a *different* result set lands so the grid fades out and re-cascades in.
+  const [refreshing, setRefreshing] = useState(false);
+  const [resultsVersion, setResultsVersion] = useState(0);
+  const lastSignatureRef = useRef<string | null>(null);
 
   const [specializationOptions, setSpecializationOptions] = useState<string[]>(DEFAULT_SPECIALIZATIONS);
   const [chapterOptions, setChapterOptions] = useState<string[]>(DEFAULT_CHAPTERS);
@@ -470,8 +522,26 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
     loadInitial();
   }, [isLoggedIn, userId]);
 
+  /**
+   * Called when a fetch has applied its results. Only a genuinely different query/page
+   * (not the first load, not a favorites refresh) triggers the fade-out → re-cascade.
+   */
+  const finishFetch = useCallback((signature: string) => {
+    if (lastSignatureRef.current !== null && lastSignatureRef.current !== signature) {
+      setResultsVersion((v) => v + 1);
+    }
+    lastSignatureRef.current = signature;
+    setLoading(false);
+    setRefreshing(false);
+  }, []);
+
   // Re-fetch lawyers whenever primitive URL search params change
   const fetchLawyers = useCallback(async () => {
+    const signature = [queryParam, specParam, chapterParam, feeParam, langKey, pageParam].join('|');
+    if (lastSignatureRef.current !== null && lastSignatureRef.current !== signature) {
+      setRefreshing(true);
+    }
+
     const supabase = createClient();
 
     let q = supabase
@@ -545,7 +615,7 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
           }))
         );
         setTotalCount(count ?? filtered.length);
-        setLoading(false);
+        finishFetch(signature);
         return;
       }
     } catch {
@@ -599,8 +669,8 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
 
     setLawyers(pagedFallback);
     setTotalCount(fallback.length);
-    setLoading(false);
-  }, [queryParam, specParam, chapterParam, feeParam, langKey, pageParam, favoriteIds]);
+    finishFetch(signature);
+  }, [queryParam, specParam, chapterParam, feeParam, langKey, pageParam, favoriteIds, finishFetch]);
 
   const [selectedLawyer, setSelectedLawyer] = useState<PublicLawyerProfile | null>(null);
 
@@ -608,76 +678,112 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
     fetchLawyers();
   }, [fetchLawyers]);
 
-  // When a lawyer is selected, render LawyerDetailView without the search bar or filters
-  if (selectedLawyer) {
-    return (
-      <motion.div
-        variants={pageVariants}
-        initial={reduceMotion ? false : 'hidden'}
-        animate="show"
-        className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-10 max-w-[1300px] mx-auto bg-[#E5D8CB] min-h-[calc(100vh-4rem)]"
-      >
-        <LawyerDetailView
-          lawyer={selectedLawyer}
-          onBack={() => {
-            setSelectedLawyer(null);
-            if (typeof document !== 'undefined') {
-              const mainContent = document.getElementById('client-main-content');
-              if (mainContent) {
-                mainContent.scrollTo({ top: 0, behavior: 'smooth' });
-              } else {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }
-            }
-          }}
-          defaultTab="about"
-        />
-      </motion.div>
-    );
-  }
+  const scrollMainToTop = useCallback((behavior: ScrollBehavior) => {
+    if (typeof document === 'undefined') return;
+    const mainContent = document.getElementById('client-main-content');
+    if (mainContent) {
+      mainContent.scrollTo({ top: 0, behavior });
+    } else {
+      window.scrollTo({ top: 0, behavior });
+    }
+  }, []);
+
+  // Jump to the top right away so the detail page's intro plays where you can see it
+  const handleSelectLawyer = useCallback(
+    (lawyer: PublicLawyerProfile) => {
+      scrollMainToTop('auto');
+      setSelectedLawyer(lawyer);
+    },
+    [scrollMainToTop]
+  );
 
   return (
-    <motion.div
-      variants={pageVariants}
-      initial={reduceMotion ? false : 'hidden'}
-      animate="show"
-      className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-10 max-w-[1300px] mx-auto space-y-6 sm:space-y-7 bg-[#E5D8CB] min-h-[calc(100vh-4rem)]"
-    >
-      <h1 className="sr-only">Find a Lawyer — Justicia Philippine Legal Intelligence</h1>
-
-      {/* Top Search & 4-Column Filters matching Reference Image */}
-      <motion.div variants={topSectionVariants} className="relative z-30">
-        <LawyerSearchFilters
-          filters={filters}
-          isLoggedIn={isLoggedIn}
-          totalCount={totalCount}
-          page={pageParam}
-          pageSize={PAGE_SIZE}
-          specializationOptions={specializationOptions}
-          chapterOptions={chapterOptions}
-          languageOptions={languageOptions}
-        />
-      </motion.div>
-
-      {/* Lawyer Cards 3x3 Grid & Pagination with Smooth Cascading Animation */}
-      <div className="relative z-10">
-        {loading ? (
-          <LawyerGridSkeleton count={PAGE_SIZE} />
-        ) : (
-          <LawyerGrid
-            lawyers={lawyers}
-            totalCount={totalCount}
-            page={pageParam}
-            pageSize={PAGE_SIZE}
-            specializationOptions={specializationOptions}
-            chapterOptions={chapterOptions}
-            languageOptions={languageOptions}
-            filters={filters}
-            isLoggedIn={isLoggedIn}
-            onSelectLawyer={setSelectedLawyer}
+    // mode="wait": the list fades out, then the detail page arrives (and vice versa)
+    <AnimatePresence mode="wait">
+      {selectedLawyer ? (
+        // LawyerDetailView runs its own intro, so this wrapper only crossfades
+        <motion.div
+          key="detail"
+          initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 10, transition: { duration: 0.22, ease: 'easeIn' } }}
+          transition={{ duration: 0.45, ease: EASE }}
+          className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-10 max-w-[1300px] mx-auto bg-[#E5D8CB] min-h-[calc(100vh-4rem)]"
+        >
+          <LawyerDetailView
+            lawyer={selectedLawyer}
+            onBack={() => {
+              setSelectedLawyer(null);
+              scrollMainToTop('smooth');
+            }}
+            defaultTab="about"
           />
-        )}
-      </div>
-    </motion.div>
+        </motion.div>
+      ) : (
+        <motion.div
+          key="list"
+          variants={pageVariants}
+          initial={reduceMotion ? false : 'hidden'}
+          animate="show"
+          exit="exit"
+          className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-10 max-w-[1300px] mx-auto space-y-6 sm:space-y-7 bg-[#E5D8CB] min-h-[calc(100vh-4rem)]"
+        >
+          <h1 className="sr-only">Find a Lawyer — Justicia Philippine Legal Intelligence</h1>
+
+          {/* Top Search & 4-Column Filters matching Reference Image */}
+          <motion.div variants={topSectionVariants} className="relative z-30">
+            <LawyerSearchFilters
+              filters={filters}
+              isLoggedIn={isLoggedIn}
+              totalCount={totalCount}
+              page={pageParam}
+              pageSize={PAGE_SIZE}
+              specializationOptions={specializationOptions}
+              chapterOptions={chapterOptions}
+              languageOptions={languageOptions}
+            />
+          </motion.div>
+
+          {/* Lawyer Cards 3x3 Grid & Pagination */}
+          <motion.div variants={gridSectionVariants} className="relative z-10">
+            <RefreshBar active={refreshing} />
+            <span role="status" aria-live="polite" className="sr-only">
+              {refreshing ? 'Updating results…' : ''}
+            </span>
+
+            {/* Dims while a new filter/page loads */}
+            <div className={`transition-opacity duration-300 ${refreshing ? 'opacity-60' : 'opacity-100'}`}>
+              {/* New result set: old grid fades up and out, new one fades in and its cards cascade again */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={resultsVersion}
+                  initial={resultsVersion === 0 || reduceMotion ? undefined : { opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10, transition: { duration: 0.18, ease: 'easeIn' } }}
+                  transition={{ duration: 0.45, ease: EASE }}
+                >
+                  {loading ? (
+                    <LawyerGridSkeleton count={PAGE_SIZE} />
+                  ) : (
+                    <LawyerGrid
+                      lawyers={lawyers}
+                      totalCount={totalCount}
+                      page={pageParam}
+                      pageSize={PAGE_SIZE}
+                      specializationOptions={specializationOptions}
+                      chapterOptions={chapterOptions}
+                      languageOptions={languageOptions}
+                      filters={filters}
+                      isLoggedIn={isLoggedIn}
+                      onSelectLawyer={handleSelectLawyer}
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

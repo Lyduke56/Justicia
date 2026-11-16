@@ -102,9 +102,18 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
   const [liveLawyerNotifs, setLiveLawyerNotifs] = useState<any[]>([]);
 
   useEffect(() => {
-    getUserNotificationsAction('lawyer').then((data) => {
-      if (data && data.length > 0) setLiveLawyerNotifs(data);
-    });
+    let active = true;
+    const load = () =>
+      getUserNotificationsAction('lawyer').then((data) => {
+        if (active && data && data.length > 0) setLiveLawyerNotifs(data);
+      });
+    load();
+    // Refresh every minute so "consultation starting soon" alerts reach the bell on time.
+    const timer = setInterval(load, 60000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [notificationsOpen]);
 
   useEffect(() => {
@@ -231,7 +240,12 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
                       <div
                         key={n.id}
                         onClick={() => {
-                          if (n.type?.includes('consultation')) navigate('consultations');
+                          if (n.type === 'meeting_starting' || n.type === 'new_message') {
+                            setNotificationsOpen(false);
+                            const thread = n.metadata?.threadId;
+                            setActiveView('messages');
+                            router.push(thread ? `/lawyer/messages?thread=${thread}` : '/lawyer/messages', { scroll: false });
+                          } else if (n.type?.includes('consultation')) navigate('consultations');
                         }}
                         className="p-2.5 rounded-xl bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer border border-[#482B1F]"
                       >

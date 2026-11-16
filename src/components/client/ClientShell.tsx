@@ -96,9 +96,18 @@ export function ClientShell({ user, children }: ClientShellProps) {
   const [liveNotifs, setLiveNotifs] = useState<any[]>([]);
 
   useEffect(() => {
-    getUserNotificationsAction('client').then((data: any) => {
-      if (data && data.length > 0) setLiveNotifs(data);
-    });
+    let active = true;
+    const load = () =>
+      getUserNotificationsAction('client').then((data: any) => {
+        if (active && data && data.length > 0) setLiveNotifs(data);
+      });
+    load();
+    // Refresh every minute so "consultation starting soon" alerts reach the bell on time.
+    const timer = setInterval(load, 60000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [notificationsOpen]);
 
   // Keep view in sync when the user navigates with browser back/forward
@@ -231,7 +240,11 @@ export function ClientShell({ user, children }: ClientShellProps) {
                       <div
                         key={n.id}
                         onClick={() => {
-                          if (n.type?.includes('consultation')) navigate('consultations');
+                          if (n.type === 'meeting_starting' || n.type === 'new_message') {
+                            setNotificationsOpen(false);
+                            const thread = n.metadata?.threadId;
+                            router.push(thread ? `/client/messages?thread=${thread}` : '/client/messages', { scroll: false });
+                          } else if (n.type?.includes('consultation')) navigate('consultations');
                         }}
                         className="p-2.5 rounded-xl bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer border border-[#482B1F]"
                       >
@@ -255,6 +268,18 @@ export function ClientShell({ user, children }: ClientShellProps) {
               </div>
             )}
           </div>
+
+          {/* Settings Shortcut */}
+          <button
+            type="button"
+            id="nav-settings-header"
+            onClick={() => router.push('/client/settings')}
+            className="p-1.5 rounded-lg transition-colors hover:text-[#C58B3C]"
+            title="Settings"
+            aria-label="Settings"
+          >
+            <GearIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+          </button>
 
           {/* User Profile */}
           <div className="relative">

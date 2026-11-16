@@ -513,6 +513,33 @@ async function findActiveBookingsOnDate(
   return bookings;
 }
 
+/**
+ * Blocks the lawyer set on a Manila date (lawyer_unavailability, migration 0008).
+ * 'all-day' for whole-day blocks. Returns [] if the table hasn't been created yet.
+ */
+async function findUnavailabilityOnDate(
+  db: Db,
+  lawyerId: string,
+  date: CalendarDate
+): Promise<Array<MinuteRange | 'all-day'>> {
+  const { data, error } = await db
+    .from('lawyer_unavailability')
+    .select('start_minutes, end_minutes')
+    .eq('lawyer_id', lawyerId)
+    .eq('unavailable_date', toIsoDate(date));
+  if (error) {
+    if (error.code !== 'PGRST205' && error.code !== '42P01') {
+      console.warn('[findUnavailabilityOnDate]', error.message);
+    }
+    return [];
+  }
+  return ((data ?? []) as Array<{ start_minutes: number | null; end_minutes: number | null }>).map((r) =>
+    r.start_minutes === null || r.end_minutes === null
+      ? 'all-day'
+      : { startMinutes: r.start_minutes, endMinutes: r.end_minutes }
+  );
+}
+
 function statusLabel(status: string, paymentState: PaymentState = 'none'): ClientConsultationStatusLabel {
   switch (status) {
     case 'confirmed':
@@ -992,6 +1019,14 @@ export async function bookConsultationAction(input: BookConsultationInput): Prom
         error: `The ${timeSlotLabel} slot is already reserved for this attorney. Please choose another time slot.`,
       };
     }
+    const blocked = await findUnavailabilityOnDate(db, lawyerId, date);
+    if (blocked.some((b) => b === 'all-day' || rangesOverlap(b, range))) {
+      return {
+        error: blocked.includes('all-day')
+          ? 'This attorney is unavailable on the selected date. Please choose another day.'
+          : `This attorney is unavailable during ${timeSlotLabel}. Please choose another time slot.`,
+      };
+    }
     const clientBookings = await findActiveBookingsOnDate(db, 'client_id', user.id, date);
     if (clientBookings.some((b) => rangesOverlap(b, range))) {
       return { error: 'You already have another consultation scheduled at this time. Please choose a different slot.' };
@@ -1327,6 +1362,112 @@ export async function uploadDocumentFileAction(
   } catch (err) {
     console.error('[uploadDocumentFileAction] error:', err);
     return { error: 'We could not upload the file. Please try again.' };
+  }
+}
+
+/**
+ * Deletes a document file owned by the current user.
+ */
+export async function deleteDocumentFileAction(
+  documentId: string
+): Promise<{ success: true } | { success?: false; error: string }> {
+  try {
+    const session = await requireSession();
+    if ('error' in session) return { error: session.error };
+    const { db, user } = session;
+
+    const { error } = await db
+      .from('documents')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', documentId)
+      .eq('owner_id', user.id);
+
+    if (error) {
+      console.error('[deleteDocumentFileAction] update failed:', error.message);
+      return { error: 'Failed to delete the document.' };
+    }
+
+    revalidatePath('/client/documents');
+    revalidatePath('/lawyer/documents');
+    return { success: true };
+  } catch (err) {
+    console.error('[deleteDocumentFileAction] error:', err);
+    return { error: 'Failed to delete the document.' };
+  }
+}
+
+/**
+ * Deletes a folder owned by the current user and soft-deletes files inside it.
+ */
+export async function deleteDocumentFolderAction(
+  folderId: string
+): Promise<{ success: true } | { success?: false; error: string }> {
+  try {
+    const session = await requireSession();
+    if ('error' in session) return { error: session.error };
+    const { db, user } = session;
+
+    const now = new Date().toISOString();
+    const { error: folderErr } = await db
+      .from('documents')
+      .update({ deleted_at: now })
+      .eq('id', folderId)
+      .eq('owner_id', user.id);
+
+    if (folderErr) {
+      console.error('[deleteDocumentFolderAction] folder delete failed:', folderErr.message);
+      return { error: 'Failed to delete folder.' };
+    }
+
+    // Also soft-delete files associated with this folder path
+    await db
+      .from('documents')
+      .update({ deleted_at: now })
+      .eq('owner_id', user.id)
+      .like('storage_path', `%/${folderId}/%`);
+
+    revalidatePath('/client/documents');
+    revalidatePath('/lawyer/documents');
+    return { success: true };
+  } catch (err) {
+    console.error('[deleteDocumentFolderAction] error:', err);
+    return { error: 'Failed to delete folder.' };
+  }
+}
+
+/**
+ * Renames a folder owned by the current user.
+ */
+export async function renameDocumentFolderAction(
+  folderId: string,
+  newName: string
+): Promise<{ success: true; newName: string } | { success?: false; error: string }> {
+  try {
+    const trimmed = (newName ?? '').trim();
+    if (!trimmed) return { error: 'Folder name cannot be empty.' };
+    if (trimmed.length > 100) return { error: 'Folder name must be 100 characters or fewer.' };
+
+    const session = await requireSession();
+    if ('error' in session) return { error: session.error };
+    const { db, user } = session;
+
+    const { error } = await db
+      .from('documents')
+      .update({ filename: `${FOLDER_PREFIX}${trimmed}` })
+      .eq('id', folderId)
+      .eq('owner_id', user.id);
+
+    if (error) {
+      console.error('[renameDocumentFolderAction] update failed:', error.message);
+      return { error: 'Failed to rename folder.' };
+    }
+
+    revalidatePath('/client/documents');
+    revalidatePath('/lawyer/documents');
+    return { success: true, newName: trimmed };
+  } catch (err) {
+    console.error('[renameDocumentFolderAction] error:', err);
+    return { error: 'Failed to rename folder.' };
   }
 }
 
@@ -1782,11 +1923,17 @@ export async function respondToConsultationAction(
 const MESSAGING_STATUSES = ['pending', 'awaiting_client_confirmation', 'confirmed', 'completed'];
 const MAX_MESSAGE_LENGTH = 4000;
 
+/**
+ * One conversation per client ⇄ lawyer pair (not per booking).
+ * `id` is the other participant's user id; `consultationIds` are every consultation between
+ * the two, so deep links that still carry a consultation id (?thread=<consultationId>) resolve.
+ */
 export interface MessageThreadItem {
   id: string;
   name: string;
   lastMessage: string;
   time: string;
+  consultationIds?: string[];
 }
 
 export interface ThreadMessage {
@@ -1834,22 +1981,48 @@ async function ensureUserAccount(db: Db, profile: ProfileRow): Promise<boolean> 
   return !error;
 }
 
-/** Returns the consultation behind a thread if the user participates in it. */
-async function getThreadConsultation(
-  db: Db,
-  threadId: string,
-  userId: string
-): Promise<{ consultation: ConsultationRow; role: 'client' | 'lawyer' } | null> {
+interface PairThread {
+  otherId: string;
+  /** Every consultation between the two users, oldest first. */
+  consultations: ConsultationRow[];
+}
+
+/**
+ * Resolves a conversation for the signed-in user. `threadId` may be the other participant's
+ * user id (pair thread) or any consultation id between them (legacy / deep links).
+ */
+async function getPairThread(db: Db, threadId: string, userId: string): Promise<PairThread | null> {
   if (!UUID_REGEX.test(threadId ?? '')) return null;
-  const { data } = await db
+
+  let otherId = threadId;
+  const { data: byConsultation } = await db
     .from('consultations')
-    .select(CONSULTATION_COLUMNS)
+    .select('id, client_id, lawyer_id')
     .eq('id', threadId)
     .or(`client_id.eq.${userId},lawyer_id.eq.${userId}`)
     .maybeSingle();
-  if (!data) return null;
-  const consultation = data as ConsultationRow;
-  return { consultation, role: consultation.lawyer_id === userId ? 'lawyer' : 'client' };
+  if (byConsultation) {
+    otherId = byConsultation.client_id === userId ? byConsultation.lawyer_id : byConsultation.client_id;
+  }
+  if (!UUID_REGEX.test(otherId) || otherId === userId) return null;
+
+  const { data, error } = await db
+    .from('consultations')
+    .select(CONSULTATION_COLUMNS)
+    .or(`and(client_id.eq.${userId},lawyer_id.eq.${otherId}),and(client_id.eq.${otherId},lawyer_id.eq.${userId})`)
+    .order('created_at', { ascending: true });
+  if (error || !data || data.length === 0) return null;
+  return { otherId, consultations: data as ConsultationRow[] };
+}
+
+/** The consultation new messages are filed under: the latest active one, else the latest messageable one. */
+function messageTargetConsultation(pair: PairThread): ConsultationRow | null {
+  const byNewest = [...pair.consultations].reverse();
+  return (
+    byNewest.find((c) => ACTIVE_BOOKING_STATUSES.includes(c.status)) ??
+    byNewest.find((c) => MESSAGING_STATUSES.includes(c.status)) ??
+    null
+  );
 }
 
 async function postSystemMessage(db: Db, threadId: string, senderId: string, content: string): Promise<void> {
@@ -1865,9 +2038,10 @@ async function postSystemMessage(db: Db, threadId: string, senderId: string, con
 }
 
 /**
- * Message threads for the signed-in user (client or lawyer).
- * Both participants see a thread for every active consultation (from pending onward),
- * so either side can message the other from View Details.
+ * Conversations for the signed-in user (client or lawyer): one per client ⇄ lawyer pair,
+ * combining every consultation between them. A pair is listed while at least one of their
+ * consultations is active or completed (from pending onward). Status updates posted as system
+ * messages on any of those consultations appear in the single conversation.
  */
 export async function getMessageThreadsAction(): Promise<MessageThreadItem[]> {
   try {
@@ -1879,7 +2053,6 @@ export async function getMessageThreadsAction(): Promise<MessageThreadItem[]> {
       .from('consultations')
       .select(`${CONSULTATION_COLUMNS}, lawyer_profiles(full_name), ${CLIENT_EMBED}`)
       .or(`client_id.eq.${user.id},lawyer_id.eq.${user.id}`)
-      .in('status', MESSAGING_STATUSES)
       .order('created_at', { ascending: false });
     if (error) {
       console.error('[getMessageThreadsAction]', error.message);
@@ -1891,35 +2064,52 @@ export async function getMessageThreadsAction(): Promise<MessageThreadItem[]> {
     >;
     if (rows.length === 0) return [];
 
+    // Group consultations by the other participant.
+    const pairs = new Map<string, { name: string; rows: typeof rows; messageable: boolean }>();
+    for (const r of rows) {
+      const isLawyer = r.lawyer_id === user.id;
+      const otherId = isLawyer ? r.client_id : r.lawyer_id;
+      if (!otherId || otherId === user.id) continue;
+      const name = isLawyer
+        ? r.client?.full_name?.trim() || r.client?.email || 'Client'
+        : r.lawyer_profiles?.full_name || 'Attorney';
+      const pair = pairs.get(otherId) ?? { name, rows: [], messageable: false };
+      pair.rows.push(r);
+      pair.messageable ||= MESSAGING_STATUSES.includes(r.status);
+      pairs.set(otherId, pair);
+    }
+    const visible = [...pairs.entries()].filter(([, p]) => p.messageable);
+    if (visible.length === 0) return [];
+
+    const consultationToPair = new Map<string, string>();
+    for (const [otherId, p] of visible) for (const r of p.rows) consultationToPair.set(r.id, otherId);
+
     const { data: msgs } = await db
       .from('messages')
       .select('id, conversation_or_thread_id, sender_id, role, content, sent_at')
-      .in('conversation_or_thread_id', rows.map((r) => r.id))
+      .in('conversation_or_thread_id', [...consultationToPair.keys()])
       .order('sent_at', { ascending: false })
-      .limit(1000);
+      .limit(2000);
     const latest = new Map<string, MessageRow>();
     for (const m of (msgs ?? []) as MessageRow[]) {
-      if (!latest.has(m.conversation_or_thread_id)) latest.set(m.conversation_or_thread_id, m);
+      const otherId = consultationToPair.get(m.conversation_or_thread_id);
+      if (otherId && !latest.has(otherId)) latest.set(otherId, m);
     }
 
-    return rows
-      .map((r) => {
-        const isLawyer = r.lawyer_id === user.id;
-        const other = isLawyer
-          ? r.client?.full_name?.trim() || r.client?.email || 'Client'
-          : r.lawyer_profiles?.full_name || 'Attorney';
-        const schedule = scheduleOf(r);
-        const dateShort = `${MONTH_NAMES[schedule.date.monthIndex].slice(0, 3)} ${schedule.date.day}`;
-        const last = latest.get(r.id);
+    return visible
+      .map(([otherId, p]) => {
+        const newest = p.rows[0]; // rows are newest-first
+        const last = latest.get(otherId);
         return {
-          sortKey: last ? new Date(last.sent_at).getTime() : new Date(r.created_at).getTime(),
+          sortKey: last ? new Date(last.sent_at).getTime() : new Date(newest.created_at).getTime(),
           item: {
-            id: r.id,
-            name: `${other} · ${dateShort}`,
+            id: otherId,
+            name: p.name,
             lastMessage: last
               ? `${last.role !== 'system' && last.sender_id === user.id ? 'You: ' : ''}${last.content}`
-              : `${schedule.meta.subject || 'Consultation'} — no messages yet`,
+              : `${scheduleOf(newest).meta.subject || 'Consultation'} — no messages yet`,
             time: last ? formatMessageTime(last.sent_at, true) : 'New',
+            consultationIds: p.rows.map((r) => r.id),
           },
         };
       })
@@ -1931,20 +2121,20 @@ export async function getMessageThreadsAction(): Promise<MessageThreadItem[]> {
   }
 }
 
-/** All messages of a thread the signed-in user participates in. */
+/** All messages between the signed-in user and the other participant, across all their consultations. */
 export async function getMessagesForThreadAction(threadId: string): Promise<ThreadMessage[]> {
   try {
     const session = await requireSession();
     if ('error' in session) return [];
     const { db, user } = session;
 
-    const thread = await getThreadConsultation(db, threadId, user.id);
-    if (!thread) return [];
+    const pair = await getPairThread(db, threadId, user.id);
+    if (!pair) return [];
 
     const { data, error } = await db
       .from('messages')
       .select('id, conversation_or_thread_id, sender_id, role, content, sent_at')
-      .eq('conversation_or_thread_id', threadId)
+      .in('conversation_or_thread_id', pair.consultations.map((c) => c.id))
       .order('sent_at', { ascending: true });
     if (error || !data) return [];
     return (data as MessageRow[]).map((m) => toThreadMessage(m, user.id));
@@ -1970,11 +2160,13 @@ export async function sendDirectMessageAction(
     if ('error' in session) return { error: session.error };
     const { db, user, profile } = session;
 
-    const thread = await getThreadConsultation(db, threadId, user.id);
-    if (!thread) return { error: 'Conversation not found.' };
-    if (!MESSAGING_STATUSES.includes(thread.consultation.status)) {
+    const pair = await getPairThread(db, threadId, user.id);
+    if (!pair) return { error: 'Conversation not found.' };
+    const target = messageTargetConsultation(pair);
+    if (!target) {
       return { error: 'This consultation is closed, so new messages can no longer be sent.' };
     }
+    const thread = { consultation: target, role: (target.lawyer_id === user.id ? 'lawyer' : 'client') as 'lawyer' | 'client' };
     if (!(await ensureUserAccount(db, profile))) {
       return { error: 'We could not verify your account for messaging. Please sign in again.' };
     }
@@ -1982,7 +2174,8 @@ export async function sendDirectMessageAction(
     const { data, error } = await db
       .from('messages')
       .insert({
-        conversation_or_thread_id: threadId,
+        // Messages are filed under a consultation; the conversation view merges all of the pair's consultations.
+        conversation_or_thread_id: target.id,
         sender_id: user.id,
         // messages.role is constrained to user | assistant | system; the sender is identified by sender_id.
         role: 'user',
@@ -2005,7 +2198,8 @@ export async function sendDirectMessageAction(
       .eq('user_id', recipientId)
       .eq('type', 'new_message')
       .eq('is_read', false)
-      .eq('metadata->>threadId', threadId)
+      // From the recipient's side, the conversation id is the sender's user id.
+      .eq('metadata->>threadId', user.id)
       .limit(1);
     if (!unread || unread.length === 0) {
       await notifyUser(
@@ -2014,7 +2208,7 @@ export async function sendDirectMessageAction(
         'new_message',
         `New message from ${profile.full_name || (thread.role === 'lawyer' ? 'your attorney' : 'your client')}`,
         text.length > 140 ? `${text.slice(0, 137)}...` : text,
-        { threadId, consultationId: threadId, senderId: user.id }
+        { threadId: user.id, consultationId: target.id, senderId: user.id }
       );
     }
 
@@ -2024,6 +2218,186 @@ export async function sendDirectMessageAction(
   } catch (err) {
     console.error('[sendDirectMessageAction] error:', err);
     return { error: 'Your message could not be sent. Please try again.' };
+  }
+}
+
+// ─── Conversation banners: upcoming meeting & rate-your-lawyer prompt ─────────
+
+/** The meeting announcement appears this long before the scheduled start (and stays until it ends). */
+const MEETING_LEAD_MS = 15 * 60 * 1000;
+
+export interface ThreadMeetingAnnouncement {
+  consultationId: string;
+  startsAt: string;
+  endsAt: string;
+  /** e.g. "Today · 2:00 PM - 3:00 PM" */
+  scheduleLabel: string;
+  method: 'video' | 'audio';
+  meetingUrl: string | null;
+  subject: string;
+}
+
+export interface ThreadRatePrompt {
+  consultationId: string;
+  lawyerName: string;
+  dateLabel: string;
+}
+
+export interface ThreadContext {
+  meeting: ThreadMeetingAnnouncement | null;
+  ratePrompt: ThreadRatePrompt | null;
+}
+
+function consultationWindow(row: ConsultationRow): { start: number; end: number } | null {
+  if (!row.scheduled_start) return null;
+  const start = new Date(row.scheduled_start).getTime();
+  const end = row.scheduled_end ? new Date(row.scheduled_end).getTime() : start + 60 * 60 * 1000;
+  return Number.isFinite(start) ? { start, end: end > start ? end : start + 60 * 60 * 1000 } : null;
+}
+
+const isMeetingWindow = (w: { start: number; end: number }, now: number) =>
+  now >= w.start - MEETING_LEAD_MS && now < w.end;
+
+/**
+ * Creates a one-time "meeting starting soon" bell notification for each of the user's confirmed
+ * consultations that start within 15 minutes (or are in progress). Runs lazily whenever the
+ * user's notifications or conversations are loaded, so no scheduler is required.
+ */
+async function ensureMeetingNotifications(db: Db, userId: string): Promise<void> {
+  try {
+    const now = Date.now();
+    const { data } = await db
+      .from('consultations')
+      .select(`${CONSULTATION_COLUMNS}, lawyer_profiles(full_name), ${CLIENT_EMBED}`)
+      .or(`client_id.eq.${userId},lawyer_id.eq.${userId}`)
+      .eq('status', 'confirmed')
+      .gte('scheduled_start', new Date(now - 6 * 60 * 60 * 1000).toISOString())
+      .lte('scheduled_start', new Date(now + MEETING_LEAD_MS).toISOString());
+    const due = ((data ?? []) as unknown as Array<
+      ConsultationRow & { lawyer_profiles: { full_name: string } | null; client: ClientProfileEmbed | null }
+    >).filter((r) => {
+      const w = consultationWindow(r);
+      return !!w && isMeetingWindow(w, now);
+    });
+    if (due.length === 0) return;
+
+    const { data: existing } = await db
+      .from('notifications')
+      .select('metadata')
+      .eq('user_id', userId)
+      .eq('type', 'meeting_starting')
+      .in('metadata->>consultationId', due.map((r) => r.id));
+    const alreadyNotified = new Set(
+      ((existing ?? []) as Array<{ metadata: { consultationId?: string } | null }>).map((n) => n.metadata?.consultationId)
+    );
+
+    for (const r of due) {
+      if (alreadyNotified.has(r.id)) continue;
+      const isLawyer = r.lawyer_id === userId;
+      const other = isLawyer
+        ? r.client?.full_name?.trim() || 'your client'
+        : r.lawyer_profiles?.full_name || 'your attorney';
+      const w = consultationWindow(r)!;
+      const minutes = Math.max(0, Math.round((w.start - now) / 60000));
+      const when = minutes > 0 ? `starts in ${minutes} minute${minutes === 1 ? '' : 's'}` : 'has started';
+      const otherId = isLawyer ? r.client_id : r.lawyer_id;
+      const startLabel = formatClock(toManilaParts(r.scheduled_start!).minutes);
+      const endLabel = formatClock(toManilaParts(new Date(w.end).toISOString()).minutes);
+      await notifyUser(
+        db,
+        userId,
+        'meeting_starting',
+        'Consultation starting soon',
+        `Your ${r.method === 'audio' ? 'audio call' : 'video consultation'} with ${other} ${when} (${startLabel} - ${endLabel}). Open Messages to join the meeting.`,
+        { consultationId: r.id, threadId: otherId, meetingUrl: r.meeting_url }
+      );
+    }
+  } catch (err) {
+    console.warn('[ensureMeetingNotifications]', err);
+  }
+}
+
+/**
+ * Banners for a conversation:
+ *  - meeting: a confirmed consultation between the pair that starts within 15 minutes or is in
+ *    progress (with its Google Meet link to join);
+ *  - ratePrompt (clients only): the latest finished consultation with this lawyer that the client
+ *    hasn't rated yet.
+ */
+export async function getThreadContextAction(threadId: string): Promise<ThreadContext> {
+  const empty: ThreadContext = { meeting: null, ratePrompt: null };
+  try {
+    const session = await requireSession();
+    if ('error' in session) return empty;
+    const { db, user } = session;
+
+    const pair = await getPairThread(db, threadId, user.id);
+    if (!pair) return empty;
+    const now = Date.now();
+
+    // ── Upcoming / live meeting ──
+    let meeting: ThreadMeetingAnnouncement | null = null;
+    const live = pair.consultations
+      .filter((c) => c.status === 'confirmed')
+      .map((c) => ({ c, w: consultationWindow(c) }))
+      .filter((x): x is { c: ConsultationRow; w: { start: number; end: number } } => !!x.w && isMeetingWindow(x.w, now))
+      .sort((a, b) => a.w.start - b.w.start)[0];
+    if (live) {
+      await ensureMeetingNotifications(db, user.id);
+      const schedule = scheduleOf(live.c);
+      const startParts = toManilaParts(live.c.scheduled_start!);
+      const endParts = toManilaParts(new Date(live.w.end).toISOString());
+      const dayLabel = startParts.isoDate === todayInManila()
+        ? 'Today'
+        : `${MONTH_NAMES[schedule.date.monthIndex]} ${schedule.date.day}`;
+      meeting = {
+        consultationId: live.c.id,
+        startsAt: new Date(live.w.start).toISOString(),
+        endsAt: new Date(live.w.end).toISOString(),
+        scheduleLabel: `${dayLabel} · ${formatClock(startParts.minutes)} - ${formatClock(endParts.minutes)}`,
+        method: live.c.method === 'audio' ? 'audio' : 'video',
+        meetingUrl: live.c.meeting_url || null,
+        subject: schedule.meta.subject || 'Consultation',
+      };
+    }
+
+    // ── Rate this lawyer (client side only) ──
+    let ratePrompt: ThreadRatePrompt | null = null;
+    const finished = pair.consultations
+      .filter((c) => c.client_id === user.id)
+      .filter((c) => {
+        if (c.status === 'completed') return true;
+        const w = consultationWindow(c);
+        return c.status === 'confirmed' && !!w && w.end <= now;
+      })
+      .sort((a, b) => (consultationWindow(b)?.end ?? 0) - (consultationWindow(a)?.end ?? 0));
+    if (finished.length > 0) {
+      const { data: reviewed } = await db
+        .from('reviews')
+        .select('consultation_id')
+        .eq('client_id', user.id)
+        .in('consultation_id', finished.map((c) => c.id));
+      const ratedIds = new Set(((reviewed ?? []) as Array<{ consultation_id: string }>).map((r) => r.consultation_id));
+      const unrated = finished.find((c) => !ratedIds.has(c.id));
+      if (unrated) {
+        const { data: lawyer } = await db
+          .from('lawyer_profiles')
+          .select('full_name')
+          .eq('user_id', unrated.lawyer_id)
+          .maybeSingle();
+        const schedule = scheduleOf(unrated);
+        ratePrompt = {
+          consultationId: unrated.id,
+          lawyerName: lawyer?.full_name || 'your attorney',
+          dateLabel: `${MONTH_NAMES[schedule.date.monthIndex]} ${schedule.date.day}, ${schedule.date.year}`,
+        };
+      }
+    }
+
+    return { meeting, ratePrompt };
+  } catch (err) {
+    console.error('[getThreadContextAction]', err);
+    return empty;
   }
 }
 
@@ -2037,6 +2411,9 @@ export async function getUserNotificationsAction(
     const session = await requireSession();
     if ('error' in session) return [];
     const { db, user } = session;
+
+    // Surface "consultation starting soon" alerts on the bell (15 minutes before a confirmed meeting).
+    await ensureMeetingNotifications(db, user.id);
 
     const { data, error } = await db
       .from('notifications')

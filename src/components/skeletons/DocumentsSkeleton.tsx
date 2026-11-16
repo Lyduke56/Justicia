@@ -4,7 +4,7 @@ import React from 'react';
 
 export function DocumentsSkeleton() {
   return (
-    <div className="max-w-[1300px] mx-auto px-4 sm:px-8 py-6 space-y-8 animate-in fade-in duration-200">
+    <div className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-10 max-w-[1300px] mx-auto bg-[#E5D8CB] min-h-[calc(100vh-4rem)] space-y-8 animate-in fade-in duration-200">
       {/* Top Toolbar Skeleton */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         {/* + New Button Skeleton */}
