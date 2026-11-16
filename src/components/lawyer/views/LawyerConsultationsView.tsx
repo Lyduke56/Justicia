@@ -538,13 +538,14 @@ export function LawyerConsultationsView({
                     disabled={!hasConsultation && !isFiltered}
                     onClick={() => setSelectedDateKey(isFiltered ? null : key)}
                     title={hasConsultation ? (isFiltered ? 'Show all dates' : 'Show consultations on this date') : undefined}
-                    className={`relative w-7 h-7 rounded-full flex items-center justify-center mx-auto ${
-                      isFiltered || isSelectedDay ? 'border-2 border-[#C58B3C] font-bold' : ''
-                    } ${hasConsultation ? 'cursor-pointer hover:text-[#C58B3C]' : 'cursor-default'}`}
+                    aria-pressed={hasConsultation ? isFiltered : undefined}
+                    data-current={isSelectedDay}
+                    data-filtered={isFiltered}
+                    className="lawyer-consultations-calendar-day relative w-7 h-7 rounded-full flex items-center justify-center mx-auto"
                   >
                     {String(day).padStart(2, '0')}
                     {hasConsultation && !isSelectedDay && !isFiltered && (
-                      <span className="absolute bottom-0 w-1 h-1 rounded-full bg-[#C58B3C]" />
+                      <span className="lawyer-consultations-calendar-dot" />
                     )}
                   </button>
                 );
@@ -620,27 +621,16 @@ export function LawyerConsultationsView({
                 </div>
               </div>
 
-              {selectedConsultation.status === 'pending' ? (
-                <div className="lawyer-consultations-status-pill rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider bg-amber-400 text-[#23150F] shadow-sm shrink-0 self-start sm:self-auto border border-amber-500">
-                  PENDING YOUR APPROVAL
-                </div>
-              ) : selectedConsultation.status === 'confirmed' ? (
-                <div className="lawyer-consultations-status-pill neu-badge-green rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider text-white shrink-0 self-start sm:self-auto">
-                  CONFIRMED APPOINTMENT
-                </div>
-              ) : selectedConsultation.status === 'pending_payment' || selectedConsultation.status === 'payment_review' ? (
-                <div className="lawyer-consultations-status-pill rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider bg-[#D49E56] text-white shadow-sm shrink-0 self-start sm:self-auto">
-                  {selectedConsultation.statusLabel}
-                </div>
-              ) : (
-                <div className={`lawyer-consultations-status-pill rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-wider shrink-0 self-start sm:self-auto ${
-                  selectedConsultation.status === 'declined' || selectedConsultation.status === 'cancelled'
-                    ? 'bg-red-700 text-white'
-                    : 'bg-stone-300 text-stone-800'
-                }`}>
-                  {selectedConsultation.statusLabel}
-                </div>
-              )}
+              <div
+                className="lawyer-consultations-status-pill shrink-0 self-start sm:self-auto"
+                data-status={selectedConsultation.status}
+              >
+                {selectedConsultation.status === 'pending'
+                  ? 'PENDING YOUR APPROVAL'
+                  : selectedConsultation.status === 'confirmed'
+                    ? 'CONFIRMED APPOINTMENT'
+                    : selectedConsultation.statusLabel}
+              </div>
             </div>
 
             {/* Client Profile Sub-Card (Extruded Warm Peach Plate) */}
