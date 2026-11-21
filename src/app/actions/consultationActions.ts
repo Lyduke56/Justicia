@@ -2,6 +2,8 @@
 
 import { randomUUID } from 'crypto';
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
+import { emitLive, type LiveScope } from '@/lib/realtime/live';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 
@@ -291,6 +293,7 @@ async function notifyUser(
       is_read: false,
     });
     if (error) console.warn('[notifyUser]', type, error.message);
+    else signalLive([userId], ['notifications']);
   } catch (err) {
     console.warn('[notifyUser] unexpected', err);
   }
@@ -616,15 +619,46 @@ function summaryOf(date: CalendarDate, range: MinuteRange | null) {
   };
 }
 
-/** Mirrors the manual payment into public.payments (best effort; the JSON is the source of truth). */
+type LedgerStatus = 'pending' | 'paid' | 'failed' | 'refunded';
+
+/**
+ * Mirrors the manual payment into public.payments — one ledger row per
+ * consultation. A confirmed ("paid") payment becomes a lawyer sale with
+ * payout_status "pending"; the Earnings & Payouts tab reads from this table.
+ * Returns false when the row could not be written (the earnings loader
+ * re-syncs missing paid rows, so a transient failure is self-healing).
+ */
 async function syncPaymentLedger(
   db: Db,
   consultation: ConsultationRow,
   payment: PaymentDetails,
-  status: 'pending' | 'paid' | 'failed' | 'refunded'
-): Promise<void> {
+  status: LedgerStatus,
+  paidAtOverride?: string | null
+): Promise<boolean> {
   try {
-    if (!(await ensureProfile(db, consultation.lawyer_id))) return; // payee must have a profile row
+    // payer / payee must have profile rows (FK targets).
+    if (!(await ensureProfile(db, consultation.lawyer_id))) return false;
+    if (!(await ensureProfile(db, consultation.client_id))) return false;
+
+    const { data: existingRows } = await db
+      .from('payments')
+      .select('id, status, payout_status, paid_at')
+      .eq('consultation_id', consultation.id)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const existing = (existingRows?.[0] ?? null) as
+      | { id: string; status: LedgerStatus; payout_status: string | null; paid_at: string | null }
+      | null;
+
+    const nowIso = new Date().toISOString();
+    const keepPaidAt = status === 'paid' && existing?.status === 'paid' && existing.paid_at;
+    const payoutStatus =
+      status === 'paid'
+        ? existing?.status === 'paid' && existing.payout_status && existing.payout_status !== 'not_applicable'
+          ? existing.payout_status // never downgrade a released payout
+          : 'pending'
+        : 'not_applicable';
+
     const fields = {
       consultation_id: consultation.id,
       payer_id: consultation.client_id,
@@ -633,22 +667,44 @@ async function syncPaymentLedger(
       platform_fee: payment.platformFee,
       currency: 'PHP',
       status,
+      payout_status: payoutStatus,
       provider: 'manual_qr',
       provider_payment_id: payment.proofDocumentId,
-      paid_at: status === 'paid' ? new Date().toISOString() : null,
-      updated_at: new Date().toISOString(),
+      paid_at:
+        status === 'paid'
+          ? keepPaidAt
+            ? existing!.paid_at
+            : paidAtOverride || nowIso
+          : status === 'refunded'
+            ? existing?.paid_at ?? null
+            : null,
+      updated_at: nowIso,
     };
-    const { data: existing } = await db
-      .from('payments')
-      .select('id')
-      .eq('consultation_id', consultation.id)
-      .maybeSingle();
     const { error } = existing
       ? await db.from('payments').update(fields).eq('id', existing.id)
       : await db.from('payments').insert(fields);
-    if (error) console.warn('[syncPaymentLedger]', error.message);
+    if (error) {
+      console.error('[syncPaymentLedger]', status, consultation.id, error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.warn('[syncPaymentLedger] unexpected', err);
+    console.error('[syncPaymentLedger] unexpected', err);
+    return false;
+  }
+}
+
+/** Marks a consultation's paid ledger row as refunded (booking cancelled after payment). */
+async function markLedgerRefunded(db: Db, consultationId: string): Promise<void> {
+  try {
+    const { error } = await db
+      .from('payments')
+      .update({ status: 'refunded', payout_status: 'not_applicable', updated_at: new Date().toISOString() })
+      .eq('consultation_id', consultationId)
+      .eq('status', 'paid');
+    if (error) console.error('[markLedgerRefunded]', consultationId, error.message);
+  } catch (err) {
+    console.error('[markLedgerRefunded] unexpected', err);
   }
 }
 
@@ -879,10 +935,24 @@ async function grantDocumentAccess(
   return true;
 }
 
+/**
+ * Tells the affected users' open tabs to re-fetch `scopes` (Supabase Realtime
+ * broadcast). Sent after the response so it never slows the action down.
+ */
+function signalLive(userIds: Array<string | null | undefined>, scopes: LiveScope[]): void {
+  try {
+    after(() => emitLive(userIds, scopes));
+  } catch {
+    // Outside a request scope (scripts / tests): send directly.
+    void emitLive(userIds, scopes);
+  }
+}
+
 function revalidateConsultationPaths() {
   try {
     revalidatePath('/client/consultations');
     revalidatePath('/lawyer/consultations');
+    revalidatePath('/lawyer/earnings');
     revalidatePath('/client/documents');
   } catch {
     // revalidatePath is a no-op outside a request scope
@@ -1101,6 +1171,7 @@ export async function bookConsultationAction(input: BookConsultationInput): Prom
     );
 
     revalidateConsultationPaths();
+    signalLive([user.id, lawyerId], ['consultations', 'documents']);
 
     return {
       success: true,
@@ -1206,6 +1277,9 @@ export async function cancelConsultationAction(
       return { error: 'We could not cancel this consultation. Please refresh and try again.' };
     }
 
+    // A paid booking that is cancelled is owed back to the client — remove it from the lawyer's sales.
+    if (wasPaid) await markLedgerRefunded(db, consultationId);
+
     // Revoke document access unless another active booking with the same lawyer still shares the file.
     await revokeSharedDocuments(db, consultation);
 
@@ -1220,6 +1294,7 @@ export async function cancelConsultationAction(
     );
 
     revalidateConsultationPaths();
+    signalLive([user.id, consultation.lawyer_id], ['consultations', 'payments', 'documents', 'messages']);
     return { success: true };
   } catch (err) {
     console.error('[cancelConsultationAction] unexpected error:', err);
@@ -1264,6 +1339,7 @@ export async function createDocumentFolderAction(
 
     revalidatePath('/client/documents');
     revalidatePath('/lawyer/documents');
+    signalLive([user.id], ['documents']);
     return {
       success: true,
       folder: { id: folderId, name, kind: 'owned', isRecentlyCreated: true, files: [] },
@@ -1349,6 +1425,7 @@ export async function uploadDocumentFileAction(
 
     revalidatePath('/client/documents');
     revalidatePath('/lawyer/documents');
+    signalLive([user.id], ['documents']);
     return {
       success: true,
       file: {
@@ -1389,6 +1466,7 @@ export async function deleteDocumentFileAction(
 
     revalidatePath('/client/documents');
     revalidatePath('/lawyer/documents');
+    signalLive([user.id], ['documents']);
     return { success: true };
   } catch (err) {
     console.error('[deleteDocumentFileAction] error:', err);
@@ -1428,6 +1506,7 @@ export async function deleteDocumentFolderAction(
 
     revalidatePath('/client/documents');
     revalidatePath('/lawyer/documents');
+    signalLive([user.id], ['documents']);
     return { success: true };
   } catch (err) {
     console.error('[deleteDocumentFolderAction] error:', err);
@@ -1464,6 +1543,7 @@ export async function renameDocumentFolderAction(
 
     revalidatePath('/client/documents');
     revalidatePath('/lawyer/documents');
+    signalLive([user.id], ['documents']);
     return { success: true, newName: trimmed };
   } catch (err) {
     console.error('[renameDocumentFolderAction] error:', err);
@@ -1906,6 +1986,7 @@ export async function respondToConsultationAction(
     revalidateConsultationPaths();
     revalidatePath('/client/messages');
     revalidatePath('/lawyer/messages');
+    signalLive([user.id, consultation.client_id], ['consultations', 'messages', 'documents']);
     return { success: true, newStatus: response === 'approved' ? 'pending_payment' : 'declined' };
   } catch (err) {
     console.error('[respondToConsultationAction] error:', err);
@@ -2214,6 +2295,7 @@ export async function sendDirectMessageAction(
 
     revalidatePath('/client/messages');
     revalidatePath('/lawyer/messages');
+    signalLive([user.id, recipientId], ['messages']);
     return { success: true, message: toThreadMessage(data as MessageRow, user.id) };
   } catch (err) {
     console.error('[sendDirectMessageAction] error:', err);
@@ -2597,6 +2679,7 @@ export async function submitPaymentProofAction(
     );
 
     revalidateConsultationPaths();
+    signalLive([user.id, consultation.lawyer_id], ['consultations', 'payments', 'documents', 'messages']);
     return { success: true, consultation: result };
   } catch (err) {
     console.error('[submitPaymentProofAction] error:', err);
@@ -2683,7 +2766,17 @@ export async function reviewPaymentAction(
 
     const updatedRow = updated as ConsultationRow;
     const updatedPayment = paymentOf(updatedRow, meta, schedule.range, 0, platformFee);
-    await syncPaymentLedger(db, updatedRow, updatedPayment, decision === 'confirm' ? 'paid' : 'failed');
+    // Record the sale (confirm) or the declined proof (reject) in the payments ledger.
+    const recorded = await syncPaymentLedger(
+      db,
+      updatedRow,
+      updatedPayment,
+      decision === 'confirm' ? 'paid' : 'failed',
+      nowIso
+    );
+    if (!recorded && decision === 'confirm') {
+      console.error('[reviewPaymentAction] payment confirmed but ledger write failed; earnings loader will re-sync', consultationId);
+    }
 
     if (decision === 'confirm') {
       await postSystemMessage(
@@ -2720,6 +2813,7 @@ export async function reviewPaymentAction(
     revalidateConsultationPaths();
     revalidatePath('/client/messages');
     revalidatePath('/lawyer/messages');
+    signalLive([user.id, consultation.client_id], ['consultations', 'payments', 'messages']);
     return { success: true, newStatus: decision === 'confirm' ? 'confirmed' : 'pending_payment' };
   } catch (err) {
     console.error('[reviewPaymentAction] error:', err);
@@ -2786,6 +2880,7 @@ export async function lawyerCancelConsultationAction(
       return { error: 'We could not cancel this consultation. Please refresh and try again.' };
     }
 
+    if (payment.state === 'verified') await markLedgerRefunded(db, consultationId);
     await revokeSharedDocuments(db, consultation);
     const when = `${schedule.displayDate.replace('TODAY, ', '')} (${schedule.timeSlot})`;
     await postSystemMessage(db, consultationId, user.id, `${lawyerName} cancelled this consultation. Reason: ${text}`);
@@ -2800,6 +2895,7 @@ export async function lawyerCancelConsultationAction(
     );
 
     revalidateConsultationPaths();
+    signalLive([user.id, consultation.client_id], ['consultations', 'payments', 'documents', 'messages']);
     return { success: true };
   } catch (err) {
     console.error('[lawyerCancelConsultationAction] error:', err);
@@ -2850,5 +2946,303 @@ export async function getDocumentAccessUrlAction(
   } catch (err) {
     console.error('[getDocumentAccessUrlAction] error:', err);
     return { error: 'This file could not be opened. Please try again.' };
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// LAWYER: EARNINGS & PAYOUTS (sales ledger = public.payments)
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// A sale is recorded when the lawyer confirms a client's proof of payment
+// (PENDING PAYMENT → CONFIRMED, see reviewPaymentAction). The ledger row keeps
+// the gross amount paid by the client and the platform fee; the lawyer's
+// earnings are amount − platform_fee. Cancelled paid bookings are refunded and
+// drop out of the totals.
+
+export type EarningsInquiryStatus =
+  | 'pendingApproval'
+  | 'pendingPayment'
+  | 'upcoming'
+  | 'completed'
+  | 'cancelled';
+
+export interface EarningsInquiry {
+  id: string;
+  name: string;
+  /** MM/DD/YYYY (Manila) */
+  date: string;
+  area: string;
+  status: EarningsInquiryStatus;
+  /** Epoch ms of the session start, for sorting. */
+  startMs: number;
+}
+
+export interface EarningsTransaction {
+  id: string;
+  consultationId: string;
+  clientName: string;
+  area: string;
+  /** MM/DD/YYYY of the consultation session (Manila). */
+  sessionDate: string;
+  /** MM/DD/YYYY the payment was confirmed (Manila). */
+  paidDate: string;
+  /** 0-based month (Manila) the payment was confirmed. */
+  paidMonth: number;
+  /** Epoch ms the payment was confirmed, for sorting. */
+  paidMs: number;
+  gross: number;
+  platformFee: number;
+  net: number;
+  payoutStatus: string;
+}
+
+export interface LawyerEarningsData {
+  year: number;
+  /** 0-based current month in Manila. */
+  currentMonth: number;
+  /** Net earnings per month of `year` (index 0 = January). */
+  monthlyEarnings: number[];
+  /** Net earnings of December of the previous year (January comparison). */
+  previousDecemberEarnings: number;
+  /** Paid (confirmed / completed) consultations per session month of `year`. */
+  monthlyConsultations: number[];
+  todayScheduled: number;
+  pendingRequests: number;
+  pendingClients: number;
+  completedSessions: number;
+  reviewCount: number;
+  /** 0–100, or null when there are no requests yet. */
+  responseRate: number | null;
+  /** Paid sales confirmed in `year`, newest first. */
+  transactions: EarningsTransaction[];
+  inquiries: EarningsInquiry[];
+}
+
+interface PaymentLedgerRow {
+  id: string;
+  consultation_id: string;
+  amount: number | string;
+  platform_fee: number | string;
+  status: LedgerStatus;
+  payout_status: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
+function toUsDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-');
+  return `${m}/${d}/${y}`;
+}
+
+const roundMoney = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Everything the Earnings & Payouts tab needs for the signed-in lawyer.
+ * Also backfills the sales ledger: every consultation whose payment was
+ * confirmed gets a "paid" payments row, and paid rows of cancelled bookings
+ * are marked refunded.
+ */
+export async function getLawyerEarningsAction(): Promise<
+  { success: true; data: LawyerEarningsData } | { success?: false; error: string }
+> {
+  try {
+    const session = await requireLawyerSession();
+    if ('error' in session) return { error: session.error };
+    const { db, user } = session;
+
+    const [consultRes, selfRes, platformFee] = await Promise.all([
+      db
+        .from('consultations')
+        .select(`${CONSULTATION_COLUMNS}, practice_area, updated_at, ${CLIENT_EMBED}`)
+        .eq('lawyer_id', user.id),
+      db
+        .from('lawyer_profiles')
+        .select('full_name, roll_number, ibp_chapter, fee_standard_60min, practice_areas, rating_count')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      getPlatformFee(db),
+    ]);
+    if (consultRes.error) {
+      console.error('[getLawyerEarningsAction] consultations', consultRes.error.message);
+      return { error: 'We could not load your earnings right now. Please try again.' };
+    }
+
+    type Row = ConsultationRow & {
+      practice_area: string | null;
+      updated_at: string | null;
+      client: ClientProfileEmbed | null;
+    };
+    const rows = (consultRes.data ?? []) as unknown as Row[];
+    const self = selfRes.data as
+      | (LawyerSelfRow & { practice_areas: string[] | null; rating_count: number | null })
+      | null;
+    const defaultArea = self?.practice_areas?.[0] || 'General Consultation';
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    // ── 1. Read the ledger and backfill missing / stale rows ──
+    const readLedger = async () => {
+      const { data, error } = await db
+        .from('payments')
+        .select('id, consultation_id, amount, platform_fee, status, payout_status, paid_at, created_at')
+        .eq('payee_id', user.id);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as PaymentLedgerRow[];
+    };
+
+    let ledger = await readLedger();
+    const paidIds = new Set(ledger.filter((p) => p.status === 'paid').map((p) => p.consultation_id));
+    let changed = false;
+
+    for (const row of rows) {
+      const { meta, range } = scheduleOf(row);
+      const payment = paymentOf(row, meta, range, Number(self?.fee_standard_60min ?? 0), platformFee);
+      const isSale =
+        (row.status === 'confirmed' || row.status === 'completed') && payment.state === 'verified';
+      if (isSale && !paidIds.has(row.id)) {
+        const paidAt =
+          meta.paymentProof?.reviewedAt || meta.confirmedAt || row.updated_at || row.created_at;
+        if (await syncPaymentLedger(db, row, payment, 'paid', paidAt)) changed = true;
+      } else if ((row.status === 'cancelled' || row.status === 'declined') && paidIds.has(row.id)) {
+        await markLedgerRefunded(db, row.id);
+        changed = true;
+      }
+    }
+    if (changed) ledger = await readLedger();
+
+    // ── 2. Monthly sales ──
+    const today = todayInManila();
+    const year = Number(today.slice(0, 4));
+    const currentMonth = Number(today.slice(5, 7)) - 1;
+    const monthlyEarnings = Array<number>(12).fill(0);
+    let previousDecemberEarnings = 0;
+    const transactions: EarningsTransaction[] = [];
+
+    for (const p of ledger) {
+      if (p.status !== 'paid') continue;
+      const paidTs = p.paid_at || p.created_at;
+      const paidIso = toManilaParts(paidTs).isoDate;
+      const paidYear = Number(paidIso.slice(0, 4));
+      const paidMonth = Number(paidIso.slice(5, 7)) - 1;
+      const gross = Number(p.amount) || 0;
+      const fee = Number(p.platform_fee) || 0;
+      const net = roundMoney(Math.max(0, gross - fee));
+
+      if (paidYear === year - 1 && paidMonth === 11) previousDecemberEarnings += net;
+      if (paidYear !== year) continue;
+      monthlyEarnings[paidMonth] += net;
+
+      const consultation = byId.get(p.consultation_id);
+      const schedule = consultation ? scheduleOf(consultation) : null;
+      transactions.push({
+        id: p.id,
+        consultationId: p.consultation_id,
+        clientName: consultation?.client?.full_name?.trim() || consultation?.client?.email || 'Client',
+        area: consultation?.practice_area || defaultArea,
+        sessionDate: schedule ? toUsDate(toIsoDate(schedule.date)) : '—',
+        paidDate: toUsDate(paidIso),
+        paidMonth,
+        paidMs: new Date(paidTs).getTime(),
+        gross: roundMoney(gross),
+        platformFee: roundMoney(fee),
+        net,
+        payoutStatus: p.payout_status || 'pending',
+      });
+    }
+    transactions.sort((a, b) => b.paidMs - a.paidMs);
+
+    // ── 3. Consultation metrics & inquiries ──
+    const now = Date.now();
+    const monthlyConsultations = Array<number>(12).fill(0);
+    let todayScheduled = 0;
+    let pendingRequests = 0;
+    const pendingClientIds = new Set<string>();
+    let completedSessions = 0;
+    let responded = 0;
+    let requestsConsidered = 0;
+    const inquiries: EarningsInquiry[] = [];
+
+    for (const row of rows) {
+      const { meta, date, range, startMs } = scheduleOf(row);
+      const isoDate = toIsoDate(date);
+      const endMs = row.scheduled_end
+        ? new Date(row.scheduled_end).getTime()
+        : startMs + (range ? range.endMinutes - range.startMinutes : 60) * 60 * 1000;
+      const paid = row.status === 'confirmed' || row.status === 'completed';
+      const isDone = row.status === 'completed' || (row.status === 'confirmed' && endMs < now);
+
+      if (paid && date.year === year) monthlyConsultations[date.monthIndex] += 1;
+      if (paid && isoDate === today) todayScheduled += 1;
+      if (row.status === 'pending') {
+        pendingRequests += 1;
+        pendingClientIds.add(row.client_id);
+      }
+      if (isDone) completedSessions += 1;
+
+      // Response rate: requests the lawyer answered (approved or declined) out of
+      // all requests that needed an answer. Ignored: requests the client withdrew
+      // before any response, and pending requests whose session is still ahead
+      // (the lawyer can still answer them). Pending requests whose time passed
+      // without an answer count as missed.
+      const answered =
+        ['awaiting_client_confirmation', 'confirmed', 'completed', 'declined'].includes(row.status) ||
+        !!meta.approvedAt ||
+        !!meta.declinedAt;
+      const withdrawnUnanswered = row.status === 'cancelled' && !answered;
+      const stillOpen = row.status === 'pending' && startMs > now;
+      if (!withdrawnUnanswered && !stillOpen) {
+        requestsConsidered += 1;
+        if (answered) responded += 1;
+      }
+
+      let status: EarningsInquiryStatus;
+      switch (row.status) {
+        case 'pending':
+          status = 'pendingApproval';
+          break;
+        case 'awaiting_client_confirmation':
+          status = 'pendingPayment';
+          break;
+        case 'confirmed':
+          status = isDone ? 'completed' : 'upcoming';
+          break;
+        case 'completed':
+          status = 'completed';
+          break;
+        default:
+          status = 'cancelled';
+      }
+      inquiries.push({
+        id: row.id,
+        name: row.client?.full_name?.trim() || meta.payment?.payerName || row.client?.email || 'Client',
+        date: toUsDate(isoDate),
+        area: row.practice_area || defaultArea,
+        status,
+        startMs,
+      });
+    }
+    inquiries.sort((a, b) => b.startMs - a.startMs);
+
+    return {
+      success: true,
+      data: {
+        year,
+        currentMonth,
+        monthlyEarnings: monthlyEarnings.map(roundMoney),
+        previousDecemberEarnings: roundMoney(previousDecemberEarnings),
+        monthlyConsultations,
+        todayScheduled,
+        pendingRequests,
+        pendingClients: pendingClientIds.size,
+        completedSessions,
+        reviewCount: Number(self?.rating_count ?? 0) || 0,
+        responseRate:
+          requestsConsidered > 0 ? Math.round((responded / requestsConsidered) * 100) : null,
+        transactions,
+        inquiries,
+      },
+    };
+  } catch (err) {
+    console.error('[getLawyerEarningsAction] error:', err);
+    return { error: 'We could not load your earnings right now. Please try again.' };
   }
 }

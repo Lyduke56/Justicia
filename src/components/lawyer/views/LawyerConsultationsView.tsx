@@ -6,13 +6,14 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
 import { useReducedMotionPreference } from '@/components/lawyer/useReducedMotionPreference';
 import {
-  getLawyerConsultationsAction,
   respondToConsultationAction,
   reviewPaymentAction,
   lawyerCancelConsultationAction,
   getDocumentAccessUrlAction,
 } from '@/app/actions/consultationActions';
 import type { LawyerConsultation } from '@/app/actions/consultationActions';
+import { fetchLive } from '@/lib/live/fetchLive';
+import { useLiveRefresh } from '@/components/live/LiveProvider';
 import { ConsultationDetailsModal } from '@/components/shared/ConsultationDetailsModal';
 import type { ConsultationDetailsModalProps } from '@/components/shared/ConsultationDetailsModal';
 import { ConsultationDecisionModal } from '@/components/lawyer/ConsultationDecisionModal';
@@ -238,7 +239,7 @@ export function LawyerConsultationsView({
 
   // Fetch the signed-in lawyer's consultations (identity is resolved server-side).
   const loadConsultations = useCallback(() => {
-    return getLawyerConsultationsAction()
+    return fetchLive('lawyer-consultations')
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
         setDbConsultations(list);
@@ -246,12 +247,18 @@ export function LawyerConsultationsView({
           current && list.some((c) => c.id === current) ? current : list[0]?.id ?? null
         );
       })
+      .catch(() => {
+        // Keep showing the last loaded list; the next live refresh retries.
+      })
       .finally(() => setLoadingConsultations(false));
   }, []);
 
   useEffect(() => {
     loadConsultations();
   }, [loadConsultations, lawyerUserId]);
+
+  // New requests, payments and cancellations appear without reopening the tab.
+  useLiveRefresh(['consultations', 'payments'], loadConsultations, { fallbackMs: 30000 });
 
   const isDemoPreview = !!lawyerUserId?.startsWith('demo-') && !loadingConsultations && dbConsultations.length === 0;
   const consultations = isDemoPreview ? PREVIEW_CONSULTATIONS : dbConsultations;
