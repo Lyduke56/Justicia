@@ -1,0 +1,171 @@
+/* The same parchment, light direction, and inset/raised relationship as the lawyer portal. */
+.admin-portal {
+  --admin-paper: #e5d8cb;
+  --admin-ink: #341512;
+  --admin-warm: rgba(211, 151, 88, 0.3);
+  --admin-raised: -5px -5px 10px rgba(252, 238, 223, 0.85),
+    5px 5px 13px rgba(206, 194, 183, 0.72),
+    inset 1px 1px 2px rgba(252, 238, 223, 0.3),
+    inset -1px -1px 2px rgba(206, 194, 183, 0.5);
+  --admin-recessed: 1px 1px 2px rgba(252, 238, 223, 0.3),
+    -1px -1px 2px rgba(206, 194, 183, 0.5),
+    inset -5px -5px 10px rgba(252, 238, 223, 0.78),
+    inset 5px 5px 13px rgba(206, 194, 183, 0.68);
+  --admin-pressed: inset 3px 3px 7px rgba(177, 160, 146, 0.55),
+    inset -3px -3px 7px rgba(252, 238, 223, 0.8);
+  background: var(--admin-paper);
+  color: var(--admin-ink);
+  font-family: var(--font-lora), Georgia, serif;
+}
+
+.admin-portal .admin-content { background: var(--admin-paper); }
+.admin-portal .admin-page {
+  width: 100%;
+  max-width: 1280px;
+  margin-inline: auto;
+  padding: 32px clamp(20px, 3vw, 48px) 48px;
+}
+.admin-page > * + * { margin-top: 28px; }
+.admin-page > .sr-only:first-child + * { margin-top: 0; }
+.admin-portal .admin-surface,
+.admin-portal .admin-inset,
+.admin-portal .admin-metric {
+  background: var(--admin-paper);
+  border: 0;
+  border-radius: 16px;
+  box-shadow: var(--admin-raised);
+}
+.admin-portal .admin-inset,
+.admin-portal .admin-metric { box-shadow: var(--admin-recessed); }
+.admin-portal .admin-plate {
+  background: var(--admin-warm);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: var(--admin-raised);
+  color: var(--admin-ink);
+}
+.admin-portal .admin-section-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  background: var(--admin-warm);
+  box-shadow: var(--admin-raised);
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+.admin-portal .admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+.admin-portal .admin-filters { display: flex; flex-wrap: wrap; gap: 12px; }
+.admin-portal .admin-control,
+.admin-portal .admin-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--admin-paper);
+  box-shadow: var(--admin-raised);
+  color: var(--admin-ink);
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  transition: box-shadow 140ms ease, background-color 140ms ease;
+}
+.admin-portal .admin-control:hover:not(:disabled),
+.admin-portal .admin-filter:hover { background: var(--admin-warm); }
+.admin-portal .admin-control:active:not(:disabled),
+.admin-portal .admin-filter[aria-pressed="true"] {
+  background: var(--admin-warm);
+  box-shadow: var(--admin-pressed);
+}
+.admin-portal .admin-primary {
+  background: #4a2e25;
+  color: #e5d8cb;
+  box-shadow: 3px 3px 8px rgba(52, 21, 18, 0.25), inset 1px 1px 2px rgba(252, 238, 223, 0.2);
+}
+.admin-portal .admin-primary:hover:not(:disabled) { background: #341512; }
+.admin-portal .admin-primary:active:not(:disabled) {
+  background: #341512;
+  box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.4);
+}
+.admin-portal .admin-danger { color: #922f25; }
+.admin-portal .admin-danger:hover:not(:disabled) { background: #e4c5b9; }
+.admin-portal .admin-metric:hover { box-shadow: var(--admin-pressed); }
+.admin-portal .admin-control { flex-shrink: 0; }
+.admin-portal .admin-choice {
+  background: var(--admin-paper);
+  box-shadow: var(--admin-raised);
+  border: 0;
+}
+.admin-portal .admin-choice:has(input:checked) {
+  background: var(--admin-warm);
+  box-shadow: var(--admin-pressed);
+}
+.admin-portal .admin-field {
+  min-height: 42px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--admin-paper);
+  box-shadow: var(--admin-recessed);
+  color: var(--admin-ink);
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 14px;
+}
+.admin-portal .admin-field::placeholder { color: #75604f; opacity: 1; }
+.admin-portal :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid #8c6020;
+  outline-offset: 4px;
+}
+.admin-portal label:has(input:focus-visible) { outline: 2px solid #8c6020; outline-offset: 4px; }
+.admin-portal button:disabled { opacity: 0.55; cursor: not-allowed; }
+.admin-portal .admin-nav-link[aria-current="page"] {
+  background: var(--admin-paper);
+  color: var(--admin-ink);
+  box-shadow: var(--admin-pressed);
+}
+.admin-portal .admin-table {
+  /* Contain visually hidden column labels inside the horizontal table scroller. */
+  position: relative;
+  font-family: var(--font-inter), Arial, sans-serif;
+}
+.admin-portal .admin-table thead,
+.admin-portal .admin-table thead tr {
+  background: var(--admin-warm);
+  color: var(--admin-ink);
+  border-color: #c8b59e;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.admin-portal .admin-table th { font-weight: 600; }
+.admin-portal .admin-table tbody tr:hover { background: rgba(252, 238, 223, 0.35); }
+.admin-portal .admin-table td { font-size: 13px; }
+.admin-portal .admin-section-title { font-family: var(--font-lora), Georgia, serif; font-size: 18px; font-weight: 600; }
+.admin-portal .admin-search { flex: 1 1 240px; min-width: 0; }
+.admin-portal .admin-drawer { background: var(--admin-paper); }
+.admin-portal .admin-divider { border-color: #c8b59e; }
+.admin-content { scrollbar-color: #c8b59e #e5d8cb; }
+.admin-content::-webkit-scrollbar-track { background: #e5d8cb; }
+.admin-content::-webkit-scrollbar-thumb { background: #c8b59e; }
+@media (max-width: 639px) {
+  .admin-portal .admin-page { padding: 24px 16px 36px; }
+  .admin-page > * + * { margin-top: 24px; }
+  .admin-portal .admin-control,
+  .admin-portal .admin-filter { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-portal .client-view-enter { animation: none; }
+  .admin-portal .admin-control,
+  .admin-portal .admin-filter { transition: none; }
+}
