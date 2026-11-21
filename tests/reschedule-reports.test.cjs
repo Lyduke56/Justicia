@@ -446,6 +446,12 @@ function fixture({ now = '2026-11-21T02:00:00Z' } = {}) {
     return mod;
   };
   function sandboxRequire(name) {
+    if (name === '@/lib/account/preferences') {
+      const mod = {};
+      const source = ts.transpileModule(fs.readFileSync('src/lib/account/preferences.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+      vm.runInNewContext(source, { exports: mod });
+      return mod;
+    }
     if (name === 'crypto') return crypto;
     if (name === 'next/cache') return { revalidatePath() {} };
     if (name === 'next/server') return { after: (fn) => fn() };
