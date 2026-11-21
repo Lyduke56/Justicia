@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { reviewLawyerApplicationAction, type ReviewDecision } from '@/app/actions/adminLawyerReview';
@@ -37,9 +37,11 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
   const router = useRouter();
   const [lawyers, setLawyers] = useState<LawyerQueueItem[]>(initialLawyers);
 
-  useEffect(() => {
+  const [previousLawyers, setPreviousLawyers] = useState(initialLawyers);
+  if (initialLawyers !== previousLawyers) {
+    setPreviousLawyers(initialLawyers);
     setLawyers(initialLawyers);
-  }, [initialLawyers]);
+  }
   const [activeTab, setActiveTab] = useState<TabKey>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -156,7 +158,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
           </div>
           <button
             onClick={() => setNotification(null)}
-            className="text-xs font-semibold uppercase tracking-wider hover:opacity-70 p-1"
+            className="admin-button text-xs font-semibold uppercase tracking-wider hover:opacity-70 p-1"
           >
             Dismiss
           </button>
@@ -176,7 +178,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
             <span>Pending Review</span>
             {counts.pending > 0 && (
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'pending' ? 'bg-[#23150F] text-[#C58B3C]' : 'bg-[#C58B3C] text-white'
+                activeTab === 'pending' ? 'bg-[#23150F] text-[#80501F]' : 'bg-[#C58B3C] text-white'
               }`}>
                 {counts.pending}
               </span>
@@ -238,7 +240,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
             className="admin-field w-full px-4 py-2.5 pl-9 text-xs text-[#34150F] placeholder-[#9E8E7D] focus:outline-none focus:ring-2 focus:ring-[#C58B3C]/40 transition-all"
           />
           <svg
-            className="w-4 h-4 text-[#7D6855] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            className="w-4 h-4 text-[#705744] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -301,16 +303,16 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                         </h2>
                         {/* Status Badge */}
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+                          className={`admin-status ${
                             isApproved
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              ? 'admin-status-success'
                               : isLawyerPending
                               ? 'bg-amber-50 text-amber-800 border-amber-300'
                               : isNeedsInfo
-                              ? 'bg-orange-50 text-orange-800 border-orange-300'
+                              ? 'admin-status-info'
                               : isRejected
-                              ? 'bg-red-50 text-red-800 border-red-200'
-                              : 'bg-gray-100 text-gray-700 border-gray-300'
+                              ? 'admin-status-danger'
+                              : 'admin-status-neutral'
                           }`}
                         >
 
@@ -328,7 +330,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                         </span>
                       </div>
 
-                      <p className="text-xs text-[#7D6855] mt-0.5 flex items-center gap-3 flex-wrap">
+                      <p className="text-xs text-[#705744] mt-0.5 flex items-center gap-3 flex-wrap">
                         <span>{lawyer.email}</span>
                         {lawyer.submitted_at && (
                           <span>
@@ -352,12 +354,12 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                       ROLL #{lawyer.roll_number || 'PENDING'}
                     </span>
                     {lawyer.ibp_chapter && (
-                      <span className="px-3 py-1.5 rounded-xl bg-[#E8DCCB] text-[#5C4535] text-xs font-semibold">
+                      <span className="admin-plate px-3 py-1.5 text-[#5C4535] text-xs font-semibold">
                         {lawyer.ibp_chapter}
                       </span>
                     )}
                     {lawyer.bar_passer_year && (
-                      <span className="px-3 py-1.5 rounded-xl bg-[#E8DCCB] text-[#5C4535] text-xs font-semibold">
+                      <span className="admin-plate px-3 py-1.5 text-[#5C4535] text-xs font-semibold">
                         Bar Passer: {lawyer.bar_passer_year}
                       </span>
                     )}
@@ -368,7 +370,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                 <div className="admin-plate grid grid-cols-1 md:grid-cols-3 gap-4 p-4 text-xs">
                   {/* Practice Areas */}
                   <div className="space-y-1.5">
-                    <span className="font-semibold text-[#7D6855] uppercase tracking-wider text-[10px]">
+                    <span className="font-semibold text-[#705744] uppercase tracking-wider text-[10px]">
                       Practice Areas
                     </span>
                     <div className="flex flex-wrap gap-1.5">
@@ -382,14 +384,14 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                           </span>
                         ))
                       ) : (
-                        <span className="text-[#A69584]">Not specified</span>
+                        <span className="text-[#806955]">Not specified</span>
                       )}
                     </div>
                   </div>
 
                   {/* Languages & Experience */}
                   <div className="space-y-1.5">
-                    <span className="font-semibold text-[#7D6855] uppercase tracking-wider text-[10px]">
+                    <span className="font-semibold text-[#705744] uppercase tracking-wider text-[10px]">
                       Background & Languages
                     </span>
                     <p className="text-[#34150F]">
@@ -402,7 +404,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
 
                   {/* Rates */}
                   <div className="space-y-1.5">
-                    <span className="font-semibold text-[#7D6855] uppercase tracking-wider text-[10px]">
+                    <span className="font-semibold text-[#705744] uppercase tracking-wider text-[10px]">
                       Consultation Rates
                     </span>
                     <p className="text-[#34150F]">
@@ -437,7 +439,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                 <div className="flex items-center justify-between pt-3 border-t border-[#E8DCCB]/80 flex-wrap gap-3">
                   <Link
                     href={`/admin/lawyers/${lawyer.user_id}`}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#C58B3C] hover:text-[#99431E] hover:underline"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#80501F] hover:text-[#99431E] hover:underline"
                   >
                     <span>View Full Credential Dossier</span>
                     <span>→</span>
@@ -498,7 +500,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
           >
             <div className="flex items-center justify-between pb-3 border-b border-[#D8CAAD]">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#C58B3C]">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#80501F]">
                   Verification Review Decision
                 </span>
                 <h3 className="font-lora text-lg font-semibold text-[#34150F]">
@@ -511,14 +513,15 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
               </div>
               <button
                 onClick={() => setModalState({ open: false, lawyer: null, decision: 'approved', note: '' })}
-                className="text-[#7D6855] hover:text-[#34150F] p-1 font-bold text-lg"
+                aria-label="Close verification decision"
+                className="admin-button p-1 font-bold text-lg"
               >
                 ✕
               </button>
             </div>
 
             <div className="space-y-3 text-xs text-[#5C4535]">
-              <div className="p-3.5 rounded-xl bg-[#F5EDE2] border border-[#E8DCCB] space-y-1">
+              <div className="admin-inset p-3.5 space-y-1">
                 <p>
                   <strong className="text-[#34150F]">Applicant:</strong> {modalState.lawyer.full_name}
                 </p>
@@ -539,10 +542,11 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
 
               {modalState.decision === 'needs_resubmission' && (
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-[#34150F] block">
+                  <label htmlFor="verification-info-note" className="font-semibold text-[#34150F] block">
                     Message / Instructions for Lawyer:
                   </label>
                   <textarea
+                    id="verification-info-note"
                     rows={3}
                     value={modalState.note}
                     onChange={(e) => setModalState((prev) => ({ ...prev, note: e.target.value }))}
@@ -557,24 +561,25 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
 
               {modalState.decision === 'rejected' && (
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-[#34150F] block">
+                  <label htmlFor="verification-rejection-note" className="font-semibold text-[#34150F] block">
                     Reason for Non-Approval:
                   </label>
                   <textarea
+                    id="verification-rejection-note"
                     rows={3}
                     value={modalState.note}
                     onChange={(e) => setModalState((prev) => ({ ...prev, note: e.target.value }))}
                     placeholder="e.g. Roll number does not match Supreme Court / IBP database records..."
                     className="admin-field w-full p-3 text-xs text-[#34150F] focus:outline-none focus:ring-2 focus:ring-red-400"
                   />
-                  <p className="text-[11px] text-[#7D6855]">
+                  <p className="text-[11px] text-[#705744]">
                     The applicant will see this reason on their Application Status page.
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#D8CAAD]">
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-[#D8CAAD]">
               <button
                 type="button"
                 onClick={() => setModalState({ open: false, lawyer: null, decision: 'approved', note: '' })}
@@ -592,7 +597,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
               </button>
             </div>
           </div>
-        </div>
+          </div>
       )}
     </div>
   );

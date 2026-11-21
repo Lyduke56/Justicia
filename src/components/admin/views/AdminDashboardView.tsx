@@ -3,7 +3,6 @@ import { ShieldCheckIcon, ScaleIcon, UserGroupIcon, DocumentTextIcon } from '@/c
 
 type PendingLawyer = { user_id: string; full_name: string; roll_number: string; ibp_chapter: string | null };
 type AuditEntry = { id: string; action: string; targetType?: string; timestamp: string };
-
 type Props = {
   pendingLawyersCount: number;
   approvedLawyersCount: number;
@@ -19,7 +18,7 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
   const stats = [
     { label: 'Awaiting review', value: pendingLawyersCount, note: 'Lawyer applications', href: '/admin/lawyers/verification-queue', icon: ShieldCheckIcon },
     { label: 'Approved lawyers', value: approvedLawyersCount, note: 'Approved profiles', href: '/admin/lawyers', icon: ScaleIcon },
-    { label: 'Registered users', value: totalUsersCount, note: 'All account roles', href: '/admin/users', icon: UserGroupIcon },
+    { label: 'Registered users', value: totalUsersCount, note: 'Across all roles', href: '/admin/users', icon: UserGroupIcon },
   ];
 
   return <div className="admin-page">

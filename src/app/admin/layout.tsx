@@ -2,6 +2,7 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AdminShell } from '@/components/admin/AdminShell';
+import '@/components/admin/admin.css';
 
 export const metadata = {
   title: {

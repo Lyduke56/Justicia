@@ -66,7 +66,7 @@ export function AdminLawyerReviewPanel({
 
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Decision Selector */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <label
             className={`admin-choice p-4 rounded-2xl cursor-pointer transition-all flex flex-col justify-between ${
               selectedDecision === 'approved'
@@ -142,7 +142,7 @@ export function AdminLawyerReviewPanel({
 
         {/* Note / Reason Field (conditional or optional for approve) */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-[#34150F] block">
+          <label htmlFor="lawyer-review-note" className="text-xs font-semibold text-[#34150F] block">
             {selectedDecision === 'approved'
               ? 'Internal Admin Note (Optional):'
               : selectedDecision === 'needs_resubmission'
@@ -150,6 +150,7 @@ export function AdminLawyerReviewPanel({
               : 'Rejection Reason (Mandatory):'}
           </label>
           <textarea
+            id="lawyer-review-note"
             rows={3}
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
@@ -164,8 +165,8 @@ export function AdminLawyerReviewPanel({
           />
         </div>
 
-        <div className="flex items-center justify-between pt-2">
-          <div className="text-xs text-[#7D6855]">
+        <div className="flex flex-wrap items-center justify-between gap-5 pt-2">
+          <div className="text-xs text-[#705744]">
             Current Status:{' '}
             <span className="font-bold text-[#34150F] capitalize">
               {currentStatus.replace('_', ' ')}
