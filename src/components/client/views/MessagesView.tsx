@@ -7,6 +7,7 @@ import { sendDirectMessageAction, type ThreadContext } from '@/app/actions/consu
 import { fetchLive } from '@/lib/live/fetchLive';
 import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
 import { addLawyerReviewAction } from '@/app/actions/reviewActions';
+import { ReportAccountModal } from '@/components/shared/ReportAccountModal';
 
 interface MessageItem {
   id: string;
@@ -128,6 +129,26 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
   }, [activeMessages.length, activeThreadId]);
 
   const activeThread = threads.find((t) => t.id === activeThreadId) || threads[0];
+
+  // Conversation options menu (Report …)
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [reportTarget, setReportTarget] = useState<{ threadId: string; name: string } | null>(null);
+  const optionsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!optionsOpen) return;
+    const onPointer = (e: PointerEvent) => {
+      if (optionsRef.current && !optionsRef.current.contains(e.target as Node)) setOptionsOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOptionsOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [optionsOpen]);
 
   // ─── Conversation banners: meeting announcement & rate prompt ───
   const [context, setContext] = useState<{ threadId: string; data: ThreadContext } | null>(null);
@@ -372,6 +393,50 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                     </div>
                   </div>
                 </div>
+
+                {activeThread && (
+                  <div ref={optionsRef} className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setOptionsOpen((open) => !open)}
+                      aria-label="Conversation options"
+                      aria-haspopup="menu"
+                      aria-expanded={optionsOpen}
+                      className="neu-raised-sm size-9 rounded-full bg-[#E5D8CB] text-[#5C4535] hover:text-[#34150F] flex items-center justify-center active:scale-95 transition cursor-pointer"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <circle cx="12" cy="5" r="1.8" />
+                        <circle cx="12" cy="12" r="1.8" />
+                        <circle cx="12" cy="19" r="1.8" />
+                      </svg>
+                    </button>
+                    {optionsOpen && (
+                      <div role="menu" className="absolute right-0 top-full mt-2 z-30 w-56 neu-raised bg-[#E5D8CB] rounded-[16px] p-1.5">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setOptionsOpen(false);
+                            setReportTarget({ threadId: activeThread.id, name: activeThread.name });
+                          }}
+                          className="w-full flex items-start gap-2.5 rounded-[12px] px-3 py-2.5 text-left hover:bg-[#DCCDBB] transition cursor-pointer"
+                        >
+                          <svg className="w-4 h-4 mt-0.5 text-rose-800 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M4 21V4m0 0h11l-1.5 4L15 12H4" />
+                          </svg>
+                          <span className="min-w-0">
+                            <span className="block font-inter text-xs font-semibold text-rose-900">
+                              Report {role === 'lawyer' ? 'client' : 'attorney'}
+                            </span>
+                            <span className="block font-inter text-[10.5px] text-[#7D6855] mt-0.5 leading-snug">
+                              Tell the Justicia team about misconduct, with proof.
+                            </span>
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Meeting announcement: shown from 15 minutes before a confirmed consultation until it ends */}
@@ -607,6 +672,15 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
           )}
         </div>
       </div>
+
+      {reportTarget && (
+        <ReportAccountModal
+          threadId={reportTarget.threadId}
+          targetName={reportTarget.name}
+          targetRole={role === 'lawyer' ? 'client' : 'lawyer'}
+          onClose={() => setReportTarget(null)}
+        />
+      )}
     </div>
   );
 }

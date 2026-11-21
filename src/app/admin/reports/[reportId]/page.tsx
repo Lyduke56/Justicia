@@ -1,9 +1,13 @@
 import type { Metadata } from 'next';
-import { AdminFeatureStatus } from '@/components/admin/AdminFeatureStatus';
-import { DocumentTextIcon } from '@/components/admin/AdminIcons';
+import { connection } from 'next/server';
+import { getAdminReportsData } from '@/app/actions/reportActions';
+import { AdminReportsView } from '@/components/admin/views/AdminReportsView';
 
 export const metadata: Metadata = { title: 'Report details | Justicia Admin' };
 
-export default function AdminReportDetailPage() {
-  return <AdminFeatureStatus eyebrow="Administration" title="Report details" description="Individual report review is not available yet." icon={<DocumentTextIcon className="h-6 w-6" />} items={['Show the report, reporter, and target.', 'Record review decisions and notes.', 'Keep a history of resolution actions.']} />;
+export default async function AdminReportDetailPage({ params }: { params: Promise<{ reportId: string }> }) {
+  await connection();
+  const { reportId } = await params;
+  const reports = await getAdminReportsData();
+  return <AdminReportsView initialReports={reports} initialSelectedId={reportId} initialFilter="all" />;
 }

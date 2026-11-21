@@ -6,6 +6,7 @@ import { after } from 'next/server';
 import { emitLive, type LiveScope } from '@/lib/realtime/live';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { checkAccountAccess } from '@/lib/moderation/accountStatus';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -126,6 +127,8 @@ export interface ClientConsultation {
   /** e.g. "1 hour" */
   durationLabel: string;
   payment: PaymentDetails;
+  /** Reschedule request state (confirmed appointments only). */
+  reschedule: RescheduleInfo | null;
 }
 
 /** Manual (QR) payment state, stored in the consultation's concern_summary JSON. */
@@ -149,6 +152,44 @@ export interface PaymentChannel {
   caption: string | null;
 }
 
+/** A confirmed appointment's reschedule state, from the viewer's point of view. */
+export interface RescheduleInfo {
+  /** The open request waiting for an answer, if any. */
+  pending: {
+    requestedBy: 'client' | 'lawyer';
+    /** True when the signed-in viewer sent the request. */
+    byMe: boolean;
+    requestedAt: string;
+    reason: string;
+    proposedStart: string;
+    /** e.g. "Thursday, November 26, 2026" */
+    proposedDateLong: string;
+    /** e.g. "2:00 PM - 3:00 PM" */
+    proposedTimeRange: string;
+    /** e.g. "2:00 PM - 3:00 PM • PST, GMT+8" */
+    proposedTimeSlot: string;
+  } | null;
+  /** The most recent request that was answered (accepted / declined / withdrawn / expired). */
+  last: {
+    status: 'accepted' | 'declined' | 'withdrawn' | 'expired';
+    requestedBy: 'client' | 'lawyer';
+    byMe: boolean;
+    respondedAt: string;
+    responseReason: string | null;
+    /** e.g. "Thursday, November 26, 2026 · 2:00 PM - 3:00 PM" */
+    proposedLabel: string;
+    /** Answered within the last 3 days (worth showing as a notice). */
+    recent: boolean;
+  } | null;
+  acceptedCount: number;
+  /** Reschedules still allowed for this booking. */
+  remaining: number;
+  /** Whether the viewer can send a new request right now. */
+  canRequest: boolean;
+  /** Why a request is not possible (when canRequest is false and nothing is pending). */
+  blockedReason: string | null;
+}
+
 export type BookConsultationResult =
   | { success: true; consultation: ClientConsultation; sharedDocumentCount: number; sharingComplete: boolean }
   | { success?: false; error: string };
@@ -163,6 +204,8 @@ interface ProfileRow {
   email: string;
   full_name: string | null;
   role: Role;
+  /** active | suspended | terminated | pending_deletion */
+  account_status?: string | null;
 }
 
 interface LawyerSummaryRow {
@@ -218,7 +261,7 @@ async function ensureProfile(
 ): Promise<ProfileRow | null> {
   const { data: existing } = await db
     .from('profiles')
-    .select('user_id, email, full_name, role')
+    .select('user_id, email, full_name, role, account_status')
     .eq('user_id', userId)
     .maybeSingle();
   if (existing) return existing as ProfileRow;
@@ -245,7 +288,7 @@ async function ensureProfile(
       },
       { onConflict: 'user_id' }
     )
-    .select('user_id, email, full_name, role')
+    .select('user_id, email, full_name, role, account_status')
     .maybeSingle();
 
   if (error) {
@@ -269,6 +312,10 @@ async function requireSession(): Promise<Session | { error: string }> {
   if (!profile) {
     return { error: 'We could not load your account profile. Please sign out and sign in again.' };
   }
+  // Suspended / terminated accounts are also banned in Auth; this is defence in depth
+  // (and lifts a suspension that has already ended).
+  const blocked = await checkAccountAccess(db, user.id, profile.account_status ?? 'active');
+  if (blocked) return { error: blocked };
   return { db, user, profile };
 }
 
@@ -861,6 +908,7 @@ function toClientConsultation(
     cancellationReason: typeof meta.cancellationReason === 'string' ? meta.cancellationReason : null,
     ...summaryOf(date, range),
     payment,
+    reschedule: rescheduleInfoOf(row, meta, 'client'),
   };
 }
 
@@ -1050,6 +1098,14 @@ export async function bookConsultationAction(input: BookConsultationInput): Prom
       return { error: 'This attorney has not been verified to accept consultations yet.' };
     }
     if (lawyerRow.is_available === false) {
+      return { error: 'This attorney is not accepting new consultations right now.' };
+    }
+    const { data: lawyerAccount } = await db
+      .from('profiles')
+      .select('account_status')
+      .eq('user_id', lawyerId)
+      .maybeSingle();
+    if (lawyerAccount?.account_status && lawyerAccount.account_status !== 'active') {
       return { error: 'This attorney is not accepting new consultations right now.' };
     }
     const lawyer = lawyerRow as unknown as LawyerSummaryRow;
@@ -1732,6 +1788,8 @@ export interface LawyerConsultation {
   lawyerSummary: { name: string; rollNumber: string; ibpChapter: string };
   /** Manual QR payment state and fee breakdown. */
   paymentDetails: PaymentDetails;
+  /** Reschedule request state (confirmed appointments only). */
+  reschedule?: RescheduleInfo | null;
 }
 
 const LAWYER_STATUS_LABELS: Record<LawyerConsultationStatus, string> = {
@@ -1818,6 +1876,7 @@ function toLawyerConsultation(
       ibpChapter: lawyer?.ibp_chapter || '—',
     },
     paymentDetails,
+    reschedule: rescheduleInfoOf(row, meta, 'lawyer'),
   };
 }
 
@@ -2369,12 +2428,17 @@ async function ensureMeetingNotifications(db: Db, userId: string): Promise<void>
       .eq('user_id', userId)
       .eq('type', 'meeting_starting')
       .in('metadata->>consultationId', due.map((r) => r.id));
-    const alreadyNotified = new Set(
-      ((existing ?? []) as Array<{ metadata: { consultationId?: string } | null }>).map((n) => n.metadata?.consultationId)
+    // Keyed by start time too, so a rescheduled session gets its own reminder.
+    const notifiedKeys = new Set(
+      ((existing ?? []) as Array<{ metadata: { consultationId?: string; scheduledStart?: string } | null }>).map(
+        (n) => `${n.metadata?.consultationId}|${n.metadata?.scheduledStart ? new Date(n.metadata.scheduledStart).getTime() : 'any'}`
+      )
     );
 
     for (const r of due) {
-      if (alreadyNotified.has(r.id)) continue;
+      const startKey = new Date(r.scheduled_start!).getTime();
+      if (notifiedKeys.has(`${r.id}|any`) && !scheduleOf(r).meta.rescheduledAt) continue;
+      if (notifiedKeys.has(`${r.id}|${startKey}`)) continue;
       const isLawyer = r.lawyer_id === userId;
       const other = isLawyer
         ? r.client?.full_name?.trim() || 'your client'
@@ -2391,7 +2455,7 @@ async function ensureMeetingNotifications(db: Db, userId: string): Promise<void>
         'meeting_starting',
         'Consultation starting soon',
         `Your ${r.method === 'audio' ? 'audio call' : 'video consultation'} with ${other} ${when} (${startLabel} - ${endLabel}). Open Messages to join the meeting.`,
-        { consultationId: r.id, threadId: otherId, meetingUrl: r.meeting_url }
+        { consultationId: r.id, threadId: otherId, meetingUrl: r.meeting_url, scheduledStart: r.scheduled_start }
       );
     }
   } catch (err) {
@@ -3244,5 +3308,634 @@ export async function getLawyerEarningsAction(): Promise<
   } catch (err) {
     console.error('[getLawyerEarningsAction] error:', err);
     return { error: 'We could not load your earnings right now. Please try again.' };
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// RESCHEDULING (confirmed appointments; client ⇄ lawyer)
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// Either participant of a CONFIRMED (paid) appointment can propose a new date and time.
+// The other participant accepts or declines; the requester can withdraw. While a request is
+// open, consultations.proposed_start / proposed_end hold the proposal and the request details
+// live in concern_summary.reschedule (history in concern_summary.rescheduleHistory).
+// Accepting moves scheduled_start / scheduled_end; the fee, payment and Meet link stay as-is.
+
+/** Accepted reschedules allowed per booking. */
+const MAX_RESCHEDULES = 2;
+/** A request can be sent until this long before the current session starts. */
+const RESCHEDULE_CUTOFF_MS = 60 * 60 * 1000;
+/** The proposed time must be at least this far in the future. */
+const RESCHEDULE_MIN_NOTICE_MS = 2 * 60 * 60 * 1000;
+/** An open request lapses when its proposed time is closer than this. */
+const RESCHEDULE_ANSWER_BY_MS = 30 * 60 * 1000;
+/** …and no further ahead than this. */
+const RESCHEDULE_MAX_DAYS_AHEAD = 60;
+/** Start times offered for a reschedule — the same slots as the booking calendar. */
+const RESCHEDULE_SLOT_STARTS = [9 * 60, 10 * 60, 13 * 60, 14 * 60, 15 * 60, 16 * 60];
+const RESCHEDULE_REASON_MIN = 5;
+const RESCHEDULE_REASON_MAX = 500;
+
+type RescheduleParty = 'client' | 'lawyer';
+type RescheduleOutcome = 'accepted' | 'declined' | 'withdrawn' | 'expired';
+
+interface StoredReschedule {
+  status: 'pending';
+  requestedBy: RescheduleParty;
+  requestedById: string;
+  requestedAt: string;
+  reason: string;
+  proposedStart: string;
+  proposedEnd: string;
+  fromStart: string | null;
+  fromEnd: string | null;
+}
+
+interface StoredRescheduleHistory extends Omit<StoredReschedule, 'status'> {
+  status: RescheduleOutcome;
+  respondedAt: string;
+  responseReason: string | null;
+}
+
+function storedReschedule(meta: Record<string, unknown>): StoredReschedule | null {
+  const r = meta.reschedule as Partial<StoredReschedule> | undefined | null;
+  if (!r || r.status !== 'pending' || typeof r.proposedStart !== 'string' || typeof r.proposedEnd !== 'string') return null;
+  if (r.requestedBy !== 'client' && r.requestedBy !== 'lawyer') return null;
+  return r as StoredReschedule;
+}
+
+function rescheduleHistory(meta: Record<string, unknown>): StoredRescheduleHistory[] {
+  return Array.isArray(meta.rescheduleHistory) ? [...(meta.rescheduleHistory as StoredRescheduleHistory[])] : [];
+}
+
+/** Display pieces ("Thursday, November 26, 2026", "2:00 PM - 3:00 PM", slot label) for a start/end pair. */
+function scheduleLabels(startIso: string, endIso: string) {
+  const start = toManilaParts(startIso);
+  const end = toManilaParts(endIso);
+  const date = parseIsoDate(start.isoDate);
+  const range = { startMinutes: start.minutes, endMinutes: end.minutes > start.minutes ? end.minutes : start.minutes + 60 };
+  const { dateLong, timeRange } = summaryOf(date, range);
+  return { dateLong, timeRange, timeSlot: formatSlotLabel(range) };
+}
+
+/** A pending request lapses once its proposed time is too close or the current session has started. */
+function rescheduleExpired(pending: StoredReschedule, row: ConsultationRow, now = Date.now()): boolean {
+  const currentStart = row.scheduled_start ? new Date(row.scheduled_start).getTime() : Infinity;
+  return new Date(pending.proposedStart).getTime() <= now + RESCHEDULE_ANSWER_BY_MS || currentStart <= now;
+}
+
+function rescheduleInfoOf(
+  row: ConsultationRow,
+  meta: Record<string, unknown>,
+  viewer: RescheduleParty
+): RescheduleInfo | null {
+  if (row.status !== 'confirmed') return null;
+  const now = Date.now();
+  const history = rescheduleHistory(meta);
+  const acceptedCount = history.filter((h) => h.status === 'accepted').length;
+  const remaining = Math.max(0, MAX_RESCHEDULES - acceptedCount);
+
+  let pendingRaw = storedReschedule(meta);
+  let lapsed: StoredRescheduleHistory | null = null;
+  if (pendingRaw && rescheduleExpired(pendingRaw, row, now)) {
+    lapsed = { ...pendingRaw, status: 'expired', respondedAt: pendingRaw.proposedStart, responseReason: null };
+    pendingRaw = null;
+  }
+
+  const lastRaw = lapsed ?? history[history.length - 1] ?? null;
+  const startMs = row.scheduled_start ? new Date(row.scheduled_start).getTime() : null;
+  let blockedReason: string | null = null;
+  if (startMs === null) blockedReason = 'This appointment has no scheduled time to move.';
+  else if (startMs - now < RESCHEDULE_CUTOFF_MS) blockedReason = 'Appointments can only be rescheduled until 1 hour before they start.';
+  else if (remaining === 0) blockedReason = `This appointment has already been rescheduled ${MAX_RESCHEDULES} times.`;
+
+  let pending: RescheduleInfo['pending'] = null;
+  if (pendingRaw) {
+    const labels = scheduleLabels(pendingRaw.proposedStart, pendingRaw.proposedEnd);
+    pending = {
+      requestedBy: pendingRaw.requestedBy,
+      byMe: pendingRaw.requestedBy === viewer,
+      requestedAt: pendingRaw.requestedAt,
+      reason: pendingRaw.reason,
+      proposedStart: pendingRaw.proposedStart,
+      proposedDateLong: labels.dateLong,
+      proposedTimeRange: labels.timeRange,
+      proposedTimeSlot: labels.timeSlot,
+    };
+  }
+
+  let last: RescheduleInfo['last'] = null;
+  if (lastRaw) {
+    const labels = scheduleLabels(lastRaw.proposedStart, lastRaw.proposedEnd);
+    last = {
+      status: lastRaw.status,
+      requestedBy: lastRaw.requestedBy,
+      byMe: lastRaw.requestedBy === viewer,
+      respondedAt: lastRaw.respondedAt,
+      responseReason: lastRaw.responseReason ?? null,
+      proposedLabel: `${labels.dateLong} · ${labels.timeRange}`,
+      recent: now - new Date(lastRaw.respondedAt).getTime() < 3 * 24 * 60 * 60 * 1000,
+    };
+  }
+
+  return {
+    pending,
+    last,
+    acceptedCount,
+    remaining,
+    canRequest: !pending && !blockedReason,
+    blockedReason: pending ? null : blockedReason,
+  };
+}
+
+type RescheduleTarget = {
+  db: Db;
+  user: User;
+  consultation: ConsultationRow;
+  party: RescheduleParty;
+  meta: ReturnType<typeof parseMeta>;
+};
+
+/** Loads a consultation the signed-in user takes part in (as client or lawyer). */
+async function loadRescheduleTarget(consultationId: string): Promise<RescheduleTarget | { error: string }> {
+  if (!UUID_REGEX.test(consultationId ?? '')) return { error: 'Consultation not found.' };
+  const session = await requireSession();
+  if ('error' in session) return { error: session.error };
+  const { db, user } = session;
+  const { data } = await db
+    .from('consultations')
+    .select(CONSULTATION_COLUMNS)
+    .eq('id', consultationId)
+    .or(`client_id.eq.${user.id},lawyer_id.eq.${user.id}`)
+    .maybeSingle();
+  if (!data) return { error: 'Consultation not found.' };
+  const consultation = data as ConsultationRow;
+  return {
+    db,
+    user,
+    consultation,
+    party: consultation.lawyer_id === user.id ? 'lawyer' : 'client',
+    meta: parseMeta(consultation.concern_summary),
+  };
+}
+
+function sessionMinutes(row: ConsultationRow): number {
+  const range = scheduleOf(row).range;
+  return range ? range.endMinutes - range.startMinutes : 60;
+}
+
+/** Checks a proposed slot against both participants' calendars. Returns an error message or null. */
+async function rescheduleConflict(
+  db: Db,
+  row: ConsultationRow,
+  date: CalendarDate,
+  range: MinuteRange
+): Promise<string | null> {
+  const label = formatSlotLabel(range);
+  const [lawyerBookings, blocked, clientBookings] = await Promise.all([
+    findActiveBookingsOnDate(db, 'lawyer_id', row.lawyer_id, date),
+    findUnavailabilityOnDate(db, row.lawyer_id, date),
+    findActiveBookingsOnDate(db, 'client_id', row.client_id, date),
+  ]);
+  if (lawyerBookings.some((b) => b.id !== row.id && rangesOverlap(b, range))) {
+    return `The attorney already has a consultation during ${label}. Please choose another time.`;
+  }
+  if (blocked.includes('all-day')) return 'The attorney is unavailable on that date. Please choose another day.';
+  if (blocked.some((b) => b !== 'all-day' && rangesOverlap(b, range))) {
+    return `The attorney is unavailable during ${label}. Please choose another time.`;
+  }
+  if (clientBookings.some((b) => b.id !== row.id && rangesOverlap(b, range))) {
+    return `The client already has another consultation during ${label}. Please choose another time.`;
+  }
+  return null;
+}
+
+async function participantNames(db: Db, row: ConsultationRow): Promise<{ client: string; lawyer: string }> {
+  const [{ data: client }, { data: lawyer }] = await Promise.all([
+    db.from('profiles').select('full_name, email').eq('user_id', row.client_id).maybeSingle(),
+    db.from('lawyer_profiles').select('full_name').eq('user_id', row.lawyer_id).maybeSingle(),
+  ]);
+  return {
+    client: client?.full_name?.trim() || client?.email || 'The client',
+    lawyer: lawyer?.full_name || 'The attorney',
+  };
+}
+
+export interface RescheduleSlotOption {
+  startMinutes: number;
+  /** e.g. "2:00 PM - 3:00 PM • PST, GMT+8" */
+  label: string;
+  state: 'available' | 'booked' | 'unavailable' | 'past' | 'current';
+}
+
+export interface RescheduleOptions {
+  /** YYYY-MM-DD (Asia/Manila) */
+  date: string;
+  slots: RescheduleSlotOption[];
+  /** Days of that month (1–31) the attorney has blocked entirely. */
+  blockedDays: number[];
+  /** Earliest / latest selectable dates (YYYY-MM-DD). */
+  minDate: string;
+  maxDate: string;
+  durationMinutes: number;
+  currentStart: string | null;
+}
+
+/** Slot availability on a date for moving a confirmed appointment (both calendars are checked). */
+export async function getRescheduleOptionsAction(
+  consultationId: string,
+  isoDate: string
+): Promise<{ success: true; options: RescheduleOptions } | { success?: false; error: string }> {
+  try {
+    if (typeof isoDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return { error: 'Please choose a valid date.' };
+    const date = parseIsoDate(isoDate);
+    if (toIsoDate(date) !== isoDate) return { error: 'Please choose a valid date.' };
+
+    const target = await loadRescheduleTarget(consultationId);
+    if ('error' in target) return { error: target.error };
+    const { db, consultation } = target;
+    if (consultation.status !== 'confirmed') return { error: 'Only confirmed appointments can be rescheduled.' };
+
+    const now = Date.now();
+    const minDate = toManilaParts(new Date(now + RESCHEDULE_MIN_NOTICE_MS).toISOString()).isoDate;
+    const maxDate = toIsoDate(parseIsoDate(todayInManila()), RESCHEDULE_MAX_DAYS_AHEAD);
+    const duration = sessionMinutes(consultation);
+
+    const [lawyerBookings, clientBookings, blocks] = await Promise.all([
+      findActiveBookingsOnDate(db, 'lawyer_id', consultation.lawyer_id, date),
+      findActiveBookingsOnDate(db, 'client_id', consultation.client_id, date),
+      findUnavailabilityOnDate(db, consultation.lawyer_id, date),
+    ]);
+    const otherBookings = [...lawyerBookings, ...clientBookings].filter((b) => b.id !== consultation.id);
+    const current = consultation.scheduled_start ? toManilaParts(consultation.scheduled_start) : null;
+
+    const outOfRange = isoDate < minDate || isoDate > maxDate;
+    const slots: RescheduleSlotOption[] = RESCHEDULE_SLOT_STARTS.map((start) => {
+      const range = { startMinutes: start, endMinutes: start + duration };
+      const startMs = new Date(toManilaTimestamp(date, start)).getTime();
+      let state: RescheduleSlotOption['state'] = 'available';
+      if (current && current.isoDate === isoDate && current.minutes === start) state = 'current';
+      else if (outOfRange || startMs < now + RESCHEDULE_MIN_NOTICE_MS) state = 'past';
+      else if (blocks.some((b) => b === 'all-day' || rangesOverlap(b, range))) state = 'unavailable';
+      else if (otherBookings.some((b) => rangesOverlap(b, range))) state = 'booked';
+      return { startMinutes: start, label: formatSlotLabel(range), state };
+    });
+
+    // Whole-day blocks for the month, so the calendar can grey those days out.
+    const monthStart = `${date.year}-${pad2(date.monthIndex + 1)}-01`;
+    const monthEnd = new Date(Date.UTC(date.year, date.monthIndex + 1, 0)).toISOString().slice(0, 10);
+    const { data: monthBlocks, error: blocksError } = await db
+      .from('lawyer_unavailability')
+      .select('unavailable_date, start_minutes, end_minutes')
+      .eq('lawyer_id', consultation.lawyer_id)
+      .gte('unavailable_date', monthStart)
+      .lte('unavailable_date', monthEnd);
+    if (blocksError && blocksError.code !== 'PGRST205' && blocksError.code !== '42P01') {
+      console.warn('[getRescheduleOptionsAction] blocks', blocksError.message);
+    }
+    const blockedDays = [
+      ...new Set(
+        ((monthBlocks ?? []) as Array<{ unavailable_date: string; start_minutes: number | null; end_minutes: number | null }>)
+          .filter((b) => b.start_minutes === null || b.end_minutes === null)
+          .map((b) => parseIsoDate(b.unavailable_date).day)
+      ),
+    ].sort((a, b) => a - b);
+
+    return {
+      success: true,
+      options: {
+        date: isoDate,
+        slots,
+        blockedDays,
+        minDate,
+        maxDate,
+        durationMinutes: duration,
+        currentStart: consultation.scheduled_start,
+      },
+    };
+  } catch (err) {
+    console.error('[getRescheduleOptionsAction] error:', err);
+    return { error: 'Available times could not be loaded. Please try again.' };
+  }
+}
+
+export type RescheduleActionResult = { success: true } | { success?: false; error: string };
+
+function rescheduleRevalidate(row: ConsultationRow) {
+  revalidateConsultationPaths();
+  try {
+    revalidatePath('/client/messages');
+    revalidatePath('/lawyer/messages');
+  } catch {
+    // no request scope
+  }
+  signalLive([row.client_id, row.lawyer_id], ['consultations', 'messages']);
+}
+
+/** Proposes a new date/time for a confirmed appointment. */
+export async function requestRescheduleAction(
+  consultationId: string,
+  input: { date: string; startMinutes: number; reason: string }
+): Promise<RescheduleActionResult> {
+  try {
+    const reason = typeof input?.reason === 'string' ? input.reason.trim() : '';
+    if (reason.length < RESCHEDULE_REASON_MIN) {
+      return { error: `Please tell the other party why you need to reschedule (at least ${RESCHEDULE_REASON_MIN} characters).` };
+    }
+    if (reason.length > RESCHEDULE_REASON_MAX) return { error: `The reason must be ${RESCHEDULE_REASON_MAX} characters or fewer.` };
+    if (typeof input?.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return { error: 'Please choose a new date.' };
+    const startMinutes = Number(input.startMinutes);
+    if (!RESCHEDULE_SLOT_STARTS.includes(startMinutes)) return { error: 'Please choose one of the available time slots.' };
+    const date = parseIsoDate(input.date);
+    if (toIsoDate(date) !== input.date) return { error: 'Please choose a new date.' };
+
+    const target = await loadRescheduleTarget(consultationId);
+    if ('error' in target) return { error: target.error };
+    const { db, user, consultation, party, meta } = target;
+    if (consultation.status !== 'confirmed') return { error: 'Only confirmed appointments can be rescheduled.' };
+
+    const info = rescheduleInfoOf(consultation, meta, party)!;
+    if (info.pending) {
+      return {
+        error: info.pending.byMe
+          ? 'You already sent a reschedule request for this appointment. Withdraw it first to propose another time.'
+          : 'The other party already proposed a new time. Please accept or decline it first.',
+      };
+    }
+    if (info.blockedReason) return { error: info.blockedReason };
+
+    const range = { startMinutes, endMinutes: startMinutes + sessionMinutes(consultation) };
+    const proposedStart = toManilaTimestamp(date, range.startMinutes);
+    const proposedEnd = toManilaTimestamp(date, range.endMinutes);
+    const proposedMs = new Date(proposedStart).getTime();
+    if (proposedMs < Date.now() + RESCHEDULE_MIN_NOTICE_MS) {
+      return { error: 'Please choose a time at least 2 hours from now.' };
+    }
+    if (input.date > toIsoDate(parseIsoDate(todayInManila()), RESCHEDULE_MAX_DAYS_AHEAD)) {
+      return { error: `Please choose a date within the next ${RESCHEDULE_MAX_DAYS_AHEAD} days.` };
+    }
+    if (consultation.scheduled_start && new Date(consultation.scheduled_start).getTime() === proposedMs) {
+      return { error: 'That is the current schedule. Please choose a different date or time.' };
+    }
+    const conflict = await rescheduleConflict(db, consultation, date, range);
+    if (conflict) return { error: conflict };
+
+    const nowIso = new Date().toISOString();
+    const request: StoredReschedule = {
+      status: 'pending',
+      requestedBy: party,
+      requestedById: user.id,
+      requestedAt: nowIso,
+      reason,
+      proposedStart,
+      proposedEnd,
+      fromStart: consultation.scheduled_start,
+      fromEnd: consultation.scheduled_end,
+    };
+    // A lapsed request moves into the history before the new one is stored.
+    const stale = storedReschedule(meta);
+    const history = rescheduleHistory(meta);
+    if (stale) history.push({ ...stale, status: 'expired', respondedAt: nowIso, responseReason: null });
+
+    let query = db
+      .from('consultations')
+      .update({
+        proposed_start: proposedStart,
+        proposed_end: proposedEnd,
+        concern_summary: JSON.stringify({ ...meta, reschedule: request, rescheduleHistory: history }),
+        updated_at: nowIso,
+      })
+      .eq('id', consultation.id)
+      .eq('status', 'confirmed');
+    // Guards against a request sent by the other party at the same moment.
+    query = stale ? query.eq('proposed_start', stale.proposedStart) : query.is('proposed_start', null);
+    const { data: updated, error } = await query.select('id');
+    if (error) {
+      console.error('[requestRescheduleAction] update failed:', error.message);
+      return { error: 'Your reschedule request could not be sent. Please try again.' };
+    }
+    if (!updated?.length) {
+      return { error: 'This appointment changed while you were choosing a time. Please refresh and try again.' };
+    }
+
+    const names = await participantNames(db, consultation);
+    const requester = party === 'lawyer' ? names.lawyer : names.client;
+    const recipientId = party === 'lawyer' ? consultation.client_id : consultation.lawyer_id;
+    const from = scheduleOf(consultation);
+    const to = scheduleLabels(proposedStart, proposedEnd);
+    const fromLabel = `${from.displayDate.replace('TODAY, ', '')} (${from.timeSlot})`;
+    await postSystemMessage(
+      db,
+      consultation.id,
+      user.id,
+      `${requester} asked to reschedule the consultation on ${fromLabel} to ${to.dateLong}, ${to.timeRange}. Reason: ${reason}`
+    );
+    await notifyUser(
+      db,
+      recipientId,
+      'consultation_reschedule_requested',
+      'Reschedule Requested',
+      `${requester} asked to move your consultation on ${fromLabel} to ${to.dateLong}, ${to.timeRange}. Open Consultations to accept or decline.`,
+      { consultationId: consultation.id, proposedStart, requestedBy: party }
+    );
+    rescheduleRevalidate(consultation);
+    return { success: true };
+  } catch (err) {
+    console.error('[requestRescheduleAction] error:', err);
+    return { error: 'Your reschedule request could not be sent. Please try again.' };
+  }
+}
+
+/** The other participant accepts or declines an open reschedule request. */
+export async function respondToRescheduleAction(
+  consultationId: string,
+  response: 'accept' | 'decline',
+  declineReason?: string
+): Promise<RescheduleActionResult> {
+  try {
+    if (response !== 'accept' && response !== 'decline') return { error: 'Invalid response.' };
+    const note = typeof declineReason === 'string' ? declineReason.trim() : '';
+    if (response === 'decline' && note.length > RESCHEDULE_REASON_MAX) {
+      return { error: `The reason must be ${RESCHEDULE_REASON_MAX} characters or fewer.` };
+    }
+
+    const target = await loadRescheduleTarget(consultationId);
+    if ('error' in target) return { error: target.error };
+    const { db, user, consultation, party, meta } = target;
+    if (consultation.status !== 'confirmed') return { error: 'This appointment can no longer be rescheduled.' };
+    const pending = storedReschedule(meta);
+    if (!pending) return { error: 'There is no reschedule request waiting for an answer.' };
+    if (pending.requestedBy === party) return { error: 'You sent this request. You can withdraw it instead.' };
+
+    const nowIso = new Date().toISOString();
+    const history = rescheduleHistory(meta);
+    if (rescheduleExpired(pending, consultation)) {
+      history.push({ ...pending, status: 'expired', respondedAt: nowIso, responseReason: null });
+      await db
+        .from('consultations')
+        .update({
+          proposed_start: null,
+          proposed_end: null,
+          concern_summary: JSON.stringify({ ...meta, reschedule: null, rescheduleHistory: history }),
+          updated_at: nowIso,
+        })
+        .eq('id', consultation.id)
+        .eq('proposed_start', pending.proposedStart);
+      rescheduleRevalidate(consultation);
+      return { error: 'This request has expired because the proposed time is too close. The original schedule stays.' };
+    }
+
+    const names = await participantNames(db, consultation);
+    const responder = party === 'lawyer' ? names.lawyer : names.client;
+    const to = scheduleLabels(pending.proposedStart, pending.proposedEnd);
+    const nextMeta: Record<string, unknown> = { ...meta, reschedule: null };
+    const update: Record<string, unknown> = { proposed_start: null, proposed_end: null, updated_at: nowIso };
+
+    if (response === 'accept') {
+      const start = toManilaParts(pending.proposedStart);
+      const end = toManilaParts(pending.proposedEnd);
+      const date = parseIsoDate(start.isoDate);
+      const range = { startMinutes: start.minutes, endMinutes: end.minutes > start.minutes ? end.minutes : start.minutes + 60 };
+      const conflict = await rescheduleConflict(db, consultation, date, range);
+      if (conflict) {
+        return {
+          error: `${conflict.replace(/ Please choose another (time|day)\.$/, '')} This request can no longer be accepted — please decline it and agree on another time.`,
+        };
+      }
+
+      history.push({ ...pending, status: 'accepted', respondedAt: nowIso, responseReason: null });
+      Object.assign(nextMeta, {
+        rescheduleHistory: history,
+        rescheduledAt: nowIso,
+        dateStr: `${MONTH_NAMES[date.monthIndex]} ${date.day}, ${date.year}`,
+        timeSlot: formatSlotLabel(range),
+        day: date.day,
+        month: MONTH_NAMES[date.monthIndex],
+        year: date.year,
+      });
+      Object.assign(update, {
+        scheduled_start: pending.proposedStart,
+        scheduled_end: pending.proposedEnd,
+        scheduled_time: start.isoDate,
+      });
+    } else {
+      history.push({ ...pending, status: 'declined', respondedAt: nowIso, responseReason: note || null });
+      nextMeta.rescheduleHistory = history;
+    }
+    update.concern_summary = JSON.stringify(nextMeta);
+
+    const { data: updated, error } = await db
+      .from('consultations')
+      .update(update)
+      .eq('id', consultation.id)
+      .eq('status', 'confirmed')
+      .eq('proposed_start', pending.proposedStart)
+      .select('id');
+    if (error || !updated?.length) {
+      if (error?.code === '23505' || error?.code === '23P01') {
+        return { error: 'That time was just taken by another confirmed consultation. Please decline and agree on another time.' };
+      }
+      if (error) {
+        console.error('[respondToRescheduleAction] update failed:', error.message);
+        return { error: 'Your answer could not be saved. Please try again.' };
+      }
+      return { error: 'This request changed in the meantime. Please refresh and try again.' };
+    }
+
+    const newWhen = `${to.dateLong}, ${to.timeRange}`;
+    if (response === 'accept') {
+      await postSystemMessage(
+        db,
+        consultation.id,
+        user.id,
+        `${responder} accepted the new schedule: ${newWhen} (PST, GMT+8). The Google Meet link stays the same.`
+      );
+      await notifyUser(
+        db,
+        pending.requestedById,
+        'consultation_rescheduled',
+        'Reschedule Accepted',
+        `${responder} accepted your request. Your consultation is now on ${newWhen}.`,
+        { consultationId: consultation.id, scheduledStart: pending.proposedStart }
+      );
+    } else {
+      const why = note ? ` Reason: ${note}` : '';
+      await postSystemMessage(
+        db,
+        consultation.id,
+        user.id,
+        `${responder} declined the request to move the consultation to ${newWhen}. The original schedule stays.${why}`
+      );
+      await notifyUser(
+        db,
+        pending.requestedById,
+        'consultation_reschedule_declined',
+        'Reschedule Declined',
+        `${responder} declined your request to move the consultation to ${newWhen}. The original schedule stays.${why}`,
+        { consultationId: consultation.id }
+      );
+    }
+    rescheduleRevalidate(consultation);
+    return { success: true };
+  } catch (err) {
+    console.error('[respondToRescheduleAction] error:', err);
+    return { error: 'Your answer could not be saved. Please try again.' };
+  }
+}
+
+/** The requester withdraws their open reschedule request. */
+export async function withdrawRescheduleAction(consultationId: string): Promise<RescheduleActionResult> {
+  try {
+    const target = await loadRescheduleTarget(consultationId);
+    if ('error' in target) return { error: target.error };
+    const { db, user, consultation, party, meta } = target;
+    const pending = storedReschedule(meta);
+    if (!pending) return { error: 'There is no reschedule request to withdraw.' };
+    if (pending.requestedBy !== party) return { error: 'Only the person who sent the request can withdraw it.' };
+
+    const nowIso = new Date().toISOString();
+    const history = rescheduleHistory(meta);
+    history.push({ ...pending, status: 'withdrawn', respondedAt: nowIso, responseReason: null });
+    const { data: updated, error } = await db
+      .from('consultations')
+      .update({
+        proposed_start: null,
+        proposed_end: null,
+        concern_summary: JSON.stringify({ ...meta, reschedule: null, rescheduleHistory: history }),
+        updated_at: nowIso,
+      })
+      .eq('id', consultation.id)
+      .eq('proposed_start', pending.proposedStart)
+      .select('id');
+    if (error || !updated?.length) {
+      if (error) {
+        console.error('[withdrawRescheduleAction] update failed:', error.message);
+        return { error: 'The request could not be withdrawn. Please try again.' };
+      }
+      return { error: 'This request changed in the meantime. Please refresh and try again.' };
+    }
+
+    const names = await participantNames(db, consultation);
+    const requester = party === 'lawyer' ? names.lawyer : names.client;
+    const to = scheduleLabels(pending.proposedStart, pending.proposedEnd);
+    await postSystemMessage(
+      db,
+      consultation.id,
+      user.id,
+      `${requester} withdrew the request to move the consultation to ${to.dateLong}, ${to.timeRange}.`
+    );
+    await notifyUser(
+      db,
+      party === 'lawyer' ? consultation.client_id : consultation.lawyer_id,
+      'consultation_reschedule_withdrawn',
+      'Reschedule Request Withdrawn',
+      `${requester} withdrew the request to move your consultation to ${to.dateLong}, ${to.timeRange}. The original schedule stays.`,
+      { consultationId: consultation.id }
+    );
+    rescheduleRevalidate(consultation);
+    return { success: true };
+  } catch (err) {
+    console.error('[withdrawRescheduleAction] error:', err);
+    return { error: 'The request could not be withdrawn. Please try again.' };
   }
 }
