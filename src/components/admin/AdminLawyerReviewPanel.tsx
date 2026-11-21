@@ -41,18 +41,14 @@ export function AdminLawyerReviewPanel({
 
   return (
     <div
-      className="p-6 sm:p-8 rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB] space-y-6"
-      style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
+      className="admin-surface p-6 sm:p-8 space-y-6"
     >
       <div>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-[#C58B3C]">
-          Credential Verification Assessment
-        </span>
-        <h3 className="font-cormorant text-2xl font-bold text-[#34150F]">
-          Review & Verification Decision
+        <h3 className="admin-section-label">
+          Verification decision
         </h3>
         <p className="text-xs text-[#7D6855] mt-1">
-          Issue a formal verification decision for Atty. {lawyerName}. Decisions immediately update the lawyer's access rights.
+          Review Atty. {lawyerName}. This decision immediately updates the lawyer&apos;s access rights.
         </p>
       </div>
 
@@ -72,7 +68,7 @@ export function AdminLawyerReviewPanel({
         {/* Decision Selector */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label
-            className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
+            className={`admin-choice p-4 rounded-2xl cursor-pointer transition-all flex flex-col justify-between ${
               selectedDecision === 'approved'
                 ? 'bg-emerald-50/80 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500/30'
                 : 'bg-[#F5EDE2] border-[#D8CAAD]/60 text-[#5C4535] hover:bg-[#E8DCCB]'
@@ -96,7 +92,7 @@ export function AdminLawyerReviewPanel({
           </label>
 
           <label
-            className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
+            className={`admin-choice p-4 rounded-2xl cursor-pointer transition-all flex flex-col justify-between ${
               selectedDecision === 'needs_resubmission'
                 ? 'bg-amber-50/80 border-amber-500 text-amber-900 ring-2 ring-amber-500/30'
                 : 'bg-[#F5EDE2] border-[#D8CAAD]/60 text-[#5C4535] hover:bg-[#E8DCCB]'
@@ -112,7 +108,7 @@ export function AdminLawyerReviewPanel({
                 onChange={() => setSelectedDecision('needs_resubmission')}
                 className="sr-only"
               />
-              <span className="text-amber-600 font-bold">📋</span>
+              <span className="text-amber-600 font-bold">+</span>
             </div>
             <p className="text-[11px] opacity-80 mt-2">
               Incomplete documents or requires updated clearance before approval.
@@ -120,7 +116,7 @@ export function AdminLawyerReviewPanel({
           </label>
 
           <label
-            className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
+            className={`admin-choice p-4 rounded-2xl cursor-pointer transition-all flex flex-col justify-between ${
               selectedDecision === 'rejected'
                 ? 'bg-red-50/80 border-red-500 text-red-900 ring-2 ring-red-500/30'
                 : 'bg-[#F5EDE2] border-[#D8CAAD]/60 text-[#5C4535] hover:bg-[#E8DCCB]'
@@ -164,7 +160,7 @@ export function AdminLawyerReviewPanel({
                 ? 'e.g. Please upload clear photo of valid IBP ID card or updated IBP Chapter clearance...'
                 : 'e.g. Roll number does not match registered attorney records...'
             }
-            className="w-full p-3.5 rounded-2xl bg-[#FAF6F0] border border-[#D8CAAD] text-xs text-[#34150F] placeholder-[#A69584] focus:outline-none focus:ring-2 focus:ring-[#C58B3C]/40 transition-all resize-none"
+            className="admin-field w-full p-3.5 text-xs text-[#34150F] placeholder-[#A69584] focus:outline-none focus:ring-2 focus:ring-[#C58B3C]/40 transition-all resize-none"
           />
         </div>
 
@@ -179,13 +175,7 @@ export function AdminLawyerReviewPanel({
           <button
             type="submit"
             disabled={isPending}
-            className={`px-6 py-2.5 rounded-xl text-white text-xs font-bold tracking-wide transition-all shadow-md ${
-              selectedDecision === 'approved'
-                ? 'bg-emerald-700 hover:bg-emerald-800'
-                : selectedDecision === 'needs_resubmission'
-                ? 'bg-amber-600 hover:bg-amber-700'
-                : 'bg-red-700 hover:bg-red-800'
-            } disabled:opacity-60`}
+            className="admin-control admin-primary disabled:opacity-60"
           >
             {isPending ? 'Saving Decision…' : 'Submit Verification Decision'}
           </button>

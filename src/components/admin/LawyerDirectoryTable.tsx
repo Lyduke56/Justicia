@@ -142,7 +142,7 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
         );
       case 'pending':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
             <ClockIcon className="w-3.5 h-3.5" />
             Pending Review
           </span>
@@ -172,84 +172,19 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
 
   return (
     <div className="space-y-6">
-      {/* ─── Top KPI Stat Summary Cards ─────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div
-          onClick={() => setSelectedStatus('all')}
-          className={`cursor-pointer p-4 rounded-2xl bg-[#EFE5D8] border transition-all ${
-            selectedStatus === 'all'
-              ? 'border-[#C58B3C] shadow-[inset_2px_2px_5px_rgba(0,0,0,0.06)]'
-              : 'border-[#E8DCCB] hover:border-[#C58B3C]/50'
-          }`}
-          style={{ boxShadow: '4px 4px 10px rgba(0,0,0,0.04), -4px -4px 10px rgba(255,255,255,0.8)' }}
-        >
-          <div className="text-[11px] font-bold uppercase tracking-wider text-[#7D6855]">Total Roster</div>
-          <div className="mt-1 font-cormorant text-3xl font-bold text-[#34150F]">{counts.all}</div>
-          <div className="text-[10px] text-[#A69584] mt-0.5">Registered attorneys</div>
-        </div>
-
-        <div
-          onClick={() => setSelectedStatus('approved')}
-          className={`cursor-pointer p-4 rounded-2xl bg-[#EFE5D8] border transition-all ${
-            selectedStatus === 'approved'
-              ? 'border-emerald-600 shadow-[inset_2px_2px_5px_rgba(0,0,0,0.06)]'
-              : 'border-[#E8DCCB] hover:border-emerald-500/50'
-          }`}
-          style={{ boxShadow: '4px 4px 10px rgba(0,0,0,0.04), -4px -4px 10px rgba(255,255,255,0.8)' }}
-        >
-          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Verified Counsel</div>
-          <div className="mt-1 font-cormorant text-3xl font-bold text-emerald-900">{counts.approved}</div>
-          <div className="text-[10px] text-emerald-700/80 mt-0.5">Active & visible in search</div>
-        </div>
-
-        <div
-          onClick={() => setSelectedStatus('pending')}
-          className={`cursor-pointer p-4 rounded-2xl bg-[#EFE5D8] border transition-all ${
-            selectedStatus === 'pending'
-              ? 'border-amber-600 shadow-[inset_2px_2px_5px_rgba(0,0,0,0.06)]'
-              : 'border-[#E8DCCB] hover:border-amber-500/50'
-          }`}
-          style={{ boxShadow: '4px 4px 10px rgba(0,0,0,0.04), -4px -4px 10px rgba(255,255,255,0.8)' }}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">Pending Review</span>
-            {counts.pending > 0 && (
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
-            )}
-          </div>
-          <div className="mt-1 font-cormorant text-3xl font-bold text-amber-900">{counts.pending}</div>
-          <div className="text-[10px] text-amber-700/80 mt-0.5">Awaiting Bar Roll check</div>
-        </div>
-
-        <div
-          onClick={() => setSelectedStatus('rejected')}
-          className={`cursor-pointer p-4 rounded-2xl bg-[#EFE5D8] border transition-all ${
-            selectedStatus === 'rejected'
-              ? 'border-rose-600 shadow-[inset_2px_2px_5px_rgba(0,0,0,0.06)]'
-              : 'border-[#E8DCCB] hover:border-rose-500/50'
-          }`}
-          style={{ boxShadow: '4px 4px 10px rgba(0,0,0,0.04), -4px -4px 10px rgba(255,255,255,0.8)' }}
-        >
-          <div className="text-[11px] font-bold uppercase tracking-wider text-rose-800">Rejected / Denied</div>
-          <div className="mt-1 font-cormorant text-3xl font-bold text-rose-900">{counts.rejected}</div>
-          <div className="text-[10px] text-rose-700/80 mt-0.5">Did not satisfy criteria</div>
-        </div>
-      </div>
-
-      {/* ─── Search, Tabs & Sorting Bar ────────────────────────────────────── */}
       <div
-        className="p-4 sm:p-5 rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB]/80 flex flex-col md:flex-row md:items-center justify-between gap-4"
-        style={{ boxShadow: '6px 6px 14px rgba(0,0,0,0.06), -6px -6px 14px rgba(255,255,255,0.9)' }}
+        className="admin-toolbar"
       >
         {/* Search Input */}
-        <div className="relative flex-1 max-w-md">
+        <div className="admin-search relative">
           <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A69584]" />
           <input
-            type="text"
+            type="search"
+            aria-label="Search lawyers"
             placeholder="Search by name, Bar roll #, IBP chapter, or specialty..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-xs rounded-2xl bg-[#E8DCCB]/40 border border-[#D5C7B5] focus:outline-none focus:border-[#C58B3C] text-[#34150F] placeholder-[#A69584] transition"
+            className="admin-field w-full pl-10 pr-16 py-2.5 text-xs focus:outline-none text-[#34150F] placeholder-[#A69584] transition"
           />
           {searchQuery && (
             <button
@@ -262,7 +197,7 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
         </div>
 
         {/* Status Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-[#E8DCCB]/50 border border-[#D5C7B5]/60 text-xs font-semibold overflow-x-auto">
+        <div className="admin-filters order-last w-full">
           {[
             { id: 'all', label: 'All', count: counts.all },
             { id: 'approved', label: 'Verified', count: counts.approved },
@@ -273,12 +208,10 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
           ].map((tab) => (
             <button
               key={tab.id}
+              type="button"
+              aria-pressed={selectedStatus === tab.id}
               onClick={() => setSelectedStatus(tab.id)}
-              className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 ${
-                selectedStatus === tab.id
-                  ? 'bg-[#23150F] text-[#EFE5D8] shadow-sm'
-                  : 'text-[#7D6855] hover:text-[#34150F] hover:bg-[#E8DCCB]'
-              }`}
+              className="admin-filter"
             >
               <span>{tab.label}</span>
               <span
@@ -294,6 +227,8 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
           ))}
         </div>
 
+        <Link href="/admin/lawyers/verification-queue" className="admin-control">Verification queue</Link>
+
         {/* Sort dropdown */}
         <div className="flex items-center gap-2 shrink-0">
           <label className="text-[11px] font-bold text-[#7D6855] uppercase tracking-wider">Sort:</label>
@@ -301,7 +236,7 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as 'newest' | 'name' | 'experience')}
             aria-label="Sort lawyers directory"
-            className="text-xs px-3 py-2 rounded-xl bg-[#E8DCCB]/40 border border-[#D5C7B5] text-[#34150F] focus:outline-none focus:border-[#C58B3C]"
+            className="admin-field text-xs px-3 py-2 text-[#34150F] focus:outline-none"
           >
             <option value="newest">Recently Registered</option>
             <option value="name">Name (A-Z)</option>
@@ -312,11 +247,10 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
 
       {/* ─── Lawyers Table ─────────────────────────────────────────────────── */}
       <div
-        className="rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB]/80 overflow-hidden"
-        style={{ boxShadow: '8px 8px 18px rgba(0,0,0,0.06), -8px -8px 18px rgba(255,255,255,0.9)' }}
+        className="admin-surface overflow-hidden"
       >
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="admin-table w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#23150F] text-[#ded7cb] text-[11px] uppercase tracking-wider font-semibold border-b border-[#352219]">
                 <th className="px-6 py-4">Counsel Profile</th>
@@ -462,7 +396,7 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
                           {isPending ? (
                             <Link
                               href={`/admin/lawyers/${lawyer.user_id}`}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#C58B3C] text-[#23150F] font-semibold text-xs hover:bg-[#B37B2F] transition shadow-sm"
+                              className="admin-control admin-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-[#23150F] font-semibold text-xs transition"
                             >
                               <ShieldCheckIcon className="w-3.5 h-3.5" />
                               <span>Verify Now</span>
@@ -470,7 +404,7 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
                           ) : (
                             <Link
                               href={`/admin/lawyers/${lawyer.user_id}`}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#E8DCCB] text-[#34150F] font-medium text-xs hover:bg-[#D5C7B5] transition"
+                              className="admin-control inline-flex items-center gap-1 px-3 py-1.5 text-[#34150F] font-medium text-xs transition"
                             >
                               <span>Dossier</span>
                               <ArrowRightIcon className="w-3 h-3 text-[#7D6855]" />

@@ -164,16 +164,14 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
       )}
 
       {/* ─── Filter Tabs & Search Bar ──────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="admin-toolbar">
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+        <div className="admin-filters">
           <button
+            type="button"
+            aria-pressed={activeTab === 'pending'}
             onClick={() => setActiveTab('pending')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'pending'
-                ? 'bg-[#C58B3C] text-white shadow-md'
-                : 'bg-[#E5D7C5]/70 text-[#5C4535] hover:bg-[#DBCABA]'
-            }`}
+            className="admin-filter"
           >
             <span>Pending Review</span>
             {counts.pending > 0 && (
@@ -186,12 +184,10 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
           </button>
 
           <button
+            type="button"
+            aria-pressed={activeTab === 'needs_resubmission'}
             onClick={() => setActiveTab('needs_resubmission')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'needs_resubmission'
-                ? 'bg-[#C58B3C] text-white shadow-md'
-                : 'bg-[#E5D7C5]/70 text-[#5C4535] hover:bg-[#DBCABA]'
-            }`}
+            className="admin-filter"
           >
             <span>Needs Info</span>
             {counts.needs_resubmission > 0 && (
@@ -202,50 +198,44 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
           </button>
 
           <button
+            type="button"
+            aria-pressed={activeTab === 'approved'}
             onClick={() => setActiveTab('approved')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'approved'
-                ? 'bg-[#C58B3C] text-white shadow-md'
-                : 'bg-[#E5D7C5]/70 text-[#5C4535] hover:bg-[#DBCABA]'
-            }`}
+            className="admin-filter"
           >
             <span>Approved</span>
             <span className="text-[10px] opacity-75">({counts.approved})</span>
           </button>
 
           <button
+            type="button"
+            aria-pressed={activeTab === 'rejected'}
             onClick={() => setActiveTab('rejected')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'rejected'
-                ? 'bg-[#C58B3C] text-white shadow-md'
-                : 'bg-[#E5D7C5]/70 text-[#5C4535] hover:bg-[#DBCABA]'
-            }`}
+            className="admin-filter"
           >
             <span>Rejected</span>
             <span className="text-[10px] opacity-75">({counts.rejected})</span>
           </button>
 
           <button
+            type="button"
+            aria-pressed={activeTab === 'all'}
             onClick={() => setActiveTab('all')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'all'
-                ? 'bg-[#34150F] text-white shadow-md'
-                : 'bg-[#E5D7C5]/70 text-[#5C4535] hover:bg-[#DBCABA]'
-            }`}
+            className="admin-filter"
           >
             <span>All ({counts.all})</span>
           </button>
         </div>
 
         {/* Search Field */}
-        <div className="relative w-full md:w-72">
+        <div className="admin-search relative">
           <input
-            type="text"
+            type="search"
+            aria-label="Search lawyer applications"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search name, roll #, chapter..."
-            className="w-full px-4 py-2.5 pl-9 rounded-xl bg-[#EFE5D8] border border-[#D8CAAD] text-xs text-[#34150F] placeholder-[#9E8E7D] focus:outline-none focus:ring-2 focus:ring-[#C58B3C]/40 transition-all"
-            style={{ boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.06)' }}
+            className="admin-field w-full px-4 py-2.5 pl-9 text-xs text-[#34150F] placeholder-[#9E8E7D] focus:outline-none focus:ring-2 focus:ring-[#C58B3C]/40 transition-all"
           />
           <svg
             className="w-4 h-4 text-[#7D6855] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -262,13 +252,12 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
       {/* ─── Application Cards List ────────────────────────────────────────── */}
       {filtered.length === 0 ? (
         <div
-          className="rounded-3xl p-12 text-center bg-[#EFE5D8] border border-[#E8DCCB] space-y-3"
-          style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
+          className="admin-surface p-12 text-center space-y-3"
         >
           <div className="w-14 h-14 rounded-full bg-[#C58B3C]/10 text-[#C58B3C] flex items-center justify-center mx-auto text-2xl">
-            📋
+            <span aria-hidden="true">—</span>
           </div>
-          <h3 className="font-cormorant text-2xl font-bold text-[#34150F]">No applications found</h3>
+          <h3 className="font-lora text-lg font-semibold text-[#34150F]">No applications found</h3>
           <p className="text-xs text-[#7D6855] max-w-sm mx-auto">
             {searchQuery
               ? `No lawyer profiles match "${searchQuery}". Try searching with different keywords.`
@@ -288,8 +277,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
             return (
               <div
                 key={lawyer.user_id}
-                className="rounded-3xl p-6 bg-[#EFE5D8] border border-[#E8DCCB] transition-all hover:border-[#C58B3C]/40 space-y-5"
-                style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
+                className="admin-surface p-6 transition-all space-y-5"
               >
                 {/* Top Row: Name, Status Badge, Roll # */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -308,7 +296,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
 
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h2 className="font-cormorant text-2xl font-bold text-[#34150F]">
+                        <h2 className="font-lora text-lg font-semibold text-[#34150F]">
                           {lawyer.full_name || 'Attorney Applicant'}
                         </h2>
                         {/* Status Badge */}
@@ -317,7 +305,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                             isApproved
                               ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                               : isLawyerPending
-                              ? 'bg-amber-50 text-amber-800 border-amber-300 animate-pulse'
+                              ? 'bg-amber-50 text-amber-800 border-amber-300'
                               : isNeedsInfo
                               ? 'bg-orange-50 text-orange-800 border-orange-300'
                               : isRejected
@@ -325,7 +313,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                               : 'bg-gray-100 text-gray-700 border-gray-300'
                           }`}
                         >
-                          <span>{isApproved ? '✅' : isLawyerPending ? '⏳' : isNeedsInfo ? '📋' : isRejected ? '✗' : '📝'}</span>
+
                           <span>
                             {isApproved
                               ? 'Approved & Verified'
@@ -377,7 +365,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                 </div>
 
                 {/* Middle Row: Practice Areas, Bio, Rates */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-[#E8DCCB]/80 text-xs">
+                <div className="admin-plate grid grid-cols-1 md:grid-cols-3 gap-4 p-4 text-xs">
                   {/* Practice Areas */}
                   <div className="space-y-1.5">
                     <span className="font-semibold text-[#7D6855] uppercase tracking-wider text-[10px]">
@@ -427,7 +415,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
 
                 {/* Bio Snippet */}
                 {lawyer.about && (
-                  <div className="p-3.5 rounded-xl bg-[#F5EDE2] border border-[#E8DCCB] text-xs text-[#5C4535] leading-relaxed">
+                  <div className="admin-inset p-4 text-sm text-[#5C4535] leading-relaxed">
                     <span className="font-bold text-[#34150F]">Statement / Bio: </span>
                     {lawyer.about}
                   </div>
@@ -462,7 +450,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                         type="button"
                         onClick={() => handleOpenAction(lawyer, 'approved')}
                         disabled={isPending}
-                        className="px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 transition-all shadow-sm flex items-center gap-1.5"
+                        className="admin-primary admin-control px-4 py-2 bg-emerald-700 text-xs font-semibold hover:bg-emerald-800 transition-all flex items-center gap-1.5"
                       >
                         <span>✓</span>
                         <span>Approve Verification</span>
@@ -475,9 +463,9 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                         type="button"
                         onClick={() => handleOpenAction(lawyer, 'needs_resubmission')}
                         disabled={isPending}
-                        className="px-3.5 py-2 rounded-xl bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition-all shadow-sm flex items-center gap-1.5"
+                        className="admin-control px-3.5 py-2 bg-amber-600 text-xs font-semibold hover:bg-amber-700 transition-all flex items-center gap-1.5"
                       >
-                        <span>📋</span>
+                        <span aria-hidden="true">+</span>
                         <span>Request Info</span>
                       </button>
                     )}
@@ -488,7 +476,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                         type="button"
                         onClick={() => handleOpenAction(lawyer, 'rejected')}
                         disabled={isPending}
-                        className="px-3.5 py-2 rounded-xl bg-red-700 text-white text-xs font-semibold hover:bg-red-800 transition-all shadow-sm flex items-center gap-1.5"
+                        className="admin-danger admin-control px-3.5 py-2 bg-red-700 text-xs font-semibold hover:bg-red-800 transition-all flex items-center gap-1.5"
                       >
                         <span>✕</span>
                         <span>Reject</span>
@@ -506,15 +494,14 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
       {modalState.open && modalState.lawyer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
           <div
-            className="w-full max-w-lg rounded-3xl bg-[#EFE5D8] border border-[#E8DCCB] p-6 sm:p-8 space-y-5 shadow-2xl animate-in zoom-in-95 duration-150"
-            style={{ boxShadow: '0 20px 40px rgba(0,0,0,0.25)' }}
+            className="admin-surface w-full max-w-lg p-6 sm:p-8 space-y-5 animate-in zoom-in-95 duration-150"
           >
             <div className="flex items-center justify-between pb-3 border-b border-[#D8CAAD]">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#C58B3C]">
                   Verification Review Decision
                 </span>
-                <h3 className="font-cormorant text-2xl font-bold text-[#34150F]">
+                <h3 className="font-lora text-lg font-semibold text-[#34150F]">
                   {modalState.decision === 'approved'
                     ? 'Approve Lawyer Credentials'
                     : modalState.decision === 'needs_resubmission'
@@ -546,7 +533,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
               {modalState.decision === 'approved' && (
                 <p className="text-emerald-900 bg-emerald-50 p-3 rounded-xl border border-emerald-200">
                   By approving, Atty. {modalState.lawyer.full_name} will be granted full access to the Counsel Portal
-                  and their public profile will be activated on "Find a Lawyer".
+                  and their public profile will be activated on &quot;Find a Lawyer&quot;.
                 </p>
               )}
 
@@ -560,10 +547,10 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                     value={modalState.note}
                     onChange={(e) => setModalState((prev) => ({ ...prev, note: e.target.value }))}
                     placeholder="e.g. Please provide updated IBP Chapter clearance or clear photo of Bar ID..."
-                    className="w-full p-3 rounded-xl bg-[#FAF6F0] border border-[#D8CAAD] text-xs text-[#34150F] focus:outline-none focus:ring-2 focus:ring-[#C58B3C]/40"
+                    className="admin-field w-full p-3 text-xs text-[#34150F] focus:outline-none focus:ring-2 focus:ring-[#C58B3C]/40"
                   />
                   <p className="text-[11px] text-[#7D6855]">
-                    This note will be shown on the lawyer's Application Status page.
+                    This note will be shown on the lawyer&apos;s Application Status page.
                   </p>
                 </div>
               )}
@@ -578,7 +565,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                     value={modalState.note}
                     onChange={(e) => setModalState((prev) => ({ ...prev, note: e.target.value }))}
                     placeholder="e.g. Roll number does not match Supreme Court / IBP database records..."
-                    className="w-full p-3 rounded-xl bg-[#FAF6F0] border border-[#D8CAAD] text-xs text-[#34150F] focus:outline-none focus:ring-2 focus:ring-red-400"
+                    className="admin-field w-full p-3 text-xs text-[#34150F] focus:outline-none focus:ring-2 focus:ring-red-400"
                   />
                   <p className="text-[11px] text-[#7D6855]">
                     The applicant will see this reason on their Application Status page.
@@ -591,7 +578,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
               <button
                 type="button"
                 onClick={() => setModalState({ open: false, lawyer: null, decision: 'approved', note: '' })}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-[#5C4535] hover:bg-[#E5D7C5]"
+                className="admin-control px-4 py-2 text-xs font-semibold text-[#5C4535]"
               >
                 Cancel
               </button>
@@ -599,13 +586,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                 type="button"
                 onClick={handleConfirmAction}
                 disabled={isPending}
-                className={`px-5 py-2.5 rounded-xl text-white text-xs font-bold tracking-wide transition-all shadow-md ${
-                  modalState.decision === 'approved'
-                    ? 'bg-emerald-700 hover:bg-emerald-800'
-                    : modalState.decision === 'needs_resubmission'
-                    ? 'bg-amber-600 hover:bg-amber-700'
-                    : 'bg-red-700 hover:bg-red-800'
-                }`}
+                className="admin-control admin-primary"
               >
                 {isPending ? 'Processing…' : 'Confirm Decision'}
               </button>

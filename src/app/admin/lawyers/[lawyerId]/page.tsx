@@ -48,7 +48,7 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
   const isRejected = profile.verification_status === 'rejected';
 
   return (
-    <div className="p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-8">
+    <div className="admin-page">
       {/* ─── Header & Breadcrumbs ─────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -59,14 +59,11 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
             >
               ← Verification Queue
             </Link>
-            <span className="text-[#A69584]">/</span>
-            <span className="text-[11px] font-bold tracking-[0.2em] text-[#C58B3C] uppercase">
-              Lawyer Dossier
-            </span>
+
           </div>
 
           <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-            <h1 className="font-cormorant text-4xl sm:text-5xl font-medium text-[#34150F] tracking-tight">
+            <h1 className="font-lora text-xl sm:text-2xl font-semibold text-[#34150F]">
               Atty. {profile.full_name}
             </h1>
 
@@ -83,7 +80,7 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
                   : 'bg-gray-100 text-gray-700 border-gray-300'
               }`}
             >
-              <span>{isApproved ? '✅' : isPending ? '⏳' : isNeedsInfo ? '📋' : isRejected ? '✗' : '📝'}</span>
+
               <span>
                 {isApproved
                   ? 'Verified Counsel'
@@ -107,7 +104,7 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
         <div className="flex items-center gap-2">
           <Link
             href="/admin/lawyers"
-            className="px-4 py-2 rounded-xl border border-[#D8CAAD] text-xs font-semibold text-[#5C4535] hover:bg-[#E5D7C5] transition-all"
+            className="admin-control px-4 py-2 text-xs font-semibold text-[#5C4535] transition-all"
           >
             All Lawyers
           </Link>
@@ -118,14 +115,13 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Official Bar Credentials */}
         <div
-          className="lg:col-span-1 rounded-3xl p-6 bg-[#EFE5D8] border border-[#E8DCCB] space-y-6 self-start"
-          style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
+          className="admin-surface lg:col-span-1 p-6 space-y-6 self-start"
         >
           <div className="border-b border-[#D8CAAD] pb-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-[#C58B3C]">
               Supreme Court & IBP Records
             </span>
-            <h2 className="font-cormorant text-2xl font-bold text-[#34150F] mt-0.5">
+            <h2 className="font-lora text-lg font-semibold text-[#34150F] mt-0.5">
               Bar Credentials
             </h2>
           </div>
@@ -175,14 +171,13 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
         <div className="lg:col-span-2 space-y-6">
           {/* Card: Practice Details & Rates */}
           <div
-            className="rounded-3xl p-6 bg-[#EFE5D8] border border-[#E8DCCB] space-y-6"
-            style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
+            className="admin-surface p-6 space-y-6"
           >
             <div className="border-b border-[#D8CAAD] pb-4">
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#C58B3C]">
                 Professional Offering
               </span>
-              <h2 className="font-cormorant text-2xl font-bold text-[#34150F] mt-0.5">
+              <h2 className="font-lora text-lg font-semibold text-[#34150F] mt-0.5">
                 Legal Practice & Consultation Rates
               </h2>
             </div>
@@ -264,8 +259,7 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
           {/* Audit History */}
           {auditLogs && auditLogs.length > 0 && (
             <div
-              className="rounded-3xl p-6 bg-[#EFE5D8] border border-[#E8DCCB] space-y-4"
-              style={{ boxShadow: '6px 6px 16px rgba(0,0,0,0.06), -6px -6px 16px rgba(255,255,255,0.9)' }}
+              className="admin-surface p-6 space-y-4"
             >
               <h3 className="font-cormorant text-xl font-bold text-[#34150F]">
                 Application Audit Trail

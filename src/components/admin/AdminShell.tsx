@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import './admin.css';
 import { usePathname } from 'next/navigation';
 import { signOutAction } from '@/app/actions/auth';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
@@ -15,7 +16,7 @@ const navigation = [
   { name: 'Audit log', href: '/admin/settings/security-audit-log', icon: DocumentTextIcon, active: (path: string) => path.startsWith('/admin/settings/security-audit-log') },
 ];
 
-const navClass = (active: boolean) => `flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9A6A27] ${active ? 'bg-[#D4C1AB] font-semibold text-[#34150F] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.12),inset_-2px_-2px_4px_rgba(255,255,255,0.65)]' : 'text-[#3E2A1E] hover:bg-[#E5D7C5]'}`;
+const navClass = (active: boolean) => `admin-nav-link flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9A6A27] ${active ? 'bg-[#D4C1AB] font-semibold text-[#34150F] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.12),inset_-2px_-2px_4px_rgba(255,255,255,0.65)]' : 'text-[#3E2A1E] hover:bg-[#E5D7C5]'}`;
 
 export function AdminShell({ user, children }: { user: { id: string; email?: string; fullName: string }; children: ReactNode }) {
   useInactivityLogout();
@@ -43,7 +44,7 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
   });
   const settingsActive = pathname === '/admin/settings' || pathname.startsWith('/admin/settings/admin-accounts');
 
-  return <div className="flex h-dvh flex-col bg-[#EFE5D8] text-[#34150F] selection:bg-[#C58B3C]/30">
+  return <div className="admin-portal flex h-dvh flex-col bg-[#EFE5D8] text-[#34150F] selection:bg-[#C58B3C]/30">
     <header className="z-40 flex h-16 shrink-0 items-center justify-between border-b border-[#352219] bg-[#23150F] px-4 text-[#DED7CB] shadow-md sm:px-8">
       <div className="flex min-w-0 items-center gap-3">
         <button type="button" aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileOpen} aria-controls="admin-mobile-navigation" onClick={() => setMobileOpen((open) => !open)} className="rounded-lg p-2 hover:text-[#C58B3C] focus-visible:outline-2 focus-visible:outline-[#C58B3C] md:hidden">
@@ -77,7 +78,7 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
           <div className="space-y-2 border-t border-[#C8B59E] pt-4"><Link href="/admin/settings" onClick={() => setMobileOpen(false)} aria-current={settingsActive ? 'page' : undefined} className={navClass(settingsActive)}><GearIcon className="h-5 w-5 text-[#5C4535]" />Settings</Link><form action={signOutAction}><button type="submit" className={`${navClass(false)} text-left`}><LogoutIcon className="h-5 w-5 text-[#5C4535]" />Sign out</button></form></div>
         </aside>
       </div>}
-      <main id="admin-main-content" className="min-w-0 flex-1 overflow-y-auto bg-[#EFE5D8]"><div key={pathname} className="client-view-enter">{children}</div></main>
+      <main id="admin-main-content" className="admin-content min-w-0 flex-1 overflow-y-auto bg-[#EFE5D8]"><div key={pathname} className="client-view-enter">{children}</div></main>
     </div>
   </div>;
 }
