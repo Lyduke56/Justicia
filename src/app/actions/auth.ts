@@ -2,7 +2,9 @@
 
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { accountBlockedMessage, checkAccountAccess, getAccountStanding } from '@/lib/moderation/accountStatus';
 import { getDashboardForRole, type UserRole } from '@/lib/utils/rbac';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -102,7 +104,25 @@ export async function signInAction(
     if (error.message.toLowerCase().includes('email not confirmed')) {
       return { error: 'Please verify your email before signing in.', field: 'email' };
     }
+    // Suspended / terminated accounts are banned in Supabase Auth (see lib/moderation).
+    if (error.code === 'user_banned' || error.message.toLowerCase().includes('banned')) {
+      return { error: await bannedAccountMessage(email), field: 'email' };
+    }
     return { error: error.message };
+  }
+
+  // A suspension that has ended is lifted here; a blocked account is signed straight out again.
+  if (signInData?.user?.id) {
+    try {
+      const db = (await createServiceClient()) as unknown as SupabaseClient;
+      const blocked = await checkAccountAccess(db, signInData.user.id);
+      if (blocked) {
+        await supabase.auth.signOut();
+        return { error: blocked, field: 'email' };
+      }
+    } catch (err) {
+      console.warn('[signInAction] account status check failed:', err);
+    }
   }
 
   // Determine the user's role — check user_accounts first, then auth metadata as fallback
@@ -156,6 +176,22 @@ export async function signInAction(
   }
 
   redirect(getDashboardForRole(resolvedRole));
+}
+
+/** Explains why a banned account cannot sign in (suspended until …, or terminated). */
+async function bannedAccountMessage(email: string): Promise<string> {
+  const fallback = 'This account is currently suspended for violating the Justicia community guidelines.';
+  try {
+    const db = (await createServiceClient()) as unknown as SupabaseClient;
+    const { data: account } = await db.from('user_accounts').select('id').eq('email', email).maybeSingle();
+    if (!account?.id) return fallback;
+    const standing = await getAccountStanding(db, account.id);
+    return standing.status === 'active'
+      ? 'This account cannot sign in right now. Please contact Justicia support.'
+      : accountBlockedMessage(standing);
+  } catch {
+    return fallback;
+  }
 }
 
 // ─── Forgot Password ──────────────────────────────────────────────────────────

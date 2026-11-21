@@ -189,9 +189,11 @@ function makeClock(iso) {
   return clock;
 }
 
-const compiled = ts.transpileModule(fs.readFileSync('src/app/actions/consultationActions.ts', 'utf8'), {
+const compile = (file) => ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText;
+const compiled = compile('src/app/actions/consultationActions.ts');
+const compiledAccountStatus = compile('src/lib/moderation/accountStatus.ts');
 
 let seq = 0;
 const uuid = (prefix = '33333333') => `${prefix}-${String(++seq).padStart(4, '0')}-4333-8333-${String(seq).padStart(12, '0')}`;
@@ -229,6 +231,30 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
   const db = makeDb(state);
   const exports = {};
   const sink = (level) => (...args) => state.logs.push({ level, text: args.map(String).join(' ') });
+  const sandboxRequire = (name) => {
+    if (name === 'crypto') return crypto;
+    if (name === 'next/cache') return { revalidatePath() {} };
+    if (name === 'next/server') return { after: (fn) => fn() };
+    if (name === '@/lib/realtime/live') {
+      return { emitLive: async (userIds, scopes) => { state.signals.push({ userIds: [...userIds], scopes: [...scopes] }); } };
+    }
+    if (name === '@/lib/integrations/email') return { sendEmail: async () => ({ sent: false }) };
+    if (name === '@/lib/moderation/accountStatus') {
+      // The real module (account standing checks), sharing this fixture's database double.
+      const mod = {};
+      vm.runInNewContext(compiledAccountStatus, { exports: mod, Date: clock.Date, console: { error() {}, warn() {}, log() {} }, require: sandboxRequire });
+      return mod;
+    }
+    if (name === '@/lib/supabase/server') {
+      return {
+        createServiceClient: async () => db,
+        createClient: async () => ({
+          auth: { getUser: async () => ({ data: { user: state.userId ? { id: state.userId, email: 'x@test.ph', user_metadata: {} } : null } }) },
+        }),
+      };
+    }
+    throw new Error(`unexpected import ${name}`);
+  };
   vm.runInNewContext(compiled, {
     exports,
     Date: clock.Date,
@@ -238,23 +264,7 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
     URL,
     setTimeout,
     console: { error: sink('error'), warn: sink('warn'), log() {} },
-    require(name) {
-      if (name === 'crypto') return crypto;
-      if (name === 'next/cache') return { revalidatePath() {} };
-      if (name === 'next/server') return { after: (fn) => fn() };
-      if (name === '@/lib/realtime/live') {
-        return { emitLive: async (userIds, scopes) => { state.signals.push({ userIds: [...userIds], scopes: [...scopes] }); } };
-      }
-      if (name === '@/lib/supabase/server') {
-        return {
-          createServiceClient: async () => db,
-          createClient: async () => ({
-            auth: { getUser: async () => ({ data: { user: state.userId ? { id: state.userId, email: 'x@test.ph', user_metadata: {} } : null } }) },
-          }),
-        };
-      }
-      throw new Error(`unexpected import ${name}`);
-    },
+    require: sandboxRequire,
   });
 
   const as = (userId) => { state.userId = userId; return exports; };

@@ -18,6 +18,7 @@ import { ConsultationDetailsModal } from '@/components/shared/ConsultationDetail
 import type { ConsultationDetailsModalProps } from '@/components/shared/ConsultationDetailsModal';
 import { ConsultationDecisionModal } from '@/components/lawyer/ConsultationDecisionModal';
 import type { DecisionMode } from '@/components/lawyer/ConsultationDecisionModal';
+import { RescheduleModal, type RescheduleModalMode } from '@/components/shared/RescheduleModal';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const consultationEntrance: Variants = {
@@ -236,6 +237,8 @@ export function LawyerConsultationsView({
   const [decisionSubmitting, setDecisionSubmitting] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [reschedule, setReschedule] = useState<{ mode: RescheduleModalMode; id: string } | null>(null);
+  const [rescheduleNotice, setRescheduleNotice] = useState<string | null>(null);
 
   // Fetch the signed-in lawyer's consultations (identity is resolved server-side).
   const loadConsultations = useCallback(() => {
@@ -372,6 +375,28 @@ export function LawyerConsultationsView({
     else if (c.cancellationReason) notice = { tone: 'red', title: 'Reason for Cancellation', text: c.cancellationReason };
     else if (c.status === 'pending_payment' && pd.state === 'rejected' && pd.rejectionReason) {
       notice = { tone: 'amber', title: 'You declined the previous proof of payment', text: pd.rejectionReason };
+    } else if (c.reschedule?.pending) {
+      const p = c.reschedule.pending;
+      notice = p.byMe
+        ? {
+            tone: 'amber',
+            title: 'Reschedule request sent',
+            text: `You asked to move this consultation to ${p.proposedDateLong}, ${p.proposedTimeRange}. Waiting for ${c.client.name} to answer.`,
+          }
+        : {
+            tone: 'amber',
+            title: `${c.client.name} asked to reschedule`,
+            text: `Proposed new time: ${p.proposedDateLong}, ${p.proposedTimeRange}.
+Reason: ${p.reason}`,
+          };
+    } else if (c.reschedule?.last?.byMe && c.reschedule.last.recent && ['declined', 'expired'].includes(c.reschedule.last.status)) {
+      const last = c.reschedule.last;
+      notice = {
+        tone: 'red',
+        title: last.status === 'declined' ? 'Your reschedule request was declined' : 'Your reschedule request expired',
+        text: `${last.proposedLabel} was not confirmed, so the original schedule stays.${last.responseReason ? `
+Reason: ${last.responseReason}` : ''}`,
+      };
     }
 
     let actions: ConsultationDetailsModalProps['actions'] = [{ label: 'Close', variant: 'caramel', onClick: close }];
@@ -383,7 +408,18 @@ export function LawyerConsultationsView({
     } else if (c.status === 'confirmed') {
       actions = [
         { label: 'Cancel', variant: 'outline', onClick: () => openDecision('cancel', c.id) },
-        { label: 'Reschedule', variant: 'espresso', onClick: () => openMessages(c.id) },
+        {
+          label: c.reschedule?.pending ? (c.reschedule.pending.byMe ? 'Withdraw Request' : 'Review Request') : 'Reschedule',
+          variant: 'espresso',
+          disabled: !c.reschedule?.pending && !c.reschedule?.canRequest,
+          onClick: () => {
+            setShowDetails(false);
+            setReschedule({
+              id: c.id,
+              mode: c.reschedule?.pending ? (c.reschedule.pending.byMe ? 'withdraw' : 'respond') : 'request',
+            });
+          },
+        },
         {
           label: 'Join Meet',
           variant: 'caramel',
@@ -672,6 +708,41 @@ export function LawyerConsultationsView({
               </div>
             </div>
 
+            {rescheduleNotice && (
+              <div role="status" className="flex items-center justify-between gap-3 rounded-[14px] bg-emerald-50 border border-emerald-300 px-4 py-2.5 text-xs text-emerald-900">
+                <span>{rescheduleNotice}</span>
+                <button type="button" onClick={() => setRescheduleNotice(null)} className="font-semibold hover:underline shrink-0">
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {selectedConsultation.reschedule?.pending && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-[14px] bg-amber-100/90 border border-amber-300 px-4 py-2.5 text-xs text-amber-900">
+                <span>
+                  {selectedConsultation.reschedule.pending.byMe
+                    ? 'You asked to move this consultation to '
+                    : `${selectedConsultation.client.name} asked to move this consultation to `}
+                  <strong>
+                    {selectedConsultation.reschedule.pending.proposedDateLong}, {selectedConsultation.reschedule.pending.proposedTimeRange}
+                  </strong>
+                  {selectedConsultation.reschedule.pending.byMe ? ' — waiting for an answer.' : '.'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setReschedule({
+                      id: selectedConsultation.id,
+                      mode: selectedConsultation.reschedule?.pending?.byMe ? 'withdraw' : 'respond',
+                    })
+                  }
+                  className="font-bold hover:underline shrink-0 self-start sm:self-auto"
+                >
+                  {selectedConsultation.reschedule.pending.byMe ? 'Withdraw' : 'Review Request'}
+                </button>
+              </div>
+            )}
+
             {/* Client Profile Sub-Card (Extruded Warm Peach Plate) */}
             <div className="neu-plate rounded-[26px] p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div className="flex items-center gap-5 sm:gap-6 min-w-0">
@@ -921,6 +992,31 @@ export function LawyerConsultationsView({
           onConfirm={handleDecision}
         />
       )}
+
+      {/* Reschedule (request / respond / withdraw) */}
+      {reschedule &&
+        (() => {
+          const target = consultations.find((x) => x.id === reschedule.id);
+          if (!target?.reschedule) return null;
+          return (
+            <RescheduleModal
+              key={`${reschedule.mode}-${reschedule.id}`}
+              mode={reschedule.mode}
+              consultationId={target.id}
+              counterpartName={target.client.name}
+              currentLabel={`${target.dateLong} · ${target.timeRange}`}
+              currentStart={target.scheduledStart}
+              pending={target.reschedule.pending}
+              remaining={target.reschedule.remaining}
+              onClose={() => setReschedule(null)}
+              onDone={(message) => {
+                setReschedule(null);
+                setRescheduleNotice(message);
+                void loadConsultations();
+              }}
+            />
+          );
+        })()}
 
     </motion.div>
   );
