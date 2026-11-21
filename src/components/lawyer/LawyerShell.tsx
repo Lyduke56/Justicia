@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { signOutAction } from '@/app/actions/auth';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
@@ -22,8 +22,10 @@ import { LawyerDashboardView } from './views/LawyerDashboardView';
 import { LawyerConsultationsView } from './views/LawyerConsultationsView';
 import { LawyerEarningsView } from './views/LawyerEarningsView';
 import { DocumentsView } from '@/components/documents/DocumentsView';
-import { getUserNotificationsAction } from '@/app/actions/consultationActions';
 import { MessagesView } from '@/components/client/views/MessagesView';
+import { KeepAliveViews } from '@/components/live/KeepAliveViews';
+import { useLiveRefresh } from '@/components/live/LiveProvider';
+import { fetchLive } from '@/lib/live/fetchLive';
 
 export type LawyerViewKey =
   | 'dashboard'
@@ -103,30 +105,47 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [liveLawyerNotifs, setLiveLawyerNotifs] = useState<any[]>([]);
 
-  useEffect(() => {
-    let active = true;
-    const load = () =>
-      getUserNotificationsAction('lawyer').then((data) => {
-        if (active && data && data.length > 0) setLiveLawyerNotifs(data);
-      });
-    load();
-    // Refresh every minute so "consultation starting soon" alerts reach the bell on time.
-    const timer = setInterval(load, 60000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [notificationsOpen]);
+  const loadNotifications = useCallback(
+    () =>
+      fetchLive('notifications', { role: 'lawyer' })
+        .then((data) => {
+          if (data && data.length > 0) setLiveLawyerNotifs(data);
+        })
+        .catch(() => {}),
+    []
+  );
 
   useEffect(() => {
+    loadNotifications();
+    // Time-based "consultation starting soon" alerts are generated on read, so keep a slow tick.
+    const timer = setInterval(loadNotifications, 60000);
+    return () => clearInterval(timer);
+  }, [notificationsOpen, loadNotifications]);
+
+  // New notifications arrive instantly via Supabase Realtime.
+  useLiveRefresh(['notifications'], loadNotifications);
+
+  // While a sidebar navigation is in flight, ignore intermediate pathnames
+  // (rapid clicks A → B → C would otherwise flash B when its URL commits).
+  const pendingPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (pendingPathRef.current && pathname !== pendingPathRef.current) return;
+    pendingPathRef.current = null;
     setActiveView(pathnameToView(pathname));
   }, [pathname]);
+
+  // Warm the router cache for every sidebar destination.
+  useEffect(() => {
+    for (const item of LAWYER_NAV_ITEMS) router.prefetch(item.href);
+    router.prefetch('/lawyer/settings');
+  }, [router]);
 
   const navigate = useCallback(
     (key: LawyerViewKey) => {
       const item = LAWYER_NAV_ITEMS.find((n) => n.key === key);
       const href = item?.href ?? (key === 'settings' ? '/lawyer/settings' : '/lawyer/dashboard');
       setActiveView(key);
+      pendingPathRef.current = href;
       router.push(href, { scroll: false });
       setMobileMenuOpen(false);
     },
@@ -135,27 +154,20 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
 
   const navigateToDashboard = useCallback(() => {
     setActiveView('dashboard');
+    pendingPathRef.current = '/lawyer/dashboard';
     router.push('/lawyer/dashboard', { scroll: false });
   }, [router]);
 
-  function renderView() {
-    switch (activeView) {
-      case 'consultations':
-        return <LawyerConsultationsView lawyerUserId={user.id} lawyerName={user.fullName} />;
-      case 'messages':
-        return <MessagesView role="lawyer" />;
-      case 'dashboard':
-        return <LawyerDashboardView />;
-      case 'documents':
-        return <DocumentsView role="lawyer" />;
-      case 'earnings':
-        return <LawyerEarningsView isDemo={user.id.startsWith('demo-')} />;
-      case 'reviews':
-        return children ?? <LawyerDashboardView />;
-      default:
-        return children ?? <LawyerDashboardView />;
-    }
-  }
+  // Tabs that stay mounted once opened (instant switching, live-refreshed).
+  // Route-driven pages (profile, settings, reviews, …) render from `children`.
+  const keepAliveViews: Record<string, () => React.ReactNode> = {
+    dashboard: () => <LawyerDashboardView />,
+    consultations: () => <LawyerConsultationsView lawyerUserId={user.id} lawyerName={user.fullName} />,
+    messages: () => <MessagesView role="lawyer" />,
+    documents: () => <DocumentsView role="lawyer" />,
+    earnings: () => <LawyerEarningsView isDemo={user.id.startsWith('demo-')} />,
+  };
+  const keepAliveKey = activeView in keepAliveViews ? activeView : null;
 
   return (
     /*
@@ -493,9 +505,13 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
 
         {/* Main Content Viewport */}
         <main className={`flex-1 overflow-y-auto bg-[#E5D8CB] ${['dashboard', 'consultations', 'documents', 'earnings'].includes(activeView) ? 'lawyer-designed-view' : ''}`} id="lawyer-main-content">
-          <div key={activeView} className="client-view-enter">
-            {renderView()}
-          </div>
+          <KeepAliveViews
+            activeKey={keepAliveKey}
+            views={keepAliveViews}
+            fallback={children ?? <LawyerDashboardView />}
+            fallbackKey={pathname}
+            scrollContainerId="lawyer-main-content"
+          />
         </main>
       </div>
     </div>

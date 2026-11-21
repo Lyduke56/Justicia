@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import {
-  getUserDocumentsDataAction,
   createDocumentFolderAction,
   uploadDocumentFileAction,
   deleteDocumentFileAction,
@@ -12,6 +11,8 @@ import {
   renameDocumentFolderAction,
   getDocumentAccessUrlAction,
 } from '@/app/actions/consultationActions';
+import { fetchLive } from '@/lib/live/fetchLive';
+import { useLiveRefresh } from '@/components/live/LiveProvider';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -511,10 +512,12 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
     return () => window.removeEventListener('click', handleOutsideClick);
   }, []);
 
-  // Load real folders from Supabase documents table
-  useEffect(() => {
-    setLoadingDocs(true);
-    getUserDocumentsDataAction(role)
+  // Load real folders from Supabase documents table. The first load shows the
+  // skeleton; live refreshes (shared files, uploads elsewhere) update silently.
+  const docsLoadedRef = useRef(false);
+  const loadDocuments = React.useCallback(() => {
+    if (!docsLoadedRef.current) setLoadingDocs(true);
+    return fetchLive('documents', { role })
       .then((dbFolders) => {
         if (Array.isArray(dbFolders) && dbFolders.length > 0) {
           // Merge user custom/consultation folders with fallback cases, avoiding duplicate names
@@ -529,10 +532,20 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       })
       .catch((err) => {
         console.error('Failed to load documents:', err);
-        setFolders(DEFAULT_CASE_FOLDERS);
+        // Only fall back to defaults when nothing has loaded yet.
+        if (!docsLoadedRef.current) setFolders(DEFAULT_CASE_FOLDERS);
       })
-      .finally(() => setLoadingDocs(false));
+      .finally(() => {
+        docsLoadedRef.current = true;
+        setLoadingDocs(false);
+      });
   }, [role]);
+
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
+
+  useLiveRefresh(['documents'], loadDocuments, { fallbackMs: 60000 });
 
   // Active folder object
   const currentFolder = folders.find((f) => f.id === currentFolderId) || null;

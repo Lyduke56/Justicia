@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { ClientShell } from '@/components/client/ClientShell';
+import { LiveProvider } from '@/components/live/LiveProvider';
+import { liveTopicFor } from '@/lib/realtime/live';
 
 export const metadata = {
   title: {
@@ -57,14 +59,16 @@ export default async function ClientLayout({
   }
 
   return (
-    <ClientShell
-      user={{
-        id: userId,
-        email,
-        fullName,
-      }}
-    >
-      {children}
-    </ClientShell>
+    <LiveProvider topic={user ? liveTopicFor(user.id) : null}>
+      <ClientShell
+        user={{
+          id: userId,
+          email,
+          fullName,
+        }}
+      >
+        {children}
+      </ClientShell>
+    </LiveProvider>
   );
 }

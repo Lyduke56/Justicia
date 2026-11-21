@@ -1,14 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { MessagesIcon, ScaleIcon, SendPaperPlaneIcon } from '@/components/client/ClientIcons';
-import {
-  getMessageThreadsAction,
-  getMessagesForThreadAction,
-  sendDirectMessageAction,
-  getThreadContextAction,
-  type ThreadContext,
-} from '@/app/actions/consultationActions';
+import { sendDirectMessageAction, type ThreadContext } from '@/app/actions/consultationActions';
+import { fetchLive } from '@/lib/live/fetchLive';
+import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
 import { addLawyerReviewAction } from '@/app/actions/reviewActions';
 
 interface MessageItem {
@@ -51,57 +48,78 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
   const [sending, setSending] = useState<boolean>(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const viewActive = useViewActive();
 
-  // Load threads (and refresh them periodically so new conversations / last messages show up).
+  // Deep link from "Message Client" / "Message Channel": /…/messages?thread=<consultationId>.
+  // Read reactively: this tab may already be mounted (kept alive) when the link is followed.
+  const requestedThread = useSearchParams().get('thread');
+  const requestedThreadRef = useRef<string | null>(requestedThread);
   useEffect(() => {
-    let active = true;
-    // Deep link from "Message Client" / "Message Channel": /…/messages?thread=<consultationId>
-    const requestedThread =
-      typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('thread') : null;
+    requestedThreadRef.current = requestedThread;
+  }, [requestedThread]);
+  const findRequested = (list: ThreadItem[], requested: string | null) =>
+    requested ? list.find((t) => t.id === requested || t.consultationIds?.includes(requested)) : undefined;
 
-    const loadThreads = () =>
-      getMessageThreadsAction().then((dbThreads) => {
-        if (!active) return;
-        const list = Array.isArray(dbThreads) ? dbThreads : [];
-        setThreads(list);
-        setActiveThreadId((current) => {
-          if (current && list.some((t) => t.id === current)) return current;
-          // Deep links may carry a consultation id; conversations are per client ⇄ lawyer pair.
-          const requested =
-            requestedThread &&
-            list.find((t) => t.id === requestedThread || t.consultationIds?.includes(requestedThread));
-          if (requested) return requested.id;
-          return list[0]?.id ?? null;
-        });
-      });
+  const loadThreads = useCallback(
+    () =>
+      fetchLive('threads')
+        .then((dbThreads) => {
+          const list = Array.isArray(dbThreads) ? dbThreads : [];
+          setThreads(list);
+          setActiveThreadId((current) => {
+            if (current && list.some((t) => t.id === current)) return current;
+            // Deep links may carry a consultation id; conversations are per client ⇄ lawyer pair.
+            return findRequested(list, requestedThreadRef.current)?.id ?? list[0]?.id ?? null;
+          });
+        })
+        .catch(() => {
+          // Keep the current list; the next live refresh retries.
+        }),
+    []
+  );
 
+  useEffect(() => {
     loadThreads();
-    const timer = setInterval(loadThreads, 15000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [role]);
+  }, [loadThreads, role]);
 
-  // Load messages for the active thread and poll for replies from the other party.
+  // Following a new ?thread= link switches to that conversation (once per link,
+  // as soon as the matching thread is loaded). Adjusting state during render is
+  // React's recommended pattern for reacting to a changed input.
+  const [handledThreadLink, setHandledThreadLink] = useState<string | null>(null);
+  if (requestedThread && requestedThread !== handledThreadLink) {
+    const match = findRequested(threads, requestedThread);
+    if (match) {
+      setHandledThreadLink(requestedThread);
+      if (match.id !== activeThreadId) setActiveThreadId(match.id);
+    }
+  }
+
+  const activeThreadRef = useRef<string | null>(activeThreadId);
   useEffect(() => {
-    if (!activeThreadId) return;
-    let active = true;
-    const loadMessages = () =>
-      getMessagesForThreadAction(activeThreadId).then((loadedMsgs) => {
-        if (!active) return;
-        setMessages((prev) => ({
-          ...prev,
-          [activeThreadId]: Array.isArray(loadedMsgs) ? loadedMsgs : [],
-        }));
-      });
-    loadMessages();
-    const timer = setInterval(loadMessages, 5000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
+    activeThreadRef.current = activeThreadId;
   }, [activeThreadId]);
+  const loadMessages = useCallback((threadId: string | null = activeThreadRef.current) => {
+    if (!threadId) return;
+    return fetchLive('thread-messages', { threadId })
+      .then((loadedMsgs) => {
+        const server = Array.isArray(loadedMsgs) ? loadedMsgs : [];
+        setMessages((prev) => {
+          // Keep optimistic messages that are still being sent.
+          const sending = (prev[threadId] || []).filter((m) => m.id.startsWith('m-'));
+          return { ...prev, [threadId]: [...server, ...sending] };
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadMessages(activeThreadId);
+  }, [activeThreadId, loadMessages]);
+
+  // Replies, new conversations and system messages arrive live (Supabase Realtime).
+  // Without a live connection, poll — only while this tab is on screen.
+  useLiveRefresh(['messages', 'consultations'], loadThreads, { fallbackMs: 15000 });
+  useLiveRefresh(['messages'], () => loadMessages(), { fallbackMs: 5000 });
 
   // Auto-scroll messages stream to bottom when active messages change
   const activeMessages = (activeThreadId && messages[activeThreadId]) || [];
@@ -124,26 +142,36 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
   const [ratingError, setRatingError] = useState<string | null>(null);
   const [ratingThanks, setRatingThanks] = useState<boolean>(false);
 
+  const loadContext = useCallback((threadId: string | null = activeThreadRef.current) => {
+    if (!threadId) return;
+    return fetchLive('thread-context', { threadId })
+      .then((data) => setContext({ threadId, data }))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
-    if (!activeThreadId) return;
-    let active = true;
-    const load = () =>
-      getThreadContextAction(activeThreadId).then((data) => {
-        if (active) setContext({ threadId: activeThreadId, data });
-      });
-    load();
-    const timer = setInterval(load, 30000);
+    loadContext(activeThreadId);
+  }, [activeThreadId, loadContext]);
+
+  // Meeting banner / rate prompt follow consultation changes live; the slow
+  // tick catches time-based changes (a meeting starting) while on screen.
+  useLiveRefresh(['consultations', 'reviews', 'messages'], () => loadContext());
+  useEffect(() => {
+    if (!viewActive) return;
+    const timer = setInterval(() => loadContext(), 60000);
+    return () => clearInterval(timer);
+  }, [viewActive, loadContext]);
+
+  // Tick so the "starts in N minutes" countdown stays current (only while on screen).
+  useEffect(() => {
+    if (!viewActive) return;
+    const catchUp = setTimeout(() => setNow(Date.now()), 0); // fresh countdown when shown again
+    const timer = setInterval(() => setNow(Date.now()), 20000);
     return () => {
-      active = false;
+      clearTimeout(catchUp);
       clearInterval(timer);
     };
-  }, [activeThreadId]);
-
-  // Tick so the "starts in N minutes" countdown stays current.
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 20000);
-    return () => clearInterval(timer);
-  }, []);
+  }, [viewActive]);
 
   const threadContext = context && context.threadId === activeThreadId ? context.data : null;
   const meeting =
@@ -194,9 +222,7 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
       setRatingComment('');
       // Hide the prompt for this consultation and refresh banners (a newer unrated one may surface).
       setContext((prev) => (prev ? { ...prev, data: { ...prev.data, ratePrompt: null } } : prev));
-      if (activeThreadId) {
-        getThreadContextAction(activeThreadId).then((data) => setContext({ threadId: activeThreadId, data }));
-      }
+      if (activeThreadId) loadContext(activeThreadId);
     } catch {
       setRatingError('Your rating could not be saved. Please try again.');
     } finally {

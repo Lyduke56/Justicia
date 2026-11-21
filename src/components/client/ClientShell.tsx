@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { getUserNotificationsAction } from '@/app/actions/consultationActions';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { KeepAliveViews } from '@/components/live/KeepAliveViews';
+import { useLiveRefresh } from '@/components/live/LiveProvider';
+import { fetchLive } from '@/lib/live/fetchLive';
 import { useRouter, usePathname } from 'next/navigation';
 import { signOutAction } from '@/app/actions/auth';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
@@ -95,25 +97,40 @@ export function ClientShell({ user, children }: ClientShellProps) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [liveNotifs, setLiveNotifs] = useState<any[]>([]);
 
-  useEffect(() => {
-    let active = true;
-    const load = () =>
-      getUserNotificationsAction('client').then((data: any) => {
-        if (active && data && data.length > 0) setLiveNotifs(data);
-      });
-    load();
-    // Refresh every minute so "consultation starting soon" alerts reach the bell on time.
-    const timer = setInterval(load, 60000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [notificationsOpen]);
+  const loadNotifications = useCallback(
+    () =>
+      fetchLive('notifications', { role: 'client' })
+        .then((data) => {
+          if (data && data.length > 0) setLiveNotifs(data);
+        })
+        .catch(() => {}),
+    []
+  );
 
-  // Keep view in sync when the user navigates with browser back/forward
   useEffect(() => {
+    loadNotifications();
+    // Time-based "consultation starting soon" alerts are generated on read, so keep a slow tick.
+    const timer = setInterval(loadNotifications, 60000);
+    return () => clearInterval(timer);
+  }, [notificationsOpen, loadNotifications]);
+
+  // New notifications arrive instantly via Supabase Realtime.
+  useLiveRefresh(['notifications'], loadNotifications);
+
+  // Keep view in sync when the user navigates with browser back/forward, but
+  // ignore intermediate pathnames while a sidebar navigation is in flight.
+  const pendingPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (pendingPathRef.current && pathname !== pendingPathRef.current) return;
+    pendingPathRef.current = null;
     setActiveView(pathnameToView(pathname));
   }, [pathname]);
+
+  // Warm the router cache for every sidebar destination.
+  useEffect(() => {
+    for (const item of NAV_ITEMS) router.prefetch(item.href);
+    router.prefetch('/client/dashboard');
+  }, [router]);
 
   // Navigate: update view state + push URL (no full page load)
   const navigate = useCallback(
@@ -121,6 +138,7 @@ export function ClientShell({ user, children }: ClientShellProps) {
       const item = NAV_ITEMS.find((n) => n.key === key);
       const href = item?.href ?? '/client/dashboard';
       setActiveView(key);
+      pendingPathRef.current = href;
       router.push(href, { scroll: false });
       setMobileMenuOpen(false);
     },
@@ -129,13 +147,24 @@ export function ClientShell({ user, children }: ClientShellProps) {
 
   const navigateToDashboard = useCallback(() => {
     setActiveView('dashboard');
+    pendingPathRef.current = '/client/dashboard';
     router.push('/client/dashboard', { scroll: false });
   }, [router]);
 
   const firstName = user.fullName.trim().split(' ')[0] || user.fullName;
 
-  // ─── Render active view ───────────────────────────────────────────────────
-  function renderView() {
+  // ─── Views ─────────────────────────────────────────────────────────────────
+  // Tabs that stay mounted once opened (instant switching, live-refreshed).
+  const keepAliveViews: Record<string, () => React.ReactNode> = {
+    dashboard: () => <DashboardView firstName={firstName} />,
+    consultations: () => <ConsultationsView onNavigate={navigate} />,
+    messages: () => <MessagesView />,
+    cases: () => <DocumentsView role="client" />,
+  };
+  const keepAliveKey = activeView in keepAliveViews ? activeView : null;
+
+  // URL-driven views (search filters, ?q=…) and route pages are rendered fresh.
+  function renderRouteView() {
     switch (activeView) {
       case 'ai-assistant':
         return <AIAssistantChat userFirstName={firstName} />;
@@ -144,14 +173,6 @@ export function ClientShell({ user, children }: ClientShellProps) {
           return children;
         }
         return <FindLawyerView isLoggedIn={true} userId={user.id} />;
-      case 'messages':
-        return <MessagesView />;
-      case 'cases':
-        return <DocumentsView role="client" />;
-      case 'consultations':
-        return <ConsultationsView onNavigate={navigate} />;
-      case 'dashboard':
-        return <DashboardView firstName={firstName} />;
       default:
         return children ?? <DashboardView firstName={firstName} />;
     }
@@ -475,13 +496,13 @@ export function ClientShell({ user, children }: ClientShellProps) {
           className="flex-1 overflow-y-auto bg-[#E5D8CB]"
           id="client-main-content"
         >
-          {/*
-            key={activeView} → React unmounts/remounts on view change,
-            triggering the CSS fade-in animation defined in globals.css
-          */}
-          <div key={activeView} className="client-view-enter">
-            {renderView()}
-          </div>
+          <KeepAliveViews
+            activeKey={keepAliveKey}
+            views={keepAliveViews}
+            fallback={renderRouteView()}
+            fallbackKey={`${activeView}:${pathname}`}
+            scrollContainerId="client-main-content"
+          />
         </main>
       </div>
     </div>

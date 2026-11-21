@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  getClientConsultationsAction,
-  cancelConsultationAction,
-} from '@/app/actions/consultationActions';
+import { cancelConsultationAction } from '@/app/actions/consultationActions';
+import { fetchLive } from '@/lib/live/fetchLive';
+import { useLiveRefresh } from '@/components/live/LiveProvider';
 import {
   getPaymentChannelAction,
   submitPaymentProofAction,
@@ -40,22 +39,28 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const [loadingAppointments, setLoadingAppointments] = useState<boolean>(true);
   const [selectedDay, setSelectedDay] = useState<number>(1);
 
-  useEffect(() => {
-    let active = true;
-    getClientConsultationsAction()
+  const appointmentsLoadedRef = useRef(false);
+  const loadAppointments = useCallback(() => {
+    return fetchLive('client-consultations')
       .then((data) => {
-        if (!active) return;
         const list = Array.isArray(data) ? data : [];
         setDbAppointments(list);
-        if (list[0]) setSelectedDay(list[0].day);
+        // Select the first booking's day only on the first load, not on live refreshes.
+        if (!appointmentsLoadedRef.current && list[0]) setSelectedDay(list[0].day);
+        appointmentsLoadedRef.current = true;
       })
-      .finally(() => {
-        if (active) setLoadingAppointments(false);
-      });
-    return () => {
-      active = false;
-    };
+      .catch(() => {
+        // Keep the bookings already on screen; the next refresh retries.
+      })
+      .finally(() => setLoadingAppointments(false));
   }, []);
+
+  useEffect(() => {
+    loadAppointments();
+  }, [loadAppointments]);
+
+  // Approvals, payment confirmations and Meet links appear without reopening the tab.
+  useLiveRefresh(['consultations', 'payments'], loadAppointments, { fallbackMs: 30000 });
   const [activeAppointmentIndex, setActiveAppointmentIndex] = useState<number>(0);
   const [showCancelModal, setShowCancelModal] = useState<boolean>(false);
   const [showDetailsModal, setShowDetailsModal] = useState<boolean>(false);

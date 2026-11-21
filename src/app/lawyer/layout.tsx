@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { headers, cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { LawyerShell } from '@/components/lawyer/LawyerShell';
+import { LiveProvider } from '@/components/live/LiveProvider';
+import { liveTopicFor } from '@/lib/realtime/live';
 
 export const metadata = {
   title: {
@@ -112,17 +114,19 @@ export default async function LawyerLayout({
 
 
   return (
-    <LawyerShell
-      user={{
-        id: user?.id || 'demo-lawyer-santos',
-        email: user?.email || 'atty.santos@justicia.ph',
-        fullName,
-        rollNumber,
-        ibpChapter,
-        isVerified,
-      }}
-    >
-      {children}
-    </LawyerShell>
+    <LiveProvider topic={user ? liveTopicFor(user.id) : null}>
+      <LawyerShell
+        user={{
+          id: user?.id || 'demo-lawyer-santos',
+          email: user?.email || 'atty.santos@justicia.ph',
+          fullName,
+          rollNumber,
+          ibpChapter,
+          isVerified,
+        }}
+      >
+        {children}
+      </LawyerShell>
+    </LiveProvider>
   );
 }
