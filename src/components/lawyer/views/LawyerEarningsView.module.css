@@ -456,7 +456,8 @@
 }
 
 .inquiryTableCard {
-  height: 250px;
+  /* Same 250px card as the design; grows when there are more than four rows. */
+  min-height: 250px;
   margin-top: 47px;
   padding: 14px 28px 30px;
   border-radius: 20px;
@@ -528,6 +529,9 @@
 }
 .upcoming {
   background: #20ae00;
+}
+.completed {
+  background: #341512;
 }
 .cancelled {
   background: #8c7a6b;

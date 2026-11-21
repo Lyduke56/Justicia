@@ -32,8 +32,9 @@ export const PUBLIC_ROUTES = [
 
 /** Route prefixes that require a specific role */
 export const ROLE_ROUTE_PREFIXES: Record<UserRole, string[]> = {
-  client: ['/client', '/ai-assistant', '/legal-research', '/consultations', '/cases', '/documents', '/messages', '/profile', '/settings'],
-  lawyer: ['/lawyer'],
+  // '/api/live' = read-only tab loaders (each loader checks the session user itself).
+  client: ['/client', '/ai-assistant', '/legal-research', '/consultations', '/cases', '/documents', '/messages', '/profile', '/settings', '/api/live'],
+  lawyer: ['/lawyer', '/api/live'],
   admin: ['/admin'],
 };
 
