@@ -795,13 +795,42 @@ function scheduleOf(row: ConsultationRow): {
   };
 }
 
-function remindersFor(
-  status: string,
-  method: 'video' | 'audio',
-  hasFiles: boolean,
-  paymentState: PaymentState = 'none'
-): string[] {
+interface ReminderContext {
+  status: string;
+  method: 'video' | 'audio';
+  hasFiles: boolean;
+  paymentState: PaymentState;
+  lawyerName: string;
+  dateLong: string;
+  timeRange: string;
+  durationLabel: string;
+  totalFee: number;
+  hasMeetingLink: boolean;
+}
+
+const pesoText = (n: number) =>
+  `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/**
+ * Reminders shown in the client's Consultations tab. "Pending Confirmation", "Pending Payment"
+ * and "Confirmed Appointment" are written around the booking's own details (attorney, schedule,
+ * fee) and the rules the system enforces (proof upload limit, reschedule limits).
+ */
+function remindersFor({
+  status,
+  method,
+  hasFiles,
+  paymentState,
+  lawyerName,
+  dateLong,
+  timeRange,
+  durationLabel,
+  totalFee,
+  hasMeetingLink,
+}: ReminderContext): string[] {
   const meet = method === 'video' ? 'video consultation' : 'audio call';
+  const when = `${dateLong}, ${timeRange}`;
+  const fee = totalFee > 0 ? pesoText(totalFee) : 'the consultation fee';
   if (status === 'awaiting_client_confirmation' && paymentState === 'submitted') {
     return [
       'Your proof of payment was submitted and is being reviewed by the attorney.',
@@ -818,31 +847,39 @@ function remindersFor(
     ];
   }
   switch (status) {
+    // PENDING CONFIRMATION: waiting on the attorney.
     case 'pending':
       return [
-        'Your request is waiting for the attorney to review and approve it.',
-        'You will be notified once the attorney approves or declines the booking.',
-        `After approval you will be asked to settle the consultation fee before the ${meet} is confirmed.`,
+        `${lawyerName} is reviewing your request for ${when}. You will be notified once they accept or decline.`,
+        'Nothing to pay yet. Payment is only requested after the attorney accepts.',
+        `Once accepted, you will pay ${fee} (session fee plus platform fee) by QR code to lock in the slot.`,
         hasFiles
-          ? 'The documents you shared are visible to the attorney while the request is active.'
-          : 'You can share supporting documents from My Documents before the session.',
-        'You may cancel this request anytime before the scheduled time.',
+          ? 'The attorney can already see the documents you shared, so they can prepare while reviewing.'
+          : 'Sharing supporting documents from My Documents helps the attorney assess your concern faster.',
+        'Changed your mind? You can cancel this request from this page at no cost.',
       ];
+    // PENDING PAYMENT: accepted by the attorney, waiting on the client's payment.
     case 'awaiting_client_confirmation':
       return [
-        'The attorney approved your request. Please complete the payment to confirm your slot.',
-        'Your time slot is held for you while payment is pending.',
-        'You can now message the attorney from the Messages tab.',
-        `Once paid, the Google Meet link for your ${meet} will appear here.`,
+        `${lawyerName} accepted your request. Pay ${fee} to confirm your ${meet} on ${when}.`,
+        'Open View Details to scan the QR code, then upload your proof of payment there.',
+        `Upload a clear screenshot or receipt (PNG, JPG or PDF, up to ${formatBytes(MAX_UPLOAD_BYTES)}) showing the amount and reference number.`,
+        'The attorney verifies the payment, and the Google Meet link appears here once it is confirmed.',
+        'Questions about the payment? Message the attorney from the Messages tab.',
       ];
+    // CONFIRMED APPOINTMENT: paid and scheduled.
     case 'confirmed':
       return [
-        `Join the Google Meet ${meet} a few minutes before the scheduled time.`,
+        `Payment confirmed. Your ${meet} with ${lawyerName} is on ${when} (${durationLabel}).`,
+        hasMeetingLink
+          ? 'Use the Join Meet button a few minutes early so you start on time.'
+          : 'The Google Meet link will appear here once the attorney adds it.',
         method === 'video'
-          ? 'Use a quiet, private room and test your camera and microphone beforehand.'
-          : 'Use a quiet, private room and test your microphone and speakers beforehand.',
-        'Keep your documents and questions ready for the attorney.',
-        'Everything discussed is protected by attorney-client privilege.',
+          ? 'Find a quiet, private room and test your camera and microphone beforehand.'
+          : 'Find a quiet, private room and test your microphone and speakers beforehand.',
+        'Write down your questions and keep related documents within reach.',
+        `Need a different time? You can request a reschedule until ${RESCHEDULE_CUTOFF_MS / 3_600_000} hour before the session (up to ${MAX_RESCHEDULES} per booking).`,
+        'Everything you discuss is protected by attorney-client privilege.',
       ];
     case 'completed':
       return [
@@ -867,6 +904,9 @@ function toClientConsultation(
 ): ClientConsultation {
   const { meta, date, range, displayDate, timeSlot } = scheduleOf(row);
   const payment = paymentOf(row, meta, range, Number(lawyer?.fee_standard_60min ?? 0), platformFee);
+  const summary = summaryOf(date, range);
+  const lawyerName = lawyer?.full_name || meta.lawyerName || 'Assigned Counsel';
+  const sharedDocs = sharedDocsFromMeta(meta);
 
   const ratingAvg = Number(lawyer?.rating_avg ?? 0);
   const ratingCount = Number(lawyer?.rating_count ?? 0);
@@ -887,7 +927,7 @@ function toClientConsultation(
     scheduledStart: row.scheduled_start,
     communicationMode: row.method === 'audio' ? 'audio' : 'video',
     lawyerId: row.lawyer_id,
-    lawyerName: lawyer?.full_name || meta.lawyerName || 'Assigned Counsel',
+    lawyerName,
     rollNumber: lawyer?.roll_number || '—',
     ibpChapter: (lawyer?.ibp_chapter || '—').toUpperCase(),
     practiceAreas: lawyer?.practice_areas?.length ? lawyer.practice_areas : ['General Practice'],
@@ -898,16 +938,22 @@ function toClientConsultation(
     caseTitle: meta.subject || 'Legal Consultation',
     caseDescription: meta.description || 'No additional details were provided for this consultation.',
     meetingLink: row.meeting_url ?? null,
-    attachedFiles: sharedDocsFromMeta(meta),
-    reminders: remindersFor(
-      row.status,
-      row.method === 'audio' ? 'audio' : 'video',
-      sharedDocsFromMeta(meta).length > 0,
-      payment.state
-    ),
+    attachedFiles: sharedDocs,
+    reminders: remindersFor({
+      status: row.status,
+      method: row.method === 'audio' ? 'audio' : 'video',
+      hasFiles: sharedDocs.length > 0,
+      paymentState: payment.state,
+      lawyerName,
+      dateLong: summary.dateLong,
+      timeRange: summary.timeRange,
+      durationLabel: summary.durationLabel,
+      totalFee: payment.total,
+      hasMeetingLink: Boolean(row.meeting_url),
+    }),
     declineReason: typeof meta.declineReason === 'string' ? meta.declineReason : null,
     cancellationReason: typeof meta.cancellationReason === 'string' ? meta.cancellationReason : null,
-    ...summaryOf(date, range),
+    ...summary,
     payment,
     reschedule: rescheduleInfoOf(row, meta, 'client'),
   };
@@ -1211,6 +1257,19 @@ export async function bookConsultationAction(input: BookConsultationInput): Prom
       user.id
     );
 
+    // The client ⇄ lawyer conversation merges every booking between the pair, so record this
+    // request there too. Otherwise the thread's latest status message can belong to an older
+    // booking (e.g. a previous "approved" one) and contradict this pending request.
+    if (await ensureUserAccount(db, profile)) {
+      await postSystemMessage(
+        db,
+        inserted.id,
+        user.id,
+        `Consultation request sent for ${dateLabel.toUpperCase()} (${timeSlotLabel}) — "${subject}". ` +
+          `Waiting for ${lawyer.full_name || 'the attorney'} to approve this booking.`
+      );
+    }
+
     await notifyUser(
       db,
       lawyerId,
@@ -1228,7 +1287,7 @@ export async function bookConsultationAction(input: BookConsultationInput): Prom
     );
 
     revalidateConsultationPaths();
-    signalLive([user.id, lawyerId], ['consultations', 'documents']);
+    signalLive([user.id, lawyerId], ['consultations', 'documents', 'messages']);
 
     return {
       success: true,
@@ -1339,6 +1398,18 @@ export async function cancelConsultationAction(
 
     // Revoke document access unless another active booking with the same lawyer still shares the file.
     await revokeSharedDocuments(db, consultation);
+
+    // Close this booking out in the shared conversation so its earlier status messages
+    // (e.g. "approved") aren't read as current.
+    if (await ensureUserAccount(db, profile)) {
+      await postSystemMessage(
+        db,
+        consultationId,
+        user.id,
+        `${profile.full_name || 'The client'} cancelled the consultation for ${summary.dateStr.replace('TODAY, ', '')} (${summary.timeSlot}).` +
+          (wasPaid ? ' A refund is pending.' : '')
+      );
+    }
 
     await notifyUser(
       db,

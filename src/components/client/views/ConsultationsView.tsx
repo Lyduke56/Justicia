@@ -1,18 +1,32 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
+import {
+  AnimatePresence,
+  motion,
+  MotionConfig,
+  useMotionValue,
+  useReducedMotion,
+  useSpring,
+  type PanInfo,
+  type Variants,
+} from 'motion/react';
 import { cancelConsultationAction } from '@/app/actions/consultationActions';
 import { fetchLive } from '@/lib/live/fetchLive';
-import { useLiveRefresh } from '@/components/live/LiveProvider';
+import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
 import {
   getPaymentChannelAction,
   submitPaymentProofAction,
   getDocumentAccessUrlAction,
 } from '@/app/actions/consultationActions';
 import type { ClientConsultation, PaymentChannel } from '@/app/actions/consultationActions';
-import { ConsultationDetailsModal } from '@/components/shared/ConsultationDetailsModal';
+import {
+  ConsultationDetailsModal,
+  DetailsStatusRow,
+  DetailsPersonBanner,
+  DetailsCaseBlock,
+} from '@/components/shared/ConsultationDetailsModal';
 import type {
   ConsultationDetailsModalProps,
   DetailsSummary,
@@ -20,12 +34,83 @@ import type {
 import type { ViewKey } from '@/components/client/ClientShell';
 import { ConsultationsSkeleton } from '@/components/skeletons';
 import { RescheduleModal, type RescheduleModalMode } from '@/components/shared/RescheduleModal';
+import {
+  NeuModal,
+  NeuButton,
+  NeuAlert,
+  EmptyState,
+  AlertIcon,
+  CalendarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  EXTRUDE,
+  PhoneIcon,
+  SearchIcon,
+  VideoIcon,
+} from '@/components/shared/neu';
 
 interface ConsultationsViewProps {
   onNavigate?: (view: ViewKey) => void;
 }
 
 type Appointment = ClientConsultation;
+
+type SelectedDate = { year: number; month: number; day: number };
+
+const WEEKDAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+// ─── Motion ──────────────────────────────────────────────────────────────────
+const EASE_OUT = [0.2, 0.8, 0.2, 1] as const;
+
+/** Page cascade: columns, then the cards inside them, rise in one after another. */
+const PAGE_STAGGER: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.09, delayChildren: 0.04 } },
+};
+const RISE_IN: Variants = {
+  hidden: { opacity: 0, y: 22, scale: 0.985 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 230, damping: 26 } },
+};
+/** Month title rolls up/down with the browsing direction. */
+const TITLE_SWAP: Variants = {
+  enter: (d: number) => ({ opacity: 0, y: d * 10 }),
+  center: { opacity: 1, y: 0, transition: { duration: 0.22, ease: EASE_OUT } },
+  exit: (d: number) => ({ opacity: 0, y: -d * 10, transition: { duration: 0.14 } }),
+};
+/** Month grid slides sideways with the browsing direction. */
+const GRID_SLIDE: Variants = {
+  enter: (d: number) => ({ opacity: 0, x: d * 28 }),
+  center: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 340, damping: 32 } },
+  exit: (d: number) => ({ opacity: 0, x: -d * 28, transition: { duration: 0.14 } }),
+};
+const LIST_STAGGER: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.05, delayChildren: 0.03 } },
+  exit: { opacity: 0, transition: { duration: 0.12 } },
+};
+const LIST_ITEM: Variants = {
+  hidden: { opacity: 0, x: -10 },
+  show: { opacity: 1, x: 0, transition: { duration: 0.28, ease: EASE_OUT } },
+};
+/** Appointment card content slides in the direction you paged, its sections cascading. */
+const CARD_SLIDE: Variants = {
+  enter: (d: number) => ({ opacity: 0, x: d * 48 }),
+  center: {
+    opacity: 1,
+    x: 0,
+    transition: { type: 'spring', stiffness: 300, damping: 32, staggerChildren: 0.05, delayChildren: 0.03 },
+  },
+  exit: (d: number) => ({ opacity: 0, x: -d * 48, transition: { duration: 0.16, ease: 'easeIn' } }),
+};
+const CARD_POP: Variants = {
+  enter: { opacity: 0, scale: 0.92, y: -6 },
+  center: { opacity: 1, scale: 1, y: 0, transition: { type: 'spring', stiffness: 420, damping: 22 } },
+};
+const CARD_ITEM: Variants = {
+  enter: { opacity: 0, y: 10 },
+  center: { opacity: 1, y: 0, transition: { duration: 0.3, ease: EASE_OUT } },
+};
 
 const MONTH_LABELS = [
   'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
@@ -35,65 +120,55 @@ const MONTH_LABELS = [
 /** Statuses a client may still cancel. */
 const CANCELLABLE_STATUSES = ['pending', 'confirmed', 'awaiting_client_confirmation'];
 
-const DEFAULT_REMINDERS = [
-  'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
-  'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-  'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.',
-  'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
-  'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-  'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.',
-];
-
-const DEFAULT_APPOINTMENT: Appointment = {
-  id: 'consultation-default-1',
-  status: 'CONFIRMED APPOINTMENT',
-  rawStatus: 'confirmed',
-  day: 23,
-  month: 8, // September (0-indexed: 8)
-  year: 2026,
-  dateStr: 'TODAY, SEPTEMBER 23, 2026',
-  timeSlot: '3:00 PM - 4:00 PM • PST, GMT+8',
-  scheduledStart: '2026-09-23T15:00:00+08:00',
-  communicationMode: 'video',
-  lawyerId: '22222222-2222-4222-8222-000000000001',
-  lawyerName: 'Atty. Maria Elena Santos, Ll.B.',
-  rollNumber: '58942',
-  ibpChapter: 'MAKATI',
-  practiceAreas: ['Labor & Employment', 'Corporate', 'Civil Law'],
-  rating: '4.9 (53 Reviews)',
-  experienceYrs: 9,
-  ratePerHour: 1500,
-  docket: 'SUBJECT MATTER & CASE DOCKET',
-  caseTitle: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
-  caseDescription:
-    'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
-  meetingLink: 'https://meet.google.com/justicia-consultation',
-  attachedFiles: [],
-  reminders: DEFAULT_REMINDERS,
-  declineReason: null,
-  cancellationReason: null,
-  dateLong: 'Wednesday, September 23, 2026',
-  timeRange: '3:00 PM - 4:00 PM',
-  durationLabel: '1 hour',
-  payment: {
-    state: 'verified',
-    proofDocumentId: null,
-    proofFileName: null,
-    submittedAt: null,
-    reviewedAt: null,
-    rejectionReason: null,
-    sessionFee: 1500,
-    platformFee: 150,
-    total: 1650,
-  },
-  reschedule: null,
-};
+/**
+ * Wraps the lawyer banner: a light sheen sweeps across it whenever a consultation arrives, and on
+ * mouse devices it tilts a few degrees toward the pointer. The sheen sits in its own clipped layer
+ * so the banner's raised shadow is never cut off.
+ */
+function BannerShowcase({ children, sheenKey }: { children: React.ReactNode; sheenKey: string }) {
+  const reduce = useReducedMotion();
+  const rx = useMotionValue(0);
+  const ry = useMotionValue(0);
+  const rotateX = useSpring(rx, { stiffness: 220, damping: 18 });
+  const rotateY = useSpring(ry, { stiffness: 220, damping: 18 });
+  return (
+    <motion.div
+      className="relative"
+      style={{ rotateX, rotateY, transformPerspective: 900 }}
+      onPointerMove={(e) => {
+        if (reduce || e.pointerType !== 'mouse') return;
+        const r = e.currentTarget.getBoundingClientRect();
+        ry.set(((e.clientX - r.left) / r.width - 0.5) * 5);
+        rx.set(-((e.clientY - r.top) / r.height - 0.5) * 5);
+      }}
+      onPointerLeave={() => {
+        rx.set(0);
+        ry.set(0);
+      }}
+    >
+      {children}
+      <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[20px] sm:rounded-[22px] overflow-hidden">
+        <motion.span
+          key={sheenKey}
+          initial={{ x: '-140%' }}
+          animate={{ x: '320%' }}
+          transition={{ duration: 1.15, delay: 0.5, ease: [0.4, 0, 0.2, 1] }}
+          className="absolute inset-y-0 left-0 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/45 to-transparent"
+        />
+      </span>
+    </motion.div>
+  );
+}
 
 export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const router = useRouter();
   const [dbAppointments, setDbAppointments] = useState<Appointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState<boolean>(true);
-  const [selectedDay, setSelectedDay] = useState<number>(1);
+  // Full date (not just the day number) so the highlight doesn't repeat in every month browsed.
+  const [selectedDate, setSelectedDate] = useState<SelectedDate>(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
+  });
 
   const appointmentsLoadedRef = useRef(false);
   const loadAppointments = useCallback(() => {
@@ -103,11 +178,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
         setDbAppointments(list);
         // Select the first booking's day only on the first load, not on live refreshes.
         if (!appointmentsLoadedRef.current) {
-          if (list[0]) {
-            setSelectedDay(list[0].day);
-          } else {
-            setSelectedDay(23);
-          }
+          if (list[0]) setSelectedDate({ year: list[0].year, month: list[0].month, day: list[0].day });
         }
         appointmentsLoadedRef.current = true;
       })
@@ -129,34 +200,50 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const [showMeetModal, setShowMeetModal] = useState<boolean>(false);
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const [isSwitching, setIsSwitching] = useState<boolean>(false);
+  /** +1 when moving to a later consultation / month, -1 when moving back (drives slide direction). */
+  const [slideDir, setSlideDir] = useState<number>(1);
+  const [monthDir, setMonthDir] = useState<number>(1);
+  /** False until the calendar card has risen in; the first day-wave waits for it. */
+  const [calendarIntroDone, setCalendarIntroDone] = useState<boolean>(false);
+
+  // The portal keeps tabs mounted (and preloads them hidden), so mounting alone doesn't mean the
+  // user is looking. Each time this tab becomes visible, bump a key that remounts the animated
+  // layout so the entrance plays again. Data, selection and calendar month live in this
+  // component and are kept. (State adjusted during render, React's pattern for reacting to a
+  // changed value without an effect.)
+  const isViewActive = useViewActive();
+  const [wasViewActive, setWasViewActive] = useState<boolean>(isViewActive);
+  const [entranceKey, setEntranceKey] = useState<number>(0);
+  if (isViewActive !== wasViewActive) {
+    setWasViewActive(isViewActive);
+    if (isViewActive) {
+      setEntranceKey((k) => k + 1);
+      setCalendarIntroDone(false);
+    }
+  }
   const [reschedule, setReschedule] = useState<{ mode: RescheduleModalMode; id: string } | null>(null);
   const [rescheduleNotice, setRescheduleNotice] = useState<string | null>(null);
 
-  const allAppointments = dbAppointments.length > 0 ? dbAppointments : [DEFAULT_APPOINTMENT];
+  const allAppointments = dbAppointments;
   const hasAppointments = allAppointments.length > 0;
   const currentAppointment: Appointment | undefined =
     allAppointments[activeAppointmentIndex] || allAppointments[0];
 
   const handleSelectAppointment = (idx: number) => {
     if (idx === activeAppointmentIndex) return;
-    setIsSwitching(true);
+    setSlideDir(idx > activeAppointmentIndex ? 1 : -1);
     setActiveAppointmentIndex(idx);
     const target = allAppointments[idx];
     if (target) {
-      setSelectedDay(target.day);
+      setSelectedDate({ year: target.year, month: target.month, day: target.day });
+      const delta = target.year * 12 + target.month - (viewYear * 12 + viewMonth);
+      if (delta !== 0) setMonthDir(delta > 0 ? 1 : -1);
       setViewMonth(target.month);
       setViewYear(target.year);
-    } else {
-      setSelectedDay(1);
     }
-    setTimeout(() => setIsSwitching(false), 200);
   };
 
   const rawStatus = currentAppointment?.rawStatus ?? 'pending';
-  const isCancelled = rawStatus === 'cancelled';
-  // Caramel badge while waiting on the lawyer (pending) or on payment (awaiting_client_confirmation).
-  const isPending = rawStatus === 'pending' || rawStatus === 'awaiting_client_confirmation';
   const canCancel = CANCELLABLE_STATUSES.includes(rawStatus);
   const canJoinMeet = rawStatus === 'confirmed';
 
@@ -183,8 +270,8 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   };
 
   // Calendar follows the month of the selected consultation, but allows explicit month browsing.
-  const [viewMonth, setViewMonth] = useState<number>(() => currentAppointment?.month ?? 8);
-  const [viewYear, setViewYear] = useState<number>(() => currentAppointment?.year ?? 2026);
+  const [viewMonth, setViewMonth] = useState<number>(() => currentAppointment?.month ?? new Date().getMonth());
+  const [viewYear, setViewYear] = useState<number>(() => currentAppointment?.year ?? new Date().getFullYear());
 
   useEffect(() => {
     if (currentAppointment) {
@@ -197,6 +284,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const calendarMonth = viewMonth;
 
   const handlePrevMonth = () => {
+    setMonthDir(-1);
     if (viewMonth === 0) {
       setViewMonth(11);
       setViewYear((y) => y - 1);
@@ -206,6 +294,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   };
 
   const handleNextMonth = () => {
+    setMonthDir(1);
     if (viewMonth === 11) {
       setViewMonth(0);
       setViewYear((y) => y + 1);
@@ -222,30 +311,43 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
     for (let d = 1; d <= totalDays; d++) slots.push({ day: d });
     return slots;
   }, [calendarYear, calendarMonth]);
+  const bookedDayTitle = (day: number) =>
+    allAppointments
+      .filter((a) => a.year === calendarYear && a.month === calendarMonth && a.day === day)
+      .map((a) => `${a.lawyerName} · ${a.timeRange}`)
+      .join('\n');
   const findAppointmentIndexOnDay = (day: number) =>
     allAppointments.findIndex((a) => a.year === calendarYear && a.month === calendarMonth && a.day === day);
 
-  // Reminders only for bookings on the date chosen in the calendar (de-duplicated).
-  const remindersForSelectedDay = Array.from(
+  // Reminders for bookings on the date chosen in the calendar (de-duplicated).
+  const activeReminders = Array.from(
     new Set(
       allAppointments
         .filter(
           (a) =>
-            a.year === calendarYear &&
-            a.month === calendarMonth &&
-            a.day === selectedDay &&
+            a.year === selectedDate.year &&
+            a.month === selectedDate.month &&
+            a.day === selectedDate.day &&
             a.rawStatus !== 'cancelled'
         )
         .flatMap((a) => a.reminders)
     )
   );
-
-  const activeReminders =
-    remindersForSelectedDay.length > 0
-      ? remindersForSelectedDay
-      : currentAppointment?.reminders?.length
-        ? currentAppointment.reminders
-        : DEFAULT_REMINDERS;
+  const selectedDateLabel = new Date(selectedDate.year, selectedDate.month, selectedDate.day).toLocaleDateString(
+    'en-PH',
+    { weekday: 'long', month: 'long', day: 'numeric' }
+  );
+  const selectedDateKey = `${selectedDate.year}-${selectedDate.month}-${selectedDate.day}`;
+  const today = new Date();
+  const isTodayCell = (day: number) =>
+    calendarYear === today.getFullYear() && calendarMonth === today.getMonth() && day === today.getDate();
+  const jumpToToday = () => {
+    const delta = today.getFullYear() * 12 + today.getMonth() - (viewYear * 12 + viewMonth);
+    if (delta !== 0) setMonthDir(delta > 0 ? 1 : -1);
+    setViewMonth(today.getMonth());
+    setViewYear(today.getFullYear());
+    setSelectedDate({ year: today.getFullYear(), month: today.getMonth(), day: today.getDate() });
+  };
 
 
   // ─── View Details / Payment modal ─────────────────────────────────────────
@@ -429,9 +531,11 @@ Reason: ${last.responseReason}` : ''}`,
           `★ ${a.rating} • ${a.experienceYrs} yrs practice`,
         ],
         rate: a.ratePerHour,
-        // pending-nvonfirmed / confirmed-and-paid show a Message button; payment.png shows the rate.
+        // "Pending Payment" shows the lawyer's rate (as do declined/cancelled bookings, which have
+        // no conversation to open); "Pending Confirmation", "Confirmed Appointment" and the other
+        // active states show a Message button that opens this consultation's thread.
         onMessage:
-          needsPayment || a.rawStatus === 'declined' || a.rawStatus === 'cancelled'
+          a.status === 'PENDING PAYMENT' || a.rawStatus === 'declined' || a.rawStatus === 'cancelled'
             ? undefined
             : () => openMessagesFor(a.id),
       },
@@ -462,284 +566,409 @@ Reason: ${last.responseReason}` : ''}`,
     };
   };
 
+  /** Swipe / drag the appointment card sideways to move to the next or previous consultation. */
+  const handleCardDragEnd = (_: unknown, info: PanInfo) => {
+    const swipe = info.offset.x + info.velocity.x * 0.2;
+    if (swipe < -90 && activeAppointmentIndex < allAppointments.length - 1) {
+      handleSelectAppointment(activeAppointmentIndex + 1);
+    } else if (swipe > 90 && activeAppointmentIndex > 0) {
+      handleSelectAppointment(activeAppointmentIndex - 1);
+    }
+  };
+
+  // ← / → page through consultations when no dialog is open and focus isn't in a text field.
+  const anyModalOpen = showCancelModal || showDetailsModal || showMeetModal || reschedule !== null;
+  useEffect(() => {
+    if (anyModalOpen || allAppointments.length < 2) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+      if (e.key === 'ArrowRight' && activeAppointmentIndex < allAppointments.length - 1) {
+        handleSelectAppointment(activeAppointmentIndex + 1);
+      } else if (e.key === 'ArrowLeft' && activeAppointmentIndex > 0) {
+        handleSelectAppointment(activeAppointmentIndex - 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   if (loadingAppointments) {
     return <ConsultationsSkeleton />;
   }
 
+  // Same data the View Details modal renders, so the booking card's top section matches it.
+  const cardDetails = currentAppointment ? buildDetailsProps(currentAppointment) : null;
+
   return (
+    <MotionConfig reducedMotion="user">
     <div className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-12 max-w-[1300px] mx-auto space-y-7 sm:space-y-8 bg-[#E5D8CB]">
-      {/* ─── Main 2-Column Grid (Exact Reference Images Layout) ───────────── */}
+      {/* ─── Main 2-Column Grid ───────────── */}
       {!hasAppointments || !currentAppointment ? (
-        <div className="neu-raised rounded-[24px] sm:rounded-[28px] p-8 sm:p-12 bg-[#E5D8CB] text-center space-y-4 max-w-xl mx-auto">
-          <div className="w-14 h-14 rounded-full neu-raised-highlight flex items-center justify-center mx-auto text-2xl" style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}>
-            📅
-          </div>
-          <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]">No Consultations Scheduled Yet</h2>
-          <p className="font-lora text-xs sm:text-sm text-[#5C4535] leading-relaxed">
-            You do not have any active or pending consultations in the system. Explore verified Philippine legal practitioners to schedule your confidential consultation session.
-          </p>
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (onNavigate) onNavigate('lawyers');
-                else router.push('/client/lawyers');
-              }}
-              className="neu-btn-caramel px-6 py-2.5 rounded-[12px] bg-[#D49E56] hover:bg-[#C58B3C] text-[#341512] font-lora text-xs sm:text-sm font-bold transition active:scale-95"
-            >
-              Find a Lawyer
-            </button>
-          </div>
-        </div>
+        <motion.div
+          key={`empty-${entranceKey}`}
+          initial={{ opacity: 0, y: 22, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 240, damping: 24 }}
+        >
+          <EmptyState
+            variant="card"
+            className="my-6 sm:my-10"
+            icon={<CalendarIcon />}
+            title="No Consultations Yet"
+            description="You have no active or pending consultations. Browse verified Philippine lawyers to book a confidential session."
+            action={
+              <NeuButton
+                variant="primary"
+                icon={<SearchIcon className="w-4 h-4" />}
+                onClick={() => {
+                  if (onNavigate) onNavigate('lawyers');
+                  else router.push('/client/lawyers');
+                }}
+              >
+                Find a Lawyer
+              </NeuButton>
+            }
+          />
+        </motion.div>
       ) : (
-        <div className="flex flex-col lg:flex-row items-start gap-6 lg:gap-7 xl:gap-8">
-          {/* ─── Left Column: Calendar & Reminders (Reference Image 1) ─── */}
-          <div className="w-full lg:w-[310px] xl:w-[380px] lg:shrink-0 space-y-5 sm:space-y-6">
-            {/* 1. Calendar Card (Reference Image 1) */}
-            <div className="neu-raised bg-[#E5D8CB] rounded-[24px] sm:rounded-[28px] p-4.5 sm:p-5 space-y-3.5 sm:space-y-4">
-              {/* Top Month Badge (Centered Inset Pill with tight navigation arrows) */}
-              <div className="flex items-center justify-center gap-1.5 sm:gap-2">
-                <button
-                  type="button"
-                  onClick={handlePrevMonth}
-                  aria-label="Previous month"
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-[#5C4535]/80 hover:text-[#C58B3C] hover:bg-[#DDCFC0]/50 transition-colors font-bold text-sm select-none cursor-pointer"
-                >
-                  ‹
-                </button>
-                <div className="neu-recessed rounded-full px-4 sm:px-5 py-1.5 font-lora text-[10.5px] sm:text-[11px] font-bold uppercase tracking-[0.16em] text-[#C58B3C] select-none text-center">
-                  {MONTH_LABELS[calendarMonth]} {calendarYear}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleNextMonth}
-                  aria-label="Next month"
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-[#5C4535]/80 hover:text-[#C58B3C] hover:bg-[#DDCFC0]/50 transition-colors font-bold text-sm select-none cursor-pointer"
-                >
-                  ›
-                </button>
-              </div>
-
-              {/* Days of week */}
-              <div className="grid grid-cols-7 gap-1 text-center font-lora text-[10.5px] sm:text-[11px] font-bold text-[#341512] uppercase tracking-wider pb-0.5">
-                <span>SUN</span>
-                <span>MON</span>
-                <span>TUE</span>
-                <span>WED</span>
-                <span>THU</span>
-                <span>FRI</span>
-                <span>SAT</span>
-              </div>
-
-              {/* Dates Grid */}
-              <div className="grid grid-cols-7 gap-y-2 sm:gap-y-2.5 gap-x-1 text-center font-lora text-xs sm:text-[12.5px]">
-                {daysInMonth.map((item, idx) => {
-                  if (!item.day) {
-                    return <div key={`empty-${idx}`} className="size-7 sm:size-8 mx-auto" />;
-                  }
-                  const isSelected = item.day === selectedDay;
-                  const hasAppointment = findAppointmentIndexOnDay(item.day) !== -1;
-                  return (
-                    <button
-                      key={`day-${item.day}`}
-                      type="button"
-                      onClick={() => {
-                        const aptIdx = findAppointmentIndexOnDay(item.day!);
-                        if (aptIdx !== -1) {
-                          handleSelectAppointment(aptIdx);
-                        } else {
-                          setSelectedDay(item.day!);
-                        }
-                      }}
-                      className={`size-7 sm:size-8 mx-auto rounded-full flex items-center justify-center font-lora transition-all relative select-none cursor-pointer ${isSelected
-                        ? 'neu-raised-sm bg-[#E5D8CB] font-bold text-[#C58B3C]'
-                        : 'font-normal text-[#341512] hover:text-[#C58B3C] hover:bg-[#DDCFC0]/40'
-                        }`}
+        <motion.div
+          key={`layout-${entranceKey}`}
+          className="flex flex-col lg:flex-row items-start gap-6 lg:gap-7 xl:gap-8"
+          variants={PAGE_STAGGER}
+          initial="hidden"
+          animate="show"
+        >
+          {/* ─── Left Column: Calendar & Reminders ─── */}
+          {/* lg+: same one-screen height as the right column; the calendar keeps its natural
+              height and the reminders card takes the rest, scrolling inside if it overflows. */}
+          <motion.div
+            variants={PAGE_STAGGER}
+            className="w-full lg:w-[310px] xl:w-[360px] lg:shrink-0 flex flex-col gap-5 lg:h-[calc(100dvh-10rem)]"
+          >
+            {/* 1. Calendar */}
+            <motion.div
+              variants={EXTRUDE}
+              onAnimationComplete={() => setCalendarIntroDone(true)}
+              className="neu-raised bg-[#E5D8CB] rounded-[24px] sm:rounded-[26px] p-4 sm:p-5 shrink-0"
+            >
+              {/* Month header: title left, controls right */}
+              <div className="flex items-center justify-between gap-2 mb-3.5">
+                <div className="min-w-0 leading-none overflow-hidden">
+                  <AnimatePresence mode="popLayout" initial={false} custom={monthDir}>
+                    <motion.div
+                      key={`${calendarYear}-${calendarMonth}`}
+                      custom={monthDir}
+                      variants={TITLE_SWAP}
+                      initial="enter"
+                      animate="center"
+                      exit="exit"
                     >
-                      <span>{String(item.day).padStart(2, '0')}</span>
-                      {hasAppointment && !isSelected && (
-                        <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-[#C58B3C]" />
-                      )}
-                    </button>
-                  );
-                })}
+                      <p className="font-lora text-lg sm:text-xl font-bold text-[#341512] capitalize truncate">
+                        {MONTH_LABELS[calendarMonth].toLowerCase()}
+                      </p>
+                      <p className="font-lora text-[11px] font-bold tracking-[0.2em] text-[#C58B3C] mt-1">{calendarYear}</p>
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <motion.button
+                    type="button"
+                    onClick={jumpToToday}
+                    whileHover={{ y: -1.5 }}
+                    whileTap={{ scale: 0.92 }}
+                    className="neu-raised-sm h-7 px-3 rounded-full font-lora text-[10.5px] font-bold uppercase tracking-wider text-[#5C4535] hover:text-[#C58B3C] transition-colors cursor-pointer select-none"
+                  >
+                    Today
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    onClick={handlePrevMonth}
+                    aria-label="Previous month"
+                    whileHover={{ x: -2 }}
+                    whileTap={{ scale: 0.86 }}
+                    className="neu-raised-sm size-7 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] transition-colors cursor-pointer"
+                  >
+                    <ChevronLeftIcon className="w-3.5 h-3.5" />
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    onClick={handleNextMonth}
+                    aria-label="Next month"
+                    whileHover={{ x: 2 }}
+                    whileTap={{ scale: 0.86 }}
+                    className="neu-raised-sm size-7 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] transition-colors cursor-pointer"
+                  >
+                    <ChevronRightIcon className="w-3.5 h-3.5" />
+                  </motion.button>
+                </div>
               </div>
-            </div>
 
-            {/* 2. REMINDERS: Card (Warm peach plate, Reference Image 1) */}
-            <div
-              className="neu-raised-highlight rounded-[24px] sm:rounded-[28px] p-4.5 sm:p-8 space-y-3"
+              {/* Recessed date well: the month grid slides in the direction you browse */}
+              <div className="neu-recessed rounded-[18px] px-2 sm:px-2.5 py-2.5 overflow-hidden">
+                <div className="grid grid-cols-7 text-center font-inter text-[10px] font-semibold uppercase text-[#9E8E7D] pb-1.5">
+                  {WEEKDAY_INITIALS.map((d, i) => (
+                    <span key={i}>{d}</span>
+                  ))}
+                </div>
+                <div className="relative">
+                  <AnimatePresence mode="popLayout" initial={false} custom={monthDir}>
+                    <motion.div
+                      key={`${calendarYear}-${calendarMonth}`}
+                      custom={monthDir}
+                      variants={GRID_SLIDE}
+                      initial="enter"
+                      animate="center"
+                      exit="exit"
+                      className="grid grid-cols-7 gap-y-1.5 text-center"
+                    >
+                      {daysInMonth.map((item, idx) => {
+                        if (!item.day) {
+                          return <div key={`empty-${idx}`} className="h-7" />;
+                        }
+                        const day = item.day;
+                        // Diagonal wave: cells further down-right arrive a touch later.
+                        const waveDelay = (calendarIntroDone ? 0.02 : 0.35) + (Math.floor(idx / 7) + (idx % 7)) * 0.018;
+                        const isSelected =
+                          day === selectedDate.day &&
+                          calendarMonth === selectedDate.month &&
+                          calendarYear === selectedDate.year;
+                        const isToday = isTodayCell(day);
+                        const hasAppointment = findAppointmentIndexOnDay(day) !== -1;
+                        return (
+                          <motion.div
+                            key={`day-${day}`}
+                            initial={{ opacity: 0, scale: 0.4 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 20, delay: waveDelay }}
+                          >
+                          <motion.button
+                            type="button"
+                            onClick={() => {
+                              const aptIdx = findAppointmentIndexOnDay(day);
+                              if (aptIdx !== -1) handleSelectAppointment(aptIdx);
+                              setSelectedDate({ year: calendarYear, month: calendarMonth, day });
+                            }}
+                            whileHover={isSelected ? undefined : { scale: 1.12 }}
+                            whileTap={{ scale: 0.88 }}
+                            transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+                            aria-label={`${MONTH_LABELS[calendarMonth].toLowerCase()} ${day}${hasAppointment ? ', has a consultation' : ''}`}
+                            title={hasAppointment ? bookedDayTitle(day) : undefined}
+                            aria-pressed={isSelected}
+                            aria-current={isToday ? 'date' : undefined}
+                            className={`relative mx-auto size-7 rounded-full flex items-center justify-center font-inter text-[11.5px] select-none cursor-pointer transition-colors ${isSelected
+                              ? 'font-bold text-[#341512]'
+                              : hasAppointment
+                                ? 'neu-day-booked font-bold text-[#B07A34]'
+                                : 'font-normal text-[#5C4535] hover:bg-[#D39758]/15'
+                              } ${
+                              // outline, not ring: rings are box-shadows and the day classes' own
+                              // box-shadow would replace them on booked/selected days.
+                              isToday ? 'outline-[1.5px] outline-solid outline-[#C58B3C] outline-offset-2' : ''}`}
+                          >
+                            {/* The caramel selection glides from day to day. */}
+                            {isSelected && (
+                              <motion.span
+                                layoutId="calendar-selected-day"
+                                transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                                className="absolute inset-0 rounded-full neu-btn-caramel"
+                              />
+                            )}
+                            <span className="relative leading-none">{day}</span>
+                          </motion.button>
+                          </motion.div>
+                        );
+                      })}
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div className="flex items-center justify-center gap-4 pt-3 font-inter text-[10px] text-[#7D6855] select-none">
+                <span className="flex items-center gap-1.5">
+                  <span className="neu-day-booked w-3 h-3 rounded-full" /> Consultation
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-full neu-btn-caramel bg-[#D49E56]" /> Selected
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full outline-[1.5px] outline-solid outline-[#C58B3C]" /> Today
+                </span>
+              </div>
+            </motion.div>
+
+            {/* 2. Reminders */}
+            <motion.div
+              variants={EXTRUDE}
+              // Same shadow and lighting as the calendar card (.neu-raised); the inline style
+              // keeps the caramel fill, since .neu-raised sets its own background colour.
+              className="neu-raised rounded-[24px] sm:rounded-[26px] p-4 sm:p-5 flex flex-col gap-4 sm:gap-5 lg:flex-1 lg:min-h-0"
               style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
             >
-              <h3 className="font-lora text-xs sm:text-[18px] font-bold text-[#341512] tracking-wider uppercase mb-1.5">
-                REMINDERS:
-              </h3>
-
-              <ul className="space-y-2 font-inter text-[10.5px] sm:text-[12px] text-[#3E2A1E] leading-[1.5]">
-                {activeReminders.map((reminder, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <span className="text-[11px] leading-tight select-none mt-0.5 shrink-0 text-[#341512]">•</span>
-                    <span>{reminder}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* ─── Right Column: Large Appointment Card (Expanded Width, Reference Image 2) ─── */}
-          <div className="w-full flex-1 min-w-0 space-y-4 sm:space-y-5">
-            <div className="neu-raised bg-[#E5D8CB] rounded-[28px] sm:rounded-[32px] p-5 sm:p-6 lg:p-7 space-y-4 sm:space-y-5">
-              {isSwitching ? (
-                <div className="space-y-5 animate-in fade-in duration-150 py-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2.5">
-                    <div className="h-6 w-40 rounded-full neu-skeleton-inset" />
-                    <div className="h-6 w-36 rounded-full neu-skeleton-inset" />
-                    <div className="h-6 w-32 rounded-full neu-skeleton" />
-                  </div>
-                  <div className="h-24 rounded-[18px] neu-skeleton-plate" />
-                  <div className="space-y-2 pt-1">
-                    <div className="h-3 w-36 neu-skeleton-text" />
-                    <div className="h-4.5 w-72 neu-skeleton-text" />
-                    <div className="space-y-1.5 pt-1">
-                      <div className="h-2.5 w-full neu-skeleton-text" />
-                      <div className="h-2.5 w-11/12 neu-skeleton-text" />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-3 pt-3 border-t border-[#D1BEA8]/50">
-                    <div className="h-8 w-18 rounded-lg neu-skeleton" />
-                    <div className="h-8 w-24 rounded-lg neu-skeleton" />
-                    <div className="h-8 w-24 rounded-lg neu-skeleton-plate" />
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Top Pill Header Row */}
-                  <div className="flex flex-wrap items-center justify-between gap-2.5">
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-                      {/* Date Pill (Debossed) */}
-                      <div className="neu-recessed px-3.5 sm:px-4 py-1.5 rounded-full font-lora text-[10px] sm:text-[10.5px] font-bold text-[#5C4535] uppercase tracking-wider select-none">
-                        {currentAppointment.dateStr.toUpperCase().startsWith('TODAY')
-                          ? currentAppointment.dateStr.toUpperCase()
-                          : `TODAY, ${currentAppointment.dateStr.toUpperCase()}`}
-                      </div>
-
-                      {/* Time Pill (Debossed) */}
-                      <div className="neu-recessed px-3.5 sm:px-4 py-1.5 rounded-full font-lora text-[10px] sm:text-[10.5px] font-bold text-[#5C4535] select-none">
-                        {currentAppointment.timeSlot}
-                      </div>
-                    </div>
-
-                    {/* Status Badge */}
-                    <div
-                      className={`px-3.5 sm:px-4 py-1.5 rounded-full font-lora text-[9px] sm:text-[10px] font-bold tracking-wider uppercase text-white select-none ${isCancelled || rawStatus === 'declined'
-                        ? 'bg-red-700 shadow-sm'
-                        : isPending
-                          ? 'bg-[#D49E56] shadow-sm'
-                          : 'neu-badge-green bg-[#27AE60]'
-                        }`}
+              <div className="flex items-center gap-3 shrink-0">
+                {/* The bell gives a little ring whenever the chosen date changes. */}
+                <motion.div
+                  key={`bell-${selectedDateKey}`}
+                  initial={{ rotate: 0 }}
+                  animate={{ rotate: [0, -16, 13, -9, 6, 0] }}
+                  transition={{ duration: 0.6, ease: 'easeInOut' }}
+                  style={{ transformOrigin: '50% 15%' }}
+                  className="neu-btn-banner size-9 rounded-full flex items-center justify-center shrink-0 text-[#341512]"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 01-3.46 0" />
+                  </svg>
+                </motion.div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-lora text-base sm:text-[17px] font-bold text-[#341512] leading-tight">Reminders</h3>
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.p
+                      key={selectedDateKey}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.18 }}
+                      className="font-inter text-[11px] text-[#5C4535] truncate"
                     >
-                      {rawStatus === 'confirmed' ? 'CONFIRMED APPOINTMENT' : currentAppointment.status}
-                    </div>
-                  </div>
-
-                  {rescheduleNotice && (
-                    <div role="status" className="flex items-center justify-between gap-2.5 rounded-[12px] bg-emerald-50 border border-emerald-300 px-3.5 py-2 font-lora text-xs text-emerald-900">
-                      <span>{rescheduleNotice}</span>
-                      <button type="button" onClick={() => setRescheduleNotice(null)} className="font-semibold hover:underline shrink-0 cursor-pointer">
-                        Dismiss
-                      </button>
-                    </div>
+                      {selectedDateLabel}
+                    </motion.p>
+                  </AnimatePresence>
+                </div>
+                <AnimatePresence>
+                  {activeReminders.length > 0 && (
+                    <motion.span
+                      key={`count-${activeReminders.length}`}
+                      initial={{ scale: 0.5, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.5, opacity: 0 }}
+                      transition={{ type: 'spring', stiffness: 520, damping: 20 }}
+                      className="neu-inset-banner shrink-0 min-w-7 h-6 px-2.5 rounded-full text-[#5C4535] font-inter text-[11px] font-bold flex items-center justify-center"
+                    >
+                      {activeReminders.length}
+                    </motion.span>
                   )}
+                </AnimatePresence>
+              </div>
 
-                  {currentAppointment.reschedule?.pending && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-[12px] bg-amber-100/90 border border-amber-300 px-3.5 py-2 font-lora text-xs text-amber-900">
-                      <span>
+              <AnimatePresence mode="wait" initial={false}>
+                {activeReminders.length === 0 ? (
+                  <motion.div
+                    key={`empty-${selectedDateKey}`}
+                    initial={{ opacity: 0, scale: 0.97 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.97 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex-1 flex flex-col items-center justify-center text-center gap-1 py-4"
+                  >
+                    <p className="font-lora text-sm font-semibold text-[#5C4535]">Nothing scheduled</p>
+                    <p className="font-inter text-[11px] text-[#7D6855]">No reminders for this date.</p>
+                  </motion.div>
+                ) : (
+                  <motion.ul
+                    key={`list-${selectedDateKey}`}
+                    variants={LIST_STAGGER}
+                    initial="hidden"
+                    animate="show"
+                    exit="exit"
+                    className="flex-1 min-h-0 overflow-y-auto neu-scrollbar-discrete -mr-2 pr-3 pl-1.5 divide-y divide-dotted divide-[#B8946E]/60"
+                  >
+                    {activeReminders.map((reminder, idx) => (
+                      <motion.li key={idx} variants={LIST_ITEM} className="flex items-start gap-2.5 py-2.5 first:pt-0 last:pb-0">
+                        {/* Bullet centred on the first text line (12px × leading-snug ≈ 16.5px tall). */}
+                        <span aria-hidden="true" className="mt-[5.5px] w-1.5 h-1.5 shrink-0 rounded-full bg-[#B07A34]" />
+                        <span className="font-inter text-[11.5px] sm:text-[12px] leading-snug text-[#3E2A1E]">{reminder}</span>
+                      </motion.li>
+                    ))}
+                  </motion.ul>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          </motion.div>
+
+          {/* ─── Right Column: Appointment Card ─── */}
+          {/* lg+: exactly one screen tall (100dvh − 4rem shell header − 6rem page padding) so the
+              card and its pagination are both visible; the description absorbs the leftover space. */}
+          <motion.div
+            variants={PAGE_STAGGER}
+            className="w-full flex-1 min-w-0 flex flex-col gap-4 sm:gap-5 lg:h-[calc(100dvh-10rem)]"
+          >
+            <motion.div
+              variants={EXTRUDE}
+              className="neu-raised bg-[#E5D8CB] rounded-[28px] sm:rounded-[32px] p-5 sm:p-6 lg:p-7 flex flex-col lg:flex-1 lg:min-h-0 overflow-hidden"
+            >
+              {/* Switching consultations slides the content in the direction you moved. */}
+              <AnimatePresence mode="wait" initial={false} custom={slideDir}>
+                <motion.div
+                  key={currentAppointment.id}
+                  custom={slideDir}
+                  variants={CARD_SLIDE}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  drag={allAppointments.length > 1 ? 'x' : false}
+                  dragDirectionLock
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.22}
+                  onDragEnd={handleCardDragEnd}
+                  className="flex flex-col gap-4 sm:gap-5 lg:flex-1 lg:min-h-0 touch-pan-y"
+                >
+                  {/* Top section mirrors the View Details modal (shared components) */}
+                  <motion.div variants={CARD_POP} className="shrink-0">
+                    <DetailsStatusRow {...cardDetails!} fit />
+                  </motion.div>
+
+                  <AnimatePresence initial={false}>
+                    {rescheduleNotice && (
+                      <NeuAlert key="reschedule-notice" tone="success" onDismiss={() => setRescheduleNotice(null)} className="shrink-0">
+                        {rescheduleNotice}
+                      </NeuAlert>
+                    )}
+
+                    {currentAppointment.reschedule?.pending && (
+                      <NeuAlert
+                        key="reschedule-pending"
+                        tone="warning"
+                        className="shrink-0"
+                        title={currentAppointment.reschedule.pending.byMe ? 'Reschedule request sent' : 'Reschedule requested'}
+                        action={
+                          <NeuButton
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              setReschedule({
+                                id: currentAppointment.id,
+                                mode: currentAppointment.reschedule?.pending?.byMe ? 'withdraw' : 'respond',
+                              })
+                            }
+                          >
+                            {currentAppointment.reschedule.pending.byMe ? 'Withdraw' : 'Review'}
+                          </NeuButton>
+                        }
+                      >
                         {currentAppointment.reschedule.pending.byMe
                           ? 'You asked to move this consultation to '
                           : `${currentAppointment.lawyerName} asked to move this consultation to `}
-                        <strong>
+                        <strong className="font-semibold">
                           {currentAppointment.reschedule.pending.proposedDateLong}, {currentAppointment.reschedule.pending.proposedTimeRange}
                         </strong>
-                        {currentAppointment.reschedule.pending.byMe ? ' — waiting for an answer.' : '.'}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setReschedule({
-                            id: currentAppointment.id,
-                            mode: currentAppointment.reschedule?.pending?.byMe ? 'withdraw' : 'respond',
-                          })
-                        }
-                        className="font-bold hover:underline shrink-0 self-start sm:self-auto cursor-pointer"
-                      >
-                        {currentAppointment.reschedule.pending.byMe ? 'Withdraw' : 'Review Request'}
-                      </button>
-                    </div>
-                  )}
+                        {currentAppointment.reschedule.pending.byMe ? '. Waiting for an answer.' : '.'}
+                      </NeuAlert>
+                    )}
+                  </AnimatePresence>
 
-                  {/* Inner Lawyer Banner Plate (Reference Image 2) */}
-                  <div
-                    className="neu-raised-highlight rounded-[18px] sm:rounded-[20px] p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-                    style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
-                  >
-                    <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
-                      {/* Circular Avatar */}
-                      <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-full border-[2.5px] sm:border-[3px] border-[#341512] flex items-center justify-center shrink-0 select-none">
-                        <svg
-                          className="w-8 h-8 sm:w-9 sm:h-9 text-[#341512]"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <circle cx="12" cy="8" r="3.8" />
-                          <path d="M5 20c0-3.8 3.1-6.5 7-6.5s7 2.7 7 6.5" />
-                        </svg>
-                      </div>
-
-                      <div className="space-y-0.5 min-w-0">
-                        <h4 className="font-lora text-base sm:text-lg font-bold text-[#341512] leading-tight">
-                          {currentAppointment.lawyerName}
-                        </h4>
-                        <p className="font-lora text-[10.5px] sm:text-[11px] text-[#5C4535] font-medium leading-tight">
-                          Roll No. {currentAppointment.rollNumber} | IBP {currentAppointment.ibpChapter}
-                        </p>
-                        <p className="font-lora text-[10.5px] sm:text-[11px] text-[#5C4535] font-medium leading-tight">
-                          {currentAppointment.practiceAreas.join(' • ')}
-                        </p>
-                        <p className="font-lora text-[10.5px] sm:text-[11px] text-[#5C4535] font-medium leading-tight">
-                          ★ {currentAppointment.rating} • {currentAppointment.experienceYrs} yrs practice
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Rate */}
-                    <div className="sm:text-right shrink-0">
-                      <span className="font-lora text-2xl sm:text-3xl lg:text-[34px] font-bold text-[#341512] leading-none">
-                        ₱{currentAppointment.ratePerHour.toLocaleString()}
-                      </span>
-                      <span className="font-lora text-xs sm:text-sm font-normal text-[#341512] ml-1">/per hour</span>
-                    </div>
-                  </div>
-
-                  {/* Subject Matter & Case Docket */}
-                  <div className="space-y-1.5 pt-0.5">
-                    <div className="font-lora font-bold text-[9.5px] sm:text-[10px] text-[#C58B3C] uppercase tracking-wider">
-                      {currentAppointment.docket}
-                    </div>
-                    <h3 className="font-lora text-base sm:text-lg font-bold text-[#341512] leading-snug">
-                      {currentAppointment.caseTitle}
-                    </h3>
-                    <p className="font-lora text-xs sm:text-[12.5px] text-[#3E2A1E] leading-relaxed text-justify">
-                      {currentAppointment.caseDescription}
-                    </p>
-                  </div>
+                  <motion.div variants={CARD_ITEM} className="shrink-0">
+                    <BannerShowcase sheenKey={currentAppointment.id}>
+                      <DetailsPersonBanner person={cardDetails!.person} />
+                    </BannerShowcase>
+                  </motion.div>
+                  <motion.div variants={CARD_ITEM} className="flex-1 min-h-0 flex flex-col">
+                    <DetailsCaseBlock {...cardDetails!} onSeeMore={openDetails} />
+                  </motion.div>
 
                   {/* Action Buttons Row */}
-                  <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+                  <motion.div variants={CARD_ITEM} className="shrink-0 flex flex-wrap items-center justify-end gap-3 pt-2">
                     {/* Cancel Button */}
                     {canCancel && (
                       <button
@@ -748,7 +977,7 @@ Reason: ${last.responseReason}` : ''}`,
                           setCancelError(null);
                           setShowCancelModal(true);
                         }}
-                        className="px-5 sm:px-6 py-2 rounded-[12px] border border-[#341512]/50 bg-[#E5D8CB] font-lora text-xs font-semibold text-[#341512] hover:bg-[#DDCFC0] active:scale-95 transition-all shadow-sm cursor-pointer"
+                        className="px-5 sm:px-6 py-2 rounded-[12px] border border-[#341512]/50 bg-[#E5D8CB] font-lora text-xs font-semibold text-[#341512] hover:bg-[#DDCFC0] hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-sm cursor-pointer motion-reduce:transform-none"
                       >
                         Cancel
                       </button>
@@ -758,150 +987,147 @@ Reason: ${last.responseReason}` : ''}`,
                     <button
                       type="button"
                       onClick={openDetails}
-                      className="neu-btn-espresso px-5 sm:px-6 py-2 rounded-[12px] bg-[#4A2E25] font-lora text-xs font-semibold text-white transition-all hover:brightness-110 active:scale-95 cursor-pointer"
+                      className="neu-btn-espresso px-5 sm:px-6 py-2 rounded-[12px] bg-[#4A2E25] font-lora text-xs font-semibold text-white transition-all duration-200 hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 cursor-pointer motion-reduce:transform-none"
                     >
                       View Details
                     </button>
 
-                    {/* Join Meet Button */}
+                    {/* Join Meet Button: a soft beacon pulses once the Meet link is ready */}
                     {canJoinMeet && (
                       <button
                         type="button"
                         onClick={() => setShowMeetModal(true)}
-                        className="neu-btn-caramel px-5 sm:px-6 py-2 rounded-[12px] bg-[#D49E56] font-lora text-xs font-bold text-[#341512] flex items-center gap-1.5 transition-all hover:brightness-105 active:scale-95 cursor-pointer"
+                        className="neu-btn-caramel relative px-5 sm:px-6 py-2 rounded-[12px] bg-[#D49E56] font-lora text-xs font-bold text-[#341512] flex items-center gap-1.5 transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 cursor-pointer motion-reduce:transform-none"
                       >
-                        <svg
-                          className="w-3.5 h-3.5 text-[#341512]"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <rect x="2" y="6" width="13" height="12" rx="2" />
-                          <path d="M15 10l5-3v10l-5-3" />
-                        </svg>
+                        {currentAppointment.meetingLink && (
+                          <span aria-hidden="true" className="absolute -top-1 -right-1 size-2.5">
+                            <span className="neu-beacon absolute inset-0 rounded-full bg-[#1FAA00]" />
+                            <span className="absolute inset-0 rounded-full bg-[#1FAA00] ring-2 ring-[#E5D8CB]" />
+                          </span>
+                        )}
+                        <VideoIcon className="w-3.5 h-3.5 text-[#341512]" />
                         <span>Join Meet</span>
                       </button>
                     )}
-                  </div>
-                </>
-              )}
-            </div>
+                  </motion.div>
+                </motion.div>
+              </AnimatePresence>
+            </motion.div>
 
-            {/* Pagination Controls below appointment card (Reference Image 2) */}
-            <div className="flex items-center justify-center gap-5 pt-2 select-none">
-              <button
+            {/* Pagination: the caramel dot glides to the active consultation. Swiping the card and ← / → keys also work. */}
+            <motion.div variants={RISE_IN} className="shrink-0 flex items-center justify-center gap-5 select-none">
+              <motion.button
                 type="button"
                 onClick={() => handleSelectAppointment(Math.max(0, activeAppointmentIndex - 1))}
                 disabled={activeAppointmentIndex <= 0}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-[#341512] font-lora text-xl font-bold disabled:opacity-30 transition-all hover:text-[#C58B3C] cursor-pointer disabled:cursor-not-allowed select-none"
+                whileHover={activeAppointmentIndex <= 0 ? undefined : { x: -2 }}
+                whileTap={activeAppointmentIndex <= 0 ? undefined : { scale: 0.86 }}
+                className="neu-raised-sm size-8 sm:size-9 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#341512] hover:text-[#C58B3C] transition-colors disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
                 aria-label="Previous consultation"
               >
-                ‹
-              </button>
+                <ChevronLeftIcon className="w-4 h-4" />
+              </motion.button>
 
-              <div className="flex items-center gap-2">
-                {Array.from({ length: Math.max(4, allAppointments.length) }).map((_, idx) => {
+              <div className="flex items-center gap-2.5" role="tablist" aria-label="Consultations">
+                {allAppointments.map((a, idx) => {
                   const isActive = idx === activeAppointmentIndex;
                   return (
-                    <button
-                      key={idx}
+                    <motion.button
+                      key={a.id}
                       type="button"
-                      onClick={() => {
-                        if (idx < allAppointments.length) handleSelectAppointment(idx);
-                      }}
-                      className={`rounded-full transition-all cursor-pointer ${isActive
-                        ? 'w-3 h-3 bg-[#C58B3C]'
-                        : 'w-2 h-2 bg-[#341512] hover:bg-[#C58B3C]/80'
-                        }`}
-                      aria-label={`Go to consultation ${idx + 1}`}
-                    />
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => handleSelectAppointment(idx)}
+                      whileHover={{ scale: 1.3 }}
+                      whileTap={{ scale: 0.85 }}
+                      className="relative size-3 flex items-center justify-center cursor-pointer"
+                      aria-label={`Consultation ${idx + 1} of ${allAppointments.length}`}
+                    >
+                      <span className="size-2 rounded-full bg-[#341512]/80" />
+                      {isActive && (
+                        <motion.span
+                          layoutId="consultation-pager-dot"
+                          transition={{ type: 'spring', stiffness: 480, damping: 32 }}
+                          className="absolute inset-0 rounded-full bg-[#C58B3C] shadow-[0_0_0_3px_rgba(197,139,60,0.18)]"
+                        />
+                      )}
+                    </motion.button>
                   );
                 })}
               </div>
 
-              <button
+              <motion.button
                 type="button"
-                onClick={() =>
-                  handleSelectAppointment(
-                    Math.min(allAppointments.length - 1, activeAppointmentIndex + 1)
-                  )
-                }
+                onClick={() => handleSelectAppointment(Math.min(allAppointments.length - 1, activeAppointmentIndex + 1))}
                 disabled={activeAppointmentIndex >= allAppointments.length - 1}
-                className="neu-raised-sm w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#341512] font-lora text-xl font-bold disabled:opacity-30 transition-all cursor-pointer disabled:cursor-not-allowed select-none"
+                whileHover={activeAppointmentIndex >= allAppointments.length - 1 ? undefined : { x: 2 }}
+                whileTap={activeAppointmentIndex >= allAppointments.length - 1 ? undefined : { scale: 0.86 }}
+                className="neu-raised-sm size-8 sm:size-9 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#341512] hover:text-[#C58B3C] transition-colors disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
                 aria-label="Next consultation"
               >
-                ›
-              </button>
-            </div>
-          </div>
-        </div>
+                <ChevronRightIcon className="w-4 h-4" />
+              </motion.button>
+            </motion.div>
+            <p className="sr-only" aria-live="polite">
+              Showing consultation {activeAppointmentIndex + 1} of {allAppointments.length}
+            </p>
+          </motion.div>
+        </motion.div>
       )}
 
       {/* ─── Cancel Consultation Modal ─────────────────────────────────────── */}
-      {showCancelModal && currentAppointment && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-5 md:p-6 animate-in fade-in overflow-y-auto"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="cancel-modal-title"
-          onClick={() => setShowCancelModal(false)}
-        >
-          <div
-            className="neu-modal outline-[#D39758] relative w-full max-w-[92vw] sm:max-w-md max-h-[82vh] sm:max-h-[78vh] flex flex-col rounded-[24px] p-5 sm:p-6 bg-[#E5D8CB] space-y-3.5 text-center animate-in zoom-in-95 duration-200 shadow-2xl my-auto overflow-y-auto neu-scrollbar-discrete"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className="w-11 h-11 rounded-full neu-raised-highlight flex items-center justify-center mx-auto text-lg"
-              style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
-            >
-              ⚠️
-            </div>
-            <h3 id="cancel-modal-title" className="font-lora text-base sm:text-lg font-bold text-[#341512]">
-              Cancel Scheduled Consultation?
-            </h3>
-            <p className="font-lora text-xs text-[#5C4535] leading-relaxed">
-              Are you sure you want to cancel your session with{' '}
-              <strong className="text-[#341512]">{currentAppointment.lawyerName}</strong> scheduled for{' '}
-              <strong className="text-[#341512]">{currentAppointment.dateStr}</strong>? Notice will be transmitted to counsel immediately.
-            </p>
-            {cancelError && (
-              <p className="font-lora text-xs font-semibold text-red-800 bg-red-100 border border-red-300 rounded-xl px-3.5 py-2">
-                {cancelError}
-              </p>
-            )}
-            <div className="flex items-center justify-center gap-3 pt-1.5">
-              <button
-                type="button"
-                onClick={() => setShowCancelModal(false)}
-                disabled={isCancelling}
-                className="px-5 py-2 rounded-xl border border-[#341512]/50 bg-[#E5D8CB] font-lora text-xs font-semibold text-[#341512] hover:bg-[#DDCFC0] transition-all disabled:opacity-50 cursor-pointer"
-              >
+      <AnimatePresence>
+      {showCancelModal && currentAppointment && (
+        <NeuModal
+          key="cancel-modal"
+          onClose={() => setShowCancelModal(false)}
+          dismissible={!isCancelling}
+          size="sm"
+          icon={<AlertIcon className="w-5 h-5" />}
+          iconTone="danger"
+          title="Cancel this consultation?"
+          subtitle="The attorney is notified right away. This can't be undone."
+          footer={
+            <>
+              <NeuButton variant="secondary" onClick={() => setShowCancelModal(false)} disabled={isCancelling}>
                 Keep Consultation
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmCancel}
-                disabled={isCancelling}
-                className="px-5 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-lora text-xs font-bold shadow-md active:scale-95 transition-all disabled:opacity-60 cursor-pointer"
-              >
-                {isCancelling ? 'Cancelling...' : 'Confirm Cancellation'}
-              </button>
+              </NeuButton>
+              <NeuButton variant="danger" onClick={handleConfirmCancel} loading={isCancelling}>
+                {isCancelling ? 'Cancelling…' : 'Cancel Consultation'}
+              </NeuButton>
+            </>
+          }
+        >
+          <div className="neu-raised bg-[#E5D8CB] rounded-[22px] p-4 sm:p-5 space-y-3">
+            <p className="font-lora text-base font-bold text-[#341512] leading-tight">{currentAppointment.lawyerName}</p>
+            <div className="border-t border-dotted border-[#C8B59E] pt-3 space-y-2 font-inter text-xs sm:text-[13px] text-[#3E2A1E]">
+              <p className="flex items-center gap-2.5">
+                <CalendarIcon className="w-4 h-4 text-[#C58B3C] shrink-0" />
+                {currentAppointment.dateLong}
+              </p>
+              <p className="flex items-center gap-2.5">
+                <ClockIcon className="w-4 h-4 text-[#C58B3C] shrink-0" />
+                {currentAppointment.timeRange}
+              </p>
             </div>
           </div>
-        </div>,
-        document.body
+          {currentAppointment.payment.state === 'verified' && (
+            <NeuAlert tone="info">Your payment was confirmed, so cancelling marks it for a refund.</NeuAlert>
+          )}
+          {cancelError && <NeuAlert tone="error">{cancelError}</NeuAlert>}
+        </NeuModal>
       )}
+      </AnimatePresence>
 
       {/* ─── View Details Modal (pending / payment / confirmed designs) ─── */}
-      {showDetailsModal && currentAppointment && (
-        <ConsultationDetailsModal {...buildDetailsProps(currentAppointment)} />
-      )}
+      <AnimatePresence>
+        {showDetailsModal && currentAppointment && (
+          <ConsultationDetailsModal key="details-modal" {...buildDetailsProps(currentAppointment)} />
+        )}
+      </AnimatePresence>
 
       {/* ─── Reschedule (request / respond / withdraw) ─────────────────────── */}
+      <AnimatePresence>
       {reschedule &&
         (() => {
           const target = allAppointments.find((x) => x.id === reschedule.id);
@@ -925,91 +1151,68 @@ Reason: ${last.responseReason}` : ''}`,
             />
           );
         })()}
+      </AnimatePresence>
 
       {/* ─── Join Meet Preview Modal (Neumorphic Design) ───────────────────── */}
-      {showMeetModal && currentAppointment && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-5 md:p-6 animate-in fade-in overflow-y-auto"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="meet-modal-title"
-          onClick={() => setShowMeetModal(false)}
+      <AnimatePresence>
+      {showMeetModal && currentAppointment && (
+        <NeuModal
+          key="meet-modal"
+          onClose={() => setShowMeetModal(false)}
+          size="md"
+          icon={currentAppointment.communicationMode === 'audio' ? <PhoneIcon className="w-5 h-5" /> : <VideoIcon className="w-5 h-5" />}
+          title={currentAppointment.communicationMode === 'audio' ? 'Join Audio Call' : 'Join Video Consultation'}
+          subtitle={`Your session with ${currentAppointment.lawyerName} opens in Google Meet in a new tab.`}
+          footer={
+            <>
+              <NeuButton variant="secondary" onClick={() => setShowMeetModal(false)}>
+                Not Yet
+              </NeuButton>
+              <NeuButton
+                variant="primary"
+                disabled={!currentAppointment.meetingLink}
+                icon={<VideoIcon className="w-4 h-4" />}
+                onClick={() => {
+                  if (!currentAppointment.meetingLink) return;
+                  window.open(currentAppointment.meetingLink, '_blank', 'noopener,noreferrer');
+                  setShowMeetModal(false);
+                }}
+              >
+                Enter Meeting
+              </NeuButton>
+            </>
+          }
         >
-          <div
-            className="neu-modal outline-[#D39758] relative w-full max-w-[92vw] sm:max-w-lg max-h-[82vh] sm:max-h-[78vh] flex flex-col rounded-[24px] p-4.5 sm:p-6 bg-[#E5D8CB] text-[#341512] space-y-3.5 animate-in zoom-in-95 duration-200 shadow-2xl my-auto overflow-y-auto neu-scrollbar-discrete"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Top Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-[#D1BEA8]/50">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                <h3 id="meet-modal-title" className="font-lora text-sm sm:text-base font-bold text-[#341512]">
-                  Justicia Video Consultation Room
-                </h3>
-              </div>
+          {/* Recessed "room" preview */}
+          <div className="neu-recessed rounded-[24px] aspect-[16/8] w-full flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <div className="relative neu-raised-sm size-14 rounded-full flex items-center justify-center text-[#C58B3C]">
+              {currentAppointment.meetingLink && (
+                <span aria-hidden="true" className="neu-beacon absolute inset-0 rounded-full border-2 border-[#1FAA00]/50" />
+              )}
+              {currentAppointment.communicationMode === 'audio' ? <PhoneIcon className="w-6 h-6" /> : <VideoIcon className="w-6 h-6" />}
             </div>
-
-            {/* Inset Video Preview Chamber */}
-            <div className="neu-recessed aspect-video w-full rounded-2xl bg-[#E5D8CB] flex flex-col items-center justify-center text-center p-4 space-y-2">
-              <div className="size-11 rounded-full neu-raised bg-[#E5D8CB] flex items-center justify-center text-lg">
-                📹
-              </div>
-              <div>
-                <p className="font-lora font-bold text-xs sm:text-[13px] text-[#341512]">Encrypted Consultation Session</p>
-                <p className="font-lora text-[10.5px] text-[#5C4535] mt-0.5">
-                  Direct connection with {currentAppointment.lawyerName}
-                </p>
-              </div>
-            </div>
-
-            {/* Bottom Actions */}
-            <div className="flex items-center justify-between pt-1">
-              <span className="font-lora text-xs text-[#5C4535] flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                Audio &amp; Video: Ready
-              </span>
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setShowMeetModal(false)}
-                  className="px-4 py-2 rounded-xl border border-[#341512]/50 bg-[#E5D8CB] font-lora text-xs font-semibold text-[#341512] hover:bg-[#DDCFC0] transition-all cursor-pointer"
-                >
-                  Dismiss
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (currentAppointment.meetingLink) {
-                      window.open(currentAppointment.meetingLink, '_blank', 'noopener,noreferrer');
-                    } else {
-                      alert('Your attorney has not shared the Google Meet link yet. It will appear here once available.');
-                    }
-                    setShowMeetModal(false);
-                  }}
-                  className="neu-btn-caramel px-5 py-2 rounded-xl bg-[#D49E56] hover:bg-[#C58B3C] text-[#341512] font-lora text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                >
-                  <svg
-                    className="w-3.5 h-3.5 text-[#341512]"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <rect x="2" y="6" width="13" height="12" rx="2" />
-                    <path d="M15 10l5-3v10l-5-3" />
-                  </svg>
-                  <span>Enter Meeting</span>
-                </button>
-              </div>
+            <div className="space-y-1">
+              <p className="font-lora text-sm sm:text-base font-bold text-[#341512]">{currentAppointment.lawyerName}</p>
+              <p className="font-inter text-[11.5px] sm:text-xs text-[#5C4535]">
+                {currentAppointment.dateLong} · {currentAppointment.timeRange}
+              </p>
             </div>
           </div>
-        </div>,
-        document.body
+
+          {currentAppointment.meetingLink ? (
+            <NeuAlert tone="success" title="Meeting link ready">
+              Join a few minutes early and check your {currentAppointment.communicationMode === 'audio' ? 'microphone and speakers' : 'camera and microphone'}.
+            </NeuAlert>
+          ) : (
+            <NeuAlert tone="warning" title="Link not shared yet">
+              Your attorney hasn&apos;t added the Google Meet link. It will appear here once it&apos;s available.
+            </NeuAlert>
+          )}
+        </NeuModal>
       )}
+      </AnimatePresence>
     </div>
+    </MotionConfig>
   );
 }
 

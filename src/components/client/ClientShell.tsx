@@ -1,25 +1,20 @@
 'use client';
 
-import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { KeepAliveViews } from '@/components/live/KeepAliveViews';
 import { useLiveRefresh } from '@/components/live/LiveProvider';
 import { fetchLive, type LiveResources } from '@/lib/live/fetchLive';
 import { useRouter, usePathname } from 'next/navigation';
-import { signOutAction } from '@/app/actions/auth';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import {
-  HomeIcon,
-  BellIcon,
-  GearIcon,
-  UserCircleIcon,
   AIAssistantIcon,
   FindLawyerIcon,
   MessagesIcon,
   BriefcaseFolderIcon,
   CalendarBookingIcon,
-  LogoutIcon,
 } from './ClientIcons';
+import { ClientSidebar } from './ClientSidebar';
+import { ClientTopbar } from './ClientTopbar';
 
 // ─── View components (lazy-imported inline to keep bundle splits) ─────────────
 import { DashboardView } from './views/DashboardView';
@@ -93,8 +88,6 @@ export function ClientShell({ user, children }: ClientShellProps) {
   // Initialise view from current URL so hard-refresh works correctly
   const [activeView, setActiveView] = useState<ViewKey>(() => pathnameToView(pathname));
   const [mobileMenuOpen,    setMobileMenuOpen]    = useState(false);
-  const [userDropdownOpen,  setUserDropdownOpen]  = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [liveNotifs, setLiveNotifs] = useState<LiveResources['notifications']>([]);
 
   const loadNotifications = useCallback(
@@ -112,7 +105,7 @@ export function ClientShell({ user, children }: ClientShellProps) {
     // Time-based "consultation starting soon" alerts are generated on read, so keep a slow tick.
     const timer = setInterval(loadNotifications, 60000);
     return () => clearInterval(timer);
-  }, [notificationsOpen, loadNotifications]);
+  }, [loadNotifications]);
 
   // New notifications arrive instantly via Supabase Realtime.
   useLiveRefresh(['notifications'], loadNotifications);
@@ -150,6 +143,19 @@ export function ClientShell({ user, children }: ClientShellProps) {
     pendingPathRef.current = '/client/dashboard';
     router.push('/client/dashboard', { scroll: false });
   }, [router]);
+
+  const handleNotificationClick = useCallback(
+    (n: LiveResources['notifications'][number]) => {
+      if (n.type === 'meeting_starting' || n.type === 'new_message') {
+        const thread = n.metadata?.threadId;
+        router.push(thread ? `/client/messages?thread=${thread}` : '/client/messages', { scroll: false });
+      } else if (n.type?.includes('consultation')) navigate('consultations');
+    },
+    [router, navigate]
+  );
+
+  const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
+  const settingsActive = pathname === '/client/settings' || pathname.startsWith('/client/settings/');
 
   const firstName = user.fullName.trim().split(' ')[0] || user.fullName;
 
@@ -190,173 +196,18 @@ export function ClientShell({ user, children }: ClientShellProps) {
     <div className="flex flex-col h-screen bg-[#E5D8CB] text-[#34150F] selection:bg-[#C58B3C]/30">
 
       {/* ─── Top Navigation Bar ──────────────────────────────────────────────── */}
-      <header className="shrink-0 h-16 w-full bg-[#23150F] border-b border-[#352219] flex items-center justify-between px-4 sm:px-8 shadow-md z-40">
-        {/* Left: Brand / Logo */}
-        <div className="flex items-center gap-3">
-          {/* Mobile hamburger */}
-          <button
-            type="button"
-            id="mobile-menu-toggle"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden text-[#ded7cb] hover:text-[#C58B3C] p-1.5 focus:outline-none"
-            aria-label="Toggle navigation menu"
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              {mobileMenuOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
-            </svg>
-          </button>
-
-          <button
-            type="button"
-            id="nav-logo"
-            onClick={navigateToDashboard}
-            className="font-cinzel text-sm sm:text-base tracking-[0.2em] text-[#ded7cb] hover:text-[#C58B3C] transition-colors"
-          >
-            <JusticiaLogo className="h-9 w-auto" />
-          </button>
-        </div>
-
-        {/* Right: Icons */}
-        <div className="flex items-center gap-4 sm:gap-6 text-[#ded7cb]">
-          <button
-            type="button"
-            id="nav-home"
-            onClick={navigateToDashboard}
-            className={`p-1.5 rounded-lg transition-colors hover:text-[#C58B3C] ${
-              activeView === 'dashboard' ? 'text-[#C58B3C]' : ''
-            }`}
-            title="Dashboard Home"
-            aria-label="Dashboard Home"
-          >
-            <HomeIcon className="w-5 h-5 sm:w-6 sm:h-6" />
-          </button>
-
-          {/* Notifications */}
-          <div className="relative">
-            <button
-              type="button"
-              id="nav-notifications"
-              onClick={() => { setNotificationsOpen(!notificationsOpen); setUserDropdownOpen(false); }}
-              className="relative p-1.5 rounded-lg transition-colors hover:text-[#C58B3C] focus:outline-none"
-              title="Notifications"
-              aria-label="Notifications"
-            >
-              <BellIcon className="w-5 h-5 sm:w-6 sm:h-6" />
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#C58B3C] animate-pulse" />
-            </button>
-
-            {notificationsOpen && (
-              <div className="absolute right-0 mt-3 w-80 rounded-2xl bg-[#2A1810] border border-[#3E271D] shadow-2xl p-4 text-xs z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between pb-2 border-b border-[#3E271D]">
-                  <span className="font-semibold text-[#ded7cb]">Notifications</span>
-                  <span className="text-[10px] text-[#C58B3C]">Mark all read</span>
-                </div>
-                <div className="py-3 space-y-2 text-[#C4B7A5] max-h-64 overflow-y-auto">
-                  {liveNotifs.length > 0 ? (
-                    liveNotifs.map((n) => (
-                      <div
-                        key={n.id}
-                        onClick={() => {
-                          if (n.type === 'meeting_starting' || n.type === 'new_message') {
-                            setNotificationsOpen(false);
-                            const thread = n.metadata?.threadId;
-                            router.push(thread ? `/client/messages?thread=${thread}` : '/client/messages', { scroll: false });
-                          } else if (n.type?.includes('consultation')) navigate('consultations');
-                        }}
-                        className="p-2.5 rounded-xl bg-[#341F16] hover:bg-[#3E251B] transition cursor-pointer border border-[#482B1F]"
-                      >
-                        <div className="flex items-center justify-between">
-                          <p className="font-bold text-[#ded7cb] text-xs">{n.title}</p>
-                          <span className="text-[9px] text-[#C58B3C]">
-                            {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-[#A69584] mt-1 leading-snug">{n.body}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <>
-                      <div className="p-2 rounded-lg bg-[#341F16] text-[#A69584] text-center text-[11px]">
-                        No new notifications
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Settings Shortcut */}
-          <button
-            type="button"
-            id="nav-settings-header"
-            onClick={() => router.push('/client/settings')}
-            className="p-1.5 rounded-lg transition-colors hover:text-[#C58B3C]"
-            title="Settings"
-            aria-label="Settings"
-          >
-            <GearIcon className="w-5 h-5 sm:w-6 sm:h-6" />
-          </button>
-
-          {/* User Profile */}
-          <div className="relative">
-            <button
-              type="button"
-              id="nav-user-menu"
-              onClick={() => { setUserDropdownOpen(!userDropdownOpen); setNotificationsOpen(false); }}
-              className="flex items-center gap-2 p-1 rounded-full hover:text-[#C58B3C] transition-colors focus:outline-none"
-              title={user.fullName}
-              aria-label="User Menu"
-            >
-              <UserCircleIcon className="w-6 h-6 sm:w-7 sm:h-7 text-[#ded7cb]" />
-            </button>
-
-            {userDropdownOpen && (
-              <div className="absolute right-0 mt-3 w-56 rounded-2xl bg-[#2A1810] border border-[#3E271D] shadow-2xl p-2 z-50 text-xs animate-in fade-in zoom-in-95 duration-150">
-                <div className="px-3 py-2 border-b border-[#3E271D]">
-                  <p className="font-medium text-[#ded7cb] truncate">{user.fullName}</p>
-                  <p className="text-[11px] text-[#A69584] truncate">{user.email}</p>
-                </div>
-                <div className="py-1">
-                  <button
-                    type="button"
-                    id="dropdown-my-profile"
-                    onClick={() => { router.push('/client/profile'); setUserDropdownOpen(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[#ded7cb] hover:bg-[#3E271D] transition text-left"
-                  >
-                    <UserCircleIcon className="w-4 h-4 text-[#C58B3C]" />
-                    <span>My Profile</span>
-                  </button>
-                  <button
-                    type="button"
-                    id="dropdown-settings"
-                    onClick={() => { router.push('/client/settings'); setUserDropdownOpen(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[#ded7cb] hover:bg-[#3E271D] transition text-left"
-                  >
-                    <GearIcon className="w-4 h-4 text-[#C58B3C]" />
-                    <span>Account Settings</span>
-                  </button>
-                </div>
-                <div className="pt-1 border-t border-[#3E271D]">
-                  <form action={signOutAction}>
-                    <button
-                      type="submit"
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-400 hover:bg-red-950/30 transition text-left"
-                    >
-                      <LogoutIcon className="w-4 h-4 text-red-400" />
-                      <span>Sign Out</span>
-                    </button>
-                  </form>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <ClientTopbar
+        user={user}
+        homeActive={activeView === 'dashboard'}
+        settingsActive={settingsActive}
+        notifications={liveNotifs}
+        onHome={navigateToDashboard}
+        onSettings={() => router.push('/client/settings')}
+        onProfile={() => router.push('/client/profile')}
+        onNotificationClick={handleNotificationClick}
+        mobileMenuOpen={mobileMenuOpen}
+        onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}
+      />
 
       {/* ─── Body: Sidebar + Content ─────────────────────────────────────────── */}
       {/*
@@ -365,129 +216,16 @@ export function ClientShell({ user, children }: ClientShellProps) {
       */}
       <div className="flex flex-row flex-1 min-h-0 relative">
 
-        {/* ── Desktop Sidebar ─────────────────────────────────────────────────── */}
-        <aside
-          className="w-64 shrink-0 bg-[#DECEB8] border-r border-[#D1BEA8] p-5 hidden md:flex flex-col justify-between overflow-y-auto"
-          aria-label="Client portal navigation"
-        >
-          <div className="space-y-6">
-            <nav className="space-y-2" aria-label="Main navigation">
-              {NAV_ITEMS.map((item) => {
-                const active = activeView === item.key;
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    id={`sidebar-nav-${item.key}`}
-                    onClick={() => navigate(item.key)}
-                    className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs sm:text-sm font-medium transition-all text-left ${
-                      active
-                        ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
-                        : 'text-[#3E2A1E] hover:bg-[#E5D7C5] hover:text-[#34150F]'
-                    }`}
-                  >
-                    <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-[#C58B3C]' : 'text-[#5C4535]'}`} />
-                    <span>{item.name}</span>
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          {/* Bottom: Settings + Logout */}
-          <div className="space-y-2 pt-6">
-            <hr className="border-[#C8B59E] mb-4" />
-            <button
-              type="button"
-              id="sidebar-settings"
-              onClick={() => router.push('/client/settings')}
-              className="w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-[#3E2A1E] hover:bg-[#E5D7C5] hover:text-[#34150F] transition-all text-left"
-            >
-              <GearIcon className="w-5 h-5 text-[#5C4535]" />
-              <span>Settings</span>
-            </button>
-
-            <form action={signOutAction}>
-              <button
-                type="submit"
-                className="w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-[#3E2A1E] hover:bg-[#E5D7C5] hover:text-[#99431E] transition-all text-left"
-              >
-                <LogoutIcon className="w-5 h-5 text-[#5C4535]" />
-                <span>Logout</span>
-              </button>
-            </form>
-          </div>
-        </aside>
-
-        {/* ── Mobile Sidebar Drawer ────────────────────────────────────────────── */}
-        {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 md:hidden flex">
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
-              onClick={() => setMobileMenuOpen(false)}
-            />
-
-            {/* Drawer */}
-            <div className="relative w-72 max-w-[80vw] bg-[#DECEB8] h-full shadow-2xl p-5 flex flex-col justify-between z-10">
-              <div className="space-y-6">
-                <div className="flex items-center justify-between pb-3 border-b border-[#D1BEA8]">
-                  <span className="flex items-center gap-2"><JusticiaLogo className="h-8 w-auto" /></span>
-                  <button
-                    type="button"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="p-1 rounded-md text-[#5C4535] hover:text-[#34150F]"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <nav className="space-y-2">
-                  {NAV_ITEMS.map((item) => {
-                    const active = activeView === item.key;
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={() => navigate(item.key)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-left ${
-                          active
-                            ? 'bg-[#D4C1AB] text-[#34150F] font-semibold shadow-[inset_2px_2px_4px_rgba(0,0,0,0.14),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]'
-                            : 'text-[#3E2A1E] hover:bg-[#E5D7C5]'
-                        }`}
-                      >
-                        <Icon className="w-5 h-5 text-[#5C4535]" />
-                        <span>{item.name}</span>
-                      </button>
-                    );
-                  })}
-                </nav>
-              </div>
-
-              <div className="space-y-2 pt-4 border-t border-[#C8B59E]">
-                <button
-                  type="button"
-                  onClick={() => { router.push('/client/settings'); setMobileMenuOpen(false); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-[#3E2A1E] hover:bg-[#E5D7C5] text-left"
-                >
-                  <GearIcon className="w-5 h-5 text-[#5C4535]" />
-                  <span>Settings</span>
-                </button>
-                <form action={signOutAction}>
-                  <button
-                    type="submit"
-                    className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-[#3E2A1E] hover:text-[#99431E] text-left"
-                  >
-                    <LogoutIcon className="w-5 h-5 text-[#5C4535]" />
-                    <span>Logout</span>
-                  </button>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* ── Sidebar (desktop column + mobile drawer) ─────────────────────────── */}
+        <ClientSidebar
+          items={NAV_ITEMS}
+          activeKey={settingsActive ? null : activeView}
+          settingsActive={settingsActive}
+          onSelect={(key) => navigate(key as ViewKey)}
+          onSettings={() => router.push('/client/settings')}
+          mobileOpen={mobileMenuOpen}
+          onCloseMobile={closeMobileMenu}
+        />
 
         {/* ── Main Content Viewport (ONLY scrollable zone) ─────────────────────── */}
         <main

@@ -2,7 +2,70 @@
 
 import React, { useCallback, useState, useTransition, useRef, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, type Variants } from 'motion/react';
+
+// ─── Entrance choreography ───────────────────────────────────────────────────
+// These inherit the page's "hidden" → "show" labels from FindLawyerView:
+// the search well opens from its centre, the Search button pops out of it, the four
+// filters rise in one after another, and the groove divider draws itself outward.
+const EASE = [0.16, 1, 0.3, 1] as const;
+
+const STACK: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.09 } } };
+const FORM_ROW: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.16 } } };
+const FILTER_ROW: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.065, delayChildren: 0.05 } } };
+
+const WELL_OPEN: Variants = {
+  hidden: { opacity: 0, clipPath: 'inset(0% 50% 0% 50% round 9px)' },
+  show: {
+    opacity: 1,
+    clipPath: 'inset(0% 0% 0% 0% round 9px)',
+    transition: { duration: 0.75, ease: EASE, opacity: { duration: 0.3 } },
+    // Clear the clip afterwards so the focus ring is not cut off
+    transitionEnd: { clipPath: 'none' },
+  },
+};
+const BUTTON_POP: Variants = {
+  hidden: { opacity: 0, scale: 0.55, x: -28 },
+  show: { opacity: 1, scale: 1, x: 0, transition: { type: 'spring', stiffness: 420, damping: 20, mass: 0.7 } },
+};
+const FILTER_IN: Variants = {
+  hidden: { opacity: 0, y: 16, filter: 'blur(5px)' },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: { type: 'spring', stiffness: 360, damping: 28 },
+    transitionEnd: { filter: 'none' },
+  },
+};
+const DIVIDER_DRAW: Variants = {
+  hidden: { opacity: 0, scaleX: 0 },
+  show: { opacity: 1, scaleX: 1, transition: { duration: 0.9, ease: EASE } },
+};
+
+// Dropdown list: springs open, options slide in one after another
+const MENU_LIST: Variants = {
+  closed: { opacity: 0, y: -10, scale: 0.95, filter: 'blur(4px)' },
+  open: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    filter: 'blur(0px)',
+    transition: {
+      type: 'spring',
+      stiffness: 450,
+      damping: 27,
+      mass: 0.55,
+      staggerChildren: 0.022,
+      delayChildren: 0.04,
+    },
+  },
+  exit: { opacity: 0, y: -8, scale: 0.96, filter: 'blur(3px)', transition: { duration: 0.15 } },
+};
+const MENU_OPTION: Variants = {
+  closed: { opacity: 0, x: -8 },
+  open: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 500, damping: 32 } },
+};
 
 interface Filters {
   query: string;
@@ -78,14 +141,29 @@ function NeumorphicSelect({
   }, [isOpen]);
 
   const currentOption = options.find((o) => o.value === selectedValue) || options[0];
+  const isFiltered = selectedValue !== 'all' && selectedValue !== '';
 
   return (
-    <div className={`flex flex-col relative ${isOpen ? 'z-40' : 'z-10'}`} ref={containerRef}>
+    <motion.div variants={FILTER_IN} className={`flex flex-col relative ${isOpen ? 'z-40' : 'z-10'}`} ref={containerRef}>
       <label
         htmlFor={id}
-        className="text-xs sm:text-[12.5px] font-lora font-semibold text-[#34150F] ml-0.5 mb-1.5 block select-none"
+        className="text-xs sm:text-[12.5px] font-lora font-semibold text-[#34150F] ml-0.5 mb-1.5 flex items-center gap-1.5 select-none"
       >
         {label}
+        {/* Caramel dot while this filter narrows the results */}
+        <AnimatePresence>
+          {isFiltered && (
+            <motion.span
+              key="dot"
+              aria-hidden="true"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 520, damping: 16 }}
+              className="size-1.5 rounded-full bg-[#C58B3C] shadow-[0_0_0_3px_rgba(197,139,60,0.18)]"
+            />
+          )}
+        </AnimatePresence>
       </label>
 
       {/* Animated Dropdown Trigger Button */}
@@ -97,7 +175,7 @@ function NeumorphicSelect({
         whileHover={{ scale: 1.015, y: -0.5 }}
         whileTap={{ scale: 0.98, y: 1 }}
         transition={{ type: 'spring', stiffness: 450, damping: 26 }}
-        className={`bg-[#E5D8CB] relative flex items-center justify-between w-full h-9 sm:h-9.5 rounded-[9px] px-3 sm:px-3.5 transition-all duration-200 focus:outline-none cursor-pointer select-none ${
+        className={`bg-[#E5D8CB] relative overflow-hidden flex items-center justify-between w-full h-9 sm:h-9.5 rounded-[9px] px-3 sm:px-3.5 transition-all duration-200 focus:outline-none cursor-pointer select-none ${
           isOpen
             ? 'neu-pressed ring-2 ring-[#B9833C]/50 text-[#34150F]'
             : 'neu-recessed hover:ring-1 hover:ring-[#B9833C]/30 text-[#5C4535]'
@@ -105,8 +183,20 @@ function NeumorphicSelect({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className="text-[11px] sm:text-xs font-inter font-normal truncate pr-2 text-left">
-          {currentOption?.label}
+        {/* The chosen value rolls in from below */}
+        <span className="relative flex-1 min-w-0 h-full flex items-center">
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={currentOption?.value}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+              className="block text-[11px] sm:text-xs font-inter font-normal truncate pr-2 text-left"
+            >
+              {currentOption?.label}
+            </motion.span>
+          </AnimatePresence>
         </span>
 
         {/* Animated Rotating Chevron with Color Shift */}
@@ -135,12 +225,12 @@ function NeumorphicSelect({
           <motion.ul
             role="listbox"
             aria-labelledby={id}
-            initial={{ opacity: 0, y: -10, scale: 0.95, filter: 'blur(4px)' }}
-            animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, y: -8, scale: 0.96, filter: 'blur(3px)' }}
-            transition={{ type: 'spring', stiffness: 450, damping: 27, mass: 0.55 }}
+            variants={MENU_LIST}
+            initial="closed"
+            animate="open"
+            exit="exit"
+            style={{ backgroundColor: '#E5D8CB', transformOrigin: '50% 0%' }}
             className="absolute top-[calc(100%+6px)] left-0 right-0 z-50 max-h-60 overflow-y-auto rounded-[13px] p-2 bg-[#E5D8CB] border border-[#D8C6B0] shadow-[0_12px_28px_rgba(180,155,130,0.5),8px_8px_20px_0_rgba(206,194,183,0.9),-8px_-8px_16px_0_rgba(252,238,223,0.9),inset_1px_1px_2px_0_rgba(252,238,223,0.6)] focus:outline-none [scrollbar-width:thin] [scrollbar-color:#C58B3C_transparent]"
-            style={{ backgroundColor: '#E5D8CB' }}
           >
             {options.map((opt) => {
               const isSelected = opt.value === selectedValue;
@@ -149,6 +239,7 @@ function NeumorphicSelect({
                   key={opt.value}
                   role="option"
                   aria-selected={isSelected}
+                  variants={MENU_OPTION}
                   whileHover={{ x: 3 }}
                   whileTap={{ scale: 0.98 }}
                   transition={{ type: 'spring', stiffness: 450, damping: 25 }}
@@ -164,9 +255,14 @@ function NeumorphicSelect({
                 >
                   <span className="truncate">{opt.label}</span>
                   {isSelected && (
-                    <span className="text-[#C58B3C] text-xs font-bold ml-1.5 shrink-0 select-none">
+                    <motion.span
+                      initial={{ scale: 0, rotate: -60 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ type: 'spring', stiffness: 520, damping: 14, delay: 0.12 }}
+                      className="text-[#C58B3C] text-xs font-bold ml-1.5 shrink-0 select-none"
+                    >
                       ✓
-                    </span>
+                    </motion.span>
                   )}
                 </motion.li>
               );
@@ -174,7 +270,7 @@ function NeumorphicSelect({
           </motion.ul>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }
 
@@ -248,15 +344,30 @@ export function LawyerSearchFilters({
   ];
 
   return (
-    <div className="space-y-3.5 select-none relative z-30">
+    <motion.div variants={STACK} className="space-y-3.5 select-none relative z-30">
       {/* Top Search Bar with Recessed Input & Tactile Capsule Button */}
-      <form
+      <motion.form
+        variants={FORM_ROW}
         onSubmit={handleSearch}
         className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3"
         role="search"
       >
-        {/* Recessed Prompt Input Field */}
-        <div className="neu-recessed bg-[#E5D8CB] flex-1 h-10 sm:h-11 rounded-[9px] px-3.5 sm:px-4.5 flex items-center transition-all duration-200 focus-within:ring-2 focus-within:ring-[#B9833C]/40 focus-within:shadow-[inset_3px_3px_7px_0_rgba(206,194,183,0.95),inset_-3px_-3px_6px_0_rgba(252,238,223,0.95)]">
+        {/* Recessed Prompt Input Field — opens from its centre on entrance */}
+        <motion.div
+          variants={WELL_OPEN}
+          className="group/search neu-recessed bg-[#E5D8CB] flex-1 h-10 sm:h-11 rounded-[9px] px-3.5 sm:px-4.5 flex items-center gap-2.5 transition-[box-shadow] duration-200 focus-within:ring-2 focus-within:ring-[#B9833C]/40 focus-within:shadow-[inset_3px_3px_7px_0_rgba(206,194,183,0.95),inset_-3px_-3px_6px_0_rgba(252,238,223,0.95)]"
+        >
+          <svg
+            aria-hidden="true"
+            className="w-4 h-4 shrink-0 text-[#9A8270] transition-[color,rotate,scale] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-focus-within/search:text-[#C58B3C] group-focus-within/search:-rotate-12 group-focus-within/search:scale-110"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.1"
+          >
+            <circle cx="11" cy="11" r="7.5" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="m20.5 20.5-4.2-4.2" />
+          </svg>
           <input
             id="lawyer-search-input"
             type="search"
@@ -267,12 +378,39 @@ export function LawyerSearchFilters({
             aria-label="Search lawyers"
             disabled={isPending}
           />
-        </div>
+          {/* Clear button once something is typed */}
+          <AnimatePresence>
+            {localQuery && (
+              <motion.button
+                key="clear"
+                type="button"
+                onClick={() => {
+                  setLocalQuery('');
+                  if (filters.query) navigate({ query: '' });
+                  document.getElementById('lawyer-search-input')?.focus();
+                }}
+                initial={{ opacity: 0, scale: 0.4, rotate: -90 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.4, rotate: 90 }}
+                whileHover={{ scale: 1.12 }}
+                whileTap={{ scale: 0.85 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+                aria-label="Clear search"
+                className="neu-raised-sm size-6 shrink-0 rounded-full flex items-center justify-center text-[#7D6855] hover:text-[#341512] cursor-pointer"
+              >
+                <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                  <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" />
+                </svg>
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </motion.div>
 
         {/* Elevated Tactile Search Button */}
         <motion.button
           type="submit"
           id="lawyer-search-btn"
+          variants={BUTTON_POP}
           disabled={isPending}
           onMouseEnter={() => setIsBtnHovered(true)}
           onMouseLeave={() => setIsBtnHovered(false)}
@@ -284,8 +422,18 @@ export function LawyerSearchFilters({
           aria-label="Search"
         >
           <motion.span
-            animate={isBtnHovered ? { rotate: -15, scale: 1.1 } : { rotate: 0, scale: 1 }}
-            transition={{ type: 'spring', stiffness: 350, damping: 20 }}
+            animate={
+              isPending
+                ? { rotate: [0, -22, 18, -10, 0], scale: 1.1 }
+                : isBtnHovered
+                  ? { rotate: -15, scale: 1.1 }
+                  : { rotate: 0, scale: 1 }
+            }
+            transition={
+              isPending
+                ? { duration: 0.8, repeat: Infinity, ease: 'easeInOut' }
+                : { type: 'spring', stiffness: 350, damping: 20 }
+            }
             className="flex items-center justify-center"
           >
             <svg
@@ -298,12 +446,12 @@ export function LawyerSearchFilters({
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35" />
             </svg>
           </motion.span>
-          <span>Search</span>
+          <span>{isPending ? 'Searching' : 'Search'}</span>
         </motion.button>
-      </form>
+      </motion.form>
 
       {/* 4-Column Animated Neumorphic Filter Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5 pt-1 relative z-30">
+      <motion.div variants={FILTER_ROW} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5 pt-1 relative z-30">
         {/* Specialization Filter */}
         <NeumorphicSelect
           id="filter-specialization"
@@ -343,10 +491,10 @@ export function LawyerSearchFilters({
           onSelect={(val) => navigate({ languages: val === 'all' ? [] : [val] })}
           disabled={isPending}
         />
-      </div>
+      </motion.div>
 
-      {/* Centered Neumorphic Groove Divider */}
-      <div className="w-3/4 max-w-[850px] mx-auto h-[1px] bg-[#D8C6B0] shadow-[0_1px_0_rgba(252,238,223,0.7)] mt-6 sm:mt-7 mb-1 relative z-0" />
-    </div>
+      {/* Centered Neumorphic Groove Divider — draws outward from the middle */}
+      <motion.div variants={DIVIDER_DRAW} className="w-3/4 max-w-[850px] mx-auto h-[1px] bg-[#D8C6B0] shadow-[0_1px_0_rgba(252,238,223,0.7)] mt-6 sm:mt-7 mb-1 relative z-0" />
+    </motion.div>
   );
 }

@@ -1,6 +1,20 @@
 @import "tailwindcss";
 
 :root {
+  /* Neumorphic light/shadow for small raised elements, relative to the #E5D8CB surface.
+     Coloured buttons reuse these so they sit on the parchment like the plain ones. */
+  --neu-raised-sm-shadow:
+    5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.2);
+  /* Pressed-in: thin surface rim outside, inset shade inside (same as .neu-recessed, tighter). */
+  --neu-pressed-sm-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 3px 3px 7px 0 rgba(0, 0, 0, 0.22),
+    inset -3px -3px 6px 0 rgba(255, 255, 255, 0.18);
+
   --background: #0d0805;
   --foreground: #ded6cb;
   --gold-primary: #c59341;
@@ -297,8 +311,9 @@ body {
 .neu-btn-caramel {
   background-color: #d49e56;
   box-shadow:
-    0 6px 16px rgba(212, 158, 86, 0.4),
-    inset 0 1px 1px rgba(255, 255, 255, 0.4);
+    var(--neu-raised-sm-shadow),
+    inset 1px 1px 2px 0 rgba(255, 255, 255, 0.35),
+    inset -1px -1px 2px 0 rgba(120, 80, 30, 0.18);
   border: none;
   transition: all 140ms ease;
 }
@@ -308,7 +323,7 @@ body {
 }
 
 .neu-btn-caramel:active {
-  box-shadow: inset 2px 2px 6px rgba(140, 96, 32, 0.6);
+  box-shadow: var(--neu-pressed-sm-shadow);
 }
 
 /* Tactile Capsule Button with real physical plunge & inset shadow */
@@ -353,8 +368,9 @@ body {
 .neu-btn-espresso {
   background-color: #4a2e25;
   box-shadow:
-    0 6px 16px rgba(74, 46, 37, 0.38),
-    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    var(--neu-raised-sm-shadow),
+    inset 1px 1px 2px 0 rgba(255, 255, 255, 0.14),
+    inset -1px -1px 2px 0 rgba(0, 0, 0, 0.3);
   border: none;
   transition: all 140ms ease;
 }
@@ -364,15 +380,16 @@ body {
 }
 
 .neu-btn-espresso:active {
-  box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--neu-pressed-sm-shadow);
 }
 
 /* Confirmed appointment badge (vibrant emerald pill) */
 .neu-badge-green {
   background-color: #27ae60;
   box-shadow:
-    4px 6px 16px rgba(39, 174, 96, 0.4),
-    -2px -2px 6px rgba(255, 255, 255, 0.25);
+    var(--neu-raised-sm-shadow),
+    inset 1px 1px 2px 0 rgba(255, 255, 255, 0.25),
+    inset -1px -1px 2px 0 rgba(0, 60, 25, 0.2);
   border: none;
 }
 
@@ -2224,6 +2241,98 @@ body {
   }
 }
 
+/*
+ * Raised button sitting on the caramel highlight banner (.neu-raised-highlight over #E5D8CB,
+ * which composites to ~#E0C5A9). Same surface colour as the banner; the dark and light shadows
+ * are darker/lighter tints of that colour so the button reads as extruded from the banner.
+ */
+.neu-btn-banner {
+  background-color: #e0c5a9;
+  border: none;
+  box-shadow:
+    4px 4px 12px 0 rgba(176, 140, 104, 0.4),
+    -4px -4px 10px 0 rgba(248, 230, 210, 0.7),
+    4px -4px 10px 0 rgba(176, 140, 104, 0.08),
+    -4px 4px 10px 0 rgba(176, 140, 104, 0.08),
+    inset -1px -1px 2px 0 rgba(176, 140, 104, 0.25),
+    inset 1px 1px 2px 0 rgba(248, 230, 210, 0.45);
+  transition:
+    box-shadow 0.18s ease,
+    filter 0.18s ease,
+    transform 0.18s ease;
+}
+
+.neu-btn-banner:hover {
+  filter: brightness(1.03);
+}
+
+.neu-btn-banner:active {
+  transform: scale(0.97);
+  box-shadow:
+    inset 3px 3px 7px 0 rgba(176, 140, 104, 0.4),
+    inset -3px -3px 7px 0 rgba(248, 230, 210, 0.7);
+}
+
+.neu-btn-banner:focus-visible {
+  outline: 2px solid #c58b3c;
+  outline-offset: 3px;
+}
+
+/*
+ * Shadow-only version of .neu-raised-sm: the same light and shadow (tints of the #E5D8CB page
+ * surface) without setting a background, so coloured pills (status badges) keep their fill.
+ */
+.neu-raised-pill {
+  border: none;
+  box-shadow:
+    5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.3);
+}
+
+/* Small element pressed into the caramel banner (count pills, wells on .neu-raised-highlight). */
+.neu-inset-banner {
+  background-color: #dcc0a2;
+  border: none;
+  box-shadow:
+    inset 2px 2px 4px 0 rgba(176, 140, 104, 0.45),
+    inset -2px -2px 4px 0 rgba(248, 230, 210, 0.75);
+}
+
+/*
+ * Calendar day with a consultation: a small caramel-tinted bubble raised out of the recessed
+ * date well (#E5D8CB). Shadows are kept tight so neighbouring days don't blur together.
+ */
+.neu-day-booked {
+  background: linear-gradient(145deg, #eedfce, #e3cfb9);
+  border: none;
+  box-shadow:
+    2px 2px 4px 0 rgba(190, 168, 146, 0.7),
+    -2px -2px 4px 0 rgba(255, 248, 240, 0.9),
+    inset 0 0 0 1px rgba(211, 151, 88, 0.28);
+  transition:
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.neu-day-booked:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    3px 3px 5px 0 rgba(190, 168, 146, 0.75),
+    -2px -2px 5px 0 rgba(255, 248, 240, 0.95),
+    inset 0 0 0 1px rgba(211, 151, 88, 0.4);
+}
+
+.neu-day-booked:active {
+  transform: none;
+  box-shadow:
+    inset 2px 2px 4px 0 rgba(190, 168, 146, 0.7),
+    inset -2px -2px 4px 0 rgba(255, 248, 240, 0.85);
+}
+
 /* Raised containers / cards (Figma spec: large raised surface #E5D8CB) */
 .neu-raised {
   background-color: #e5d8cb;
@@ -2468,6 +2577,95 @@ body {
     0 0 0 2px rgba(220, 38, 38, 0.35);
 }
 
+/* Destructive action (cancel booking, withdraw, decline). Like .neu-btn-caramel and
+   .neu-btn-espresso, the raised/pressed shadows are lit relative to the #E5D8CB surface. */
+.neu-btn-danger {
+  background-color: #b42318;
+  box-shadow:
+    var(--neu-raised-sm-shadow),
+    inset 1px 1px 2px 0 rgba(255, 255, 255, 0.25),
+    inset -1px -1px 2px 0 rgba(80, 10, 5, 0.25);
+  border: none;
+  transition: all 140ms ease;
+}
+
+.neu-btn-danger:hover {
+  background-color: #9f1f15;
+}
+
+.neu-btn-danger:active {
+  box-shadow: var(--neu-pressed-sm-shadow);
+}
+
+/* Shared modal entrance (NeuModal). */
+@keyframes neuOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes neuModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.neu-overlay-in {
+  animation: neuOverlayIn 0.18s ease-out both;
+}
+
+.neu-modal-in {
+  animation: neuModalIn 0.26s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Gentle idle float for empty-state icons. */
+@keyframes neuFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.neu-float {
+  animation: neuFloat 3.2s ease-in-out infinite;
+}
+
+/* Soft expanding ring (e.g. "meeting link ready" beacon). */
+@keyframes neuBeacon {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.neu-beacon {
+  animation: neuBeacon 1.8s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neu-overlay-in,
+  .neu-modal-in,
+  .neu-float,
+  .neu-beacon {
+    animation: none;
+  }
+}
+
 /* Sign-in modal container (Figma spec: inset body + outer rim, #D39758 outline) */
 .neu-modal {
   background-color: #e5d8cb;
@@ -2571,4 +2769,340 @@ input:-webkit-autofill:focus {
     inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9) !important;
   -webkit-text-fill-color: #34150f !important;
   transition: background-color 5000s ease-in-out 0s;
+}
+
+/* ── Client portal chrome: sidebar ─────────────────────────────────────────── */
+.client-sidebar {
+  background: #dbc9ba;
+  color: rgb(52 21 18 / 0.8);
+  font-family: var(--font-lora), Georgia, serif;
+}
+.client-side-row {
+  color: rgb(52 21 18 / 0.8);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 220ms ease;
+}
+.client-side-row:hover,
+.client-side-row[data-active] {
+  color: #341512;
+}
+.client-side-row[data-tone="danger"]:hover {
+  color: #8f2b1d;
+}
+.client-side-row:focus-visible {
+  box-shadow: 0 0 0 2px rgb(52 21 18 / 0.35);
+}
+/* Recessed well under the active tab (glides between rows via layoutId): pressed into the
+   #DBC9BA surface with shade on the top-left inner edge and light on the bottom-right. */
+.client-side-pill {
+  /* Matched to the reference: centre = surface colour; ~#CDBCAE shade top-left and
+     ~#E4D1C1 light bottom-right, each fading over ~12–15px. */
+  background: #dbc9ba;
+  box-shadow:
+    inset 6px 6px 12px rgb(160 140 125 / 0.36),
+    inset -6px -6px 12px rgb(250 238 226 / 0.5);
+}
+.client-side-hover {
+  background: rgb(52 21 18 / 0.055);
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity 220ms ease,
+    transform 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.client-side-row:hover .client-side-hover {
+  opacity: 1;
+  transform: scale(1);
+}
+.client-side-row[data-active] .client-side-hover {
+  opacity: 0;
+}
+.client-side-row[data-tone="danger"] .client-side-hover {
+  background: rgb(143 43 29 / 0.07);
+}
+.client-side-icon,
+.client-side-label {
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.client-side-row:hover .client-side-icon {
+  transform: translateX(1px) scale(1.1);
+}
+.client-side-row:hover .client-side-label {
+  transform: translateX(3px);
+}
+.client-side-row[data-tone="danger"]:hover .client-side-icon {
+  transform: translateX(3px);
+}
+
+/* ── Client portal chrome: top bar ─────────────────────────────────────────── */
+.client-topbar {
+  background: #341512;
+  box-shadow:
+    0 1px 0 rgb(0 0 0 / 0.25),
+    0 6px 18px -8px rgb(26 9 7 / 0.55);
+}
+.client-topbar-icon {
+  color: #e5d8cb;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.client-topbar-icon:focus-visible {
+  box-shadow: 0 0 0 2px rgb(229 216 203 / 0.45);
+}
+.client-topbar-halo {
+  background: radial-gradient(circle, rgb(229 216 203 / 0.16), rgb(229 216 203 / 0.08) 70%);
+}
+.client-topbar-icon[data-active] .client-topbar-halo {
+  background: radial-gradient(circle, rgb(229 216 203 / 0.2), rgb(229 216 203 / 0.11) 70%);
+  box-shadow: inset 0 0 0 1px rgb(229 216 203 / 0.08);
+}
+
+/* Popovers: parchment neumorphism, the same #E5D8CB surface as the page they drop onto.
+   Every interactive surface keeps the same 4 shadow layers (outer dark, outer light,
+   inset dark, inset light) so rest -> hover (raised) -> press (recessed) interpolates. */
+.client-popover {
+  --neu-dark: 190 174 159;
+  --neu-light: 255 248 240;
+  border-radius: 22px;
+  background: #e5d8cb;
+  border: 1px solid rgb(52 21 18 / 0.12);
+  color: #341512;
+  font-family: var(--font-inter), Arial, sans-serif;
+}
+.client-popover-caret {
+  position: absolute;
+  top: -7px;
+  right: var(--caret, 16px);
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  background: #e5d8cb;
+  border-left: 1px solid rgb(52 21 18 / 0.12);
+  border-top: 1px solid rgb(52 21 18 / 0.12);
+  border-top-left-radius: 3px;
+}
+/* Even-thickness ring around the monogram (no directional shadow, so it reads centred). */
+.client-avatar-ring {
+  background: #ebe0d5;
+  box-shadow: 0 0 0 1px rgb(52 21 18 / 0.08);
+}
+.client-popover-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(52 21 18 / 0.18) transparent;
+}
+.client-popover-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.client-popover-scroll::-webkit-scrollbar-thumb {
+  background: rgb(52 21 18 / 0.18);
+  border-radius: 999px;
+}
+
+/* Static neu primitives (soft) */
+.client-neu-well {
+  background: #e1d3c5;
+  box-shadow:
+    inset 2px 2px 5px rgb(var(--neu-dark) / 0.36),
+    inset -2px -2px 5px rgb(var(--neu-light) / 0.7);
+}
+.client-neu-raised-sm {
+  box-shadow:
+    2px 2px 5px rgb(var(--neu-dark) / 0.42),
+    -2px -2px 5px rgb(var(--neu-light) / 0.75);
+}
+.client-neu-thumb {
+  background: #e8dcd0;
+  box-shadow:
+    1.5px 1.5px 4px rgb(var(--neu-dark) / 0.42),
+    -1.5px -1.5px 4px rgb(var(--neu-light) / 0.75);
+}
+.client-neu-groove {
+  height: 2px;
+  border-radius: 2px;
+  box-shadow:
+    inset 1px 1px 1px rgb(var(--neu-dark) / 0.45),
+    inset -1px -1px 1px rgb(var(--neu-light) / 0.8);
+}
+.client-avatar {
+  color: #341512;
+  background: linear-gradient(140deg, #f0c27f, #c58b3c);
+  box-shadow: inset 0 0 0 1px rgb(255 240 210 / 0.35);
+}
+.client-unread-dot {
+  background: #c58b3c;
+  box-shadow: 0 0 0 3px rgb(197 139 60 / 0.18);
+  animation: clientUnreadPulse 2.4s ease-in-out infinite;
+}
+@keyframes clientUnreadPulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgb(197 139 60 / 0.18); }
+  50% { box-shadow: 0 0 0 6px rgb(197 139 60 / 0); }
+}
+
+/* Interactive neu surfaces. Cards and menu rows are RECESSED (inset shadows only), so
+   nothing spills past their edges. Every state keeps the same 4 layers (outer dark,
+   outer light, inset dark, inset light) so transitions interpolate smoothly. */
+.client-notif-card,
+.client-neu-item,
+.client-neu-btn {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    box-shadow 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 200ms ease,
+    color 200ms ease;
+  --rest:
+    0 0 0 rgb(var(--neu-dark) / 0), 0 0 0 rgb(var(--neu-light) / 0),
+    inset 0 0 0 rgb(var(--neu-dark) / 0), inset 0 0 0 rgb(var(--neu-light) / 0);
+  --raised:
+    2px 2px 5px rgb(var(--neu-dark) / 0.4), -2px -2px 5px rgb(var(--neu-light) / 0.7),
+    inset 0 0 0 rgb(var(--neu-dark) / 0), inset 0 0 0 rgb(var(--neu-light) / 0);
+  --lifted:
+    3px 3px 7px rgb(var(--neu-dark) / 0.45), -3px -3px 7px rgb(var(--neu-light) / 0.75),
+    inset 0 0 0 rgb(var(--neu-dark) / 0), inset 0 0 0 rgb(var(--neu-light) / 0);
+  --recessed-soft:
+    0 0 0 rgb(var(--neu-dark) / 0), 0 0 0 rgb(var(--neu-light) / 0),
+    inset 1.5px 1.5px 4px rgb(var(--neu-dark) / 0.22), inset -1.5px -1.5px 4px rgb(var(--neu-light) / 0.55);
+  --recessed:
+    0 0 0 rgb(var(--neu-dark) / 0), 0 0 0 rgb(var(--neu-light) / 0),
+    inset 2px 2px 6px rgb(var(--neu-dark) / 0.32), inset -2px -2px 6px rgb(var(--neu-light) / 0.65);
+  --recessed-deep:
+    0 0 0 rgb(var(--neu-dark) / 0), 0 0 0 rgb(var(--neu-light) / 0),
+    inset 3px 3px 7px rgb(var(--neu-dark) / 0.4), inset -3px -3px 7px rgb(var(--neu-light) / 0.72);
+  box-shadow: var(--rest);
+}
+.client-notif-card:focus-visible,
+.client-neu-item:focus-visible,
+.client-neu-btn:focus-visible {
+  outline: 2px solid rgb(197 139 60 / 0.55);
+  outline-offset: 2px;
+}
+
+/* Notification cards: read = faint recess, unread = a touch deeper and warmer. */
+.client-notif-card {
+  background: #e3d6c9;
+  box-shadow: var(--recessed-soft);
+}
+.client-notif-card[data-unread] {
+  background: #e0d2c4;
+  box-shadow: var(--recessed);
+}
+.client-notif-card:hover {
+  background: #dfd0c2;
+  box-shadow: var(--recessed-deep);
+}
+.client-notif-card:active {
+  box-shadow: var(--recessed-deep);
+  background: #dccdbe;
+  transition-duration: 120ms;
+}
+
+/* Profile menu rows: flat at rest, sink in on hover, deeper on press. */
+.client-neu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 14px;
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: rgb(52 21 18 / 0.82);
+}
+.client-neu-item:hover {
+  color: #341512;
+  background: #e1d3c5;
+  box-shadow: var(--recessed);
+}
+.client-neu-item:active {
+  box-shadow: var(--recessed-deep);
+  transition-duration: 120ms;
+}
+.client-neu-chip {
+  display: grid;
+  height: 2rem;
+  width: 2rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 999px;
+  color: #8c5a1e;
+  background: #e5d8cb;
+  box-shadow:
+    1.5px 1.5px 4px rgb(var(--neu-dark) / 0.42),
+    -1.5px -1.5px 4px rgb(var(--neu-light) / 0.75),
+    inset 0 0 0 rgb(var(--neu-dark) / 0),
+    inset 0 0 0 rgb(var(--neu-light) / 0);
+  transition:
+    box-shadow 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.client-neu-item:hover .client-neu-chip {
+  transform: scale(1.05);
+}
+.client-neu-item:active .client-neu-chip {
+  transform: scale(0.96);
+  box-shadow:
+    0 0 0 rgb(var(--neu-dark) / 0),
+    0 0 0 rgb(var(--neu-light) / 0),
+    inset 1.5px 1.5px 3px rgb(var(--neu-dark) / 0.4),
+    inset -1.5px -1.5px 3px rgb(var(--neu-light) / 0.7);
+}
+.client-neu-item-chevron {
+  opacity: 0;
+  transform: translateX(-4px);
+  color: rgb(52 21 18 / 0.5);
+  transition:
+    opacity 200ms ease,
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.client-neu-item:hover .client-neu-item-chevron,
+.client-neu-item:focus-visible .client-neu-item-chevron {
+  opacity: 1;
+  transform: translateX(0);
+}
+.client-neu-item[data-tone="danger"],
+.client-neu-item[data-tone="danger"] .client-neu-chip {
+  color: #9a3a22;
+}
+.client-neu-item[data-tone="danger"]:hover {
+  color: #82301b;
+}
+
+/* Small soft-raised pill button ("Mark all read") */
+.client-neu-btn {
+  color: #8c5a1e;
+  box-shadow: var(--raised);
+}
+.client-neu-btn:hover:not(:disabled) {
+  color: #6f4615;
+  box-shadow: var(--lifted);
+}
+.client-neu-btn:active:not(:disabled) {
+  box-shadow: var(--recessed-deep);
+  transition-duration: 120ms;
+}
+.client-neu-btn:disabled {
+  cursor: default;
+  color: rgb(52 21 18 / 0.35);
+  box-shadow: var(--recessed-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .client-side-hover,
+  .client-side-icon,
+  .client-side-label,
+  .client-neu-chip,
+  .client-neu-item-chevron {
+    transition: none;
+  }
+  .client-side-row:hover .client-side-icon,
+  .client-side-row:hover .client-side-label,
+  .client-neu-item:hover .client-neu-chip,
+  .client-neu-item:active .client-neu-chip {
+    transform: none;
+  }
+  .client-unread-dot {
+    animation: none;
+  }
 }
