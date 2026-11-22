@@ -8,6 +8,7 @@
  *  - withdraw: cancel your own open request
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   getRescheduleOptionsAction,
   requestRescheduleAction,
@@ -67,6 +68,11 @@ export function RescheduleModal(props: RescheduleModalProps) {
   const { mode, consultationId, counterpartName, currentLabel, currentStart, pending, remaining, onClose, onDone } = props;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -78,24 +84,25 @@ export function RescheduleModal(props: RescheduleModalProps) {
 
   const title = mode === 'request' ? 'Reschedule Consultation' : mode === 'respond' ? 'Reschedule Request' : 'Withdraw Request?';
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-5 md:p-6 animate-in fade-in overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="reschedule-modal-title"
       onClick={() => !submitting && onClose()}
     >
       <div
-        className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-[28px] p-6 sm:p-9 bg-[#E8DCCD] space-y-5"
-        style={{ boxShadow: CARD_SHADOW }}
+        className="neu-modal outline-[#D39758] relative w-full max-w-[94vw] sm:max-w-2xl lg:max-w-3xl max-h-[88vh] flex flex-col rounded-[26px] sm:rounded-[30px] p-6 sm:p-8 lg:p-9 bg-[#E5D8CB] space-y-5 sm:space-y-6 animate-in zoom-in-95 duration-200 shadow-2xl my-auto overflow-y-auto neu-scrollbar-discrete"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-center">
           <h3
             id="reschedule-modal-title"
-            className="px-8 sm:px-14 py-3 rounded-xl bg-[#E3CAA9] font-lora text-xl sm:text-2xl font-bold text-[#5C4535] text-center"
-            style={{ boxShadow: TITLE_PLATE_SHADOW }}
+            className="neu-raised-highlight px-6 sm:px-10 py-2 sm:py-2.5 rounded-2xl font-lora text-lg sm:text-xl font-bold text-[#341512] text-center"
+            style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
           >
             {title}
           </h3>
@@ -144,7 +151,8 @@ export function RescheduleModal(props: RescheduleModalProps) {
           />
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -189,7 +197,7 @@ function Buttons({
         type="button"
         onClick={onCancel}
         disabled={submitting}
-        className="min-w-[130px] px-8 py-2 rounded-xl border border-[#4A3525] text-xs sm:text-sm font-lora font-bold text-[#4A3525] hover:bg-[#E0D2C0] transition-all disabled:opacity-50"
+        className="min-w-[130px] px-8 py-2.5 rounded-xl border border-[#341512]/60 bg-[#ECE1D2] text-xs sm:text-sm font-lora font-semibold text-[#341512] hover:bg-[#E2D4C3] active:scale-95 transition-all disabled:opacity-50 shadow-[2px_2px_5px_rgba(182,155,130,0.3),-2px_-2px_5px_#ffffff]"
       >
         {cancelLabel}
       </button>
@@ -197,7 +205,7 @@ function Buttons({
         type="button"
         onClick={onPrimary}
         disabled={submitting || disabled}
-        className="min-w-[130px] px-8 py-2 rounded-xl bg-[#D9A86C] text-xs sm:text-sm font-lora font-bold text-[#4A3525] transition-all hover:brightness-105 active:scale-95 disabled:opacity-50"
+        className="neu-btn-caramel min-w-[130px] px-8 py-2.5 rounded-xl bg-[#D49E56] text-xs sm:text-sm font-lora font-bold text-[#341512] transition-all hover:brightness-105 active:scale-95 disabled:opacity-50"
         style={{ boxShadow: PRIMARY_SHADOW }}
       >
         {primaryLabel}
@@ -346,7 +354,7 @@ function RequestStep({
             >
               ‹
             </button>
-            <span className="text-xs font-bold uppercase tracking-widest text-[#C58B3C]">
+            <span className="font-lora text-xs font-bold uppercase tracking-widest text-[#C58B3C]">
               {MONTHS[view.month]} {view.year}
             </span>
             <button
@@ -359,12 +367,12 @@ function RequestStep({
               ›
             </button>
           </div>
-          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-[#362519] pb-1">
+          <div className="grid grid-cols-7 gap-1 text-center font-lora text-[11px] font-bold text-[#341512] pb-1">
             {WEEKDAYS.map((d) => (
               <span key={d}>{d}</span>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1 text-center text-xs">
+          <div className="grid grid-cols-7 gap-1 text-center font-lora text-xs">
             {cells.map((day, idx) => {
               if (!day) return <span key={`e-${idx}`} className="h-8" />;
               const iso = dayIso(view.year, view.month, day);
@@ -381,12 +389,12 @@ function RequestStep({
                   aria-pressed={selected}
                   aria-label={`${longDate(iso)}${blocked ? ' (attorney unavailable)' : ''}`}
                   title={blocked ? 'Attorney unavailable' : undefined}
-                  className={`h-8 w-8 mx-auto rounded-full font-medium transition-all ${
+                  className={`h-8 w-8 mx-auto rounded-full font-lora transition-all flex items-center justify-center ${
                     selected
-                      ? 'bg-[#DFC5A4] text-[#C58B3C] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.18)]'
+                      ? 'bg-[#ECE1D2] text-[#C58B3C] font-bold shadow-[3px_3px_7px_rgba(182,155,130,0.45),-3px_-3px_7px_#ffffff]'
                       : disabled
                         ? 'text-[#B5A391] line-through decoration-[#C8B59E]'
-                        : 'text-[#3E2A1E] hover:bg-[#DECEB8]'
+                        : 'text-[#341512] hover:text-[#C58B3C] hover:bg-[#DECEB8]'
                   }`}
                 >
                   {pad(day)}
