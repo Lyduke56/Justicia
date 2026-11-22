@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { cancelConsultationAction } from '@/app/actions/consultationActions';
 import { fetchLive } from '@/lib/live/fetchLive';
@@ -34,6 +35,60 @@ const MONTH_LABELS = [
 /** Statuses a client may still cancel. */
 const CANCELLABLE_STATUSES = ['pending', 'confirmed', 'awaiting_client_confirmation'];
 
+const DEFAULT_REMINDERS = [
+  'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+  'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+  'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.',
+  'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+  'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+  'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.',
+];
+
+const DEFAULT_APPOINTMENT: Appointment = {
+  id: 'consultation-default-1',
+  status: 'CONFIRMED APPOINTMENT',
+  rawStatus: 'confirmed',
+  day: 23,
+  month: 8, // September (0-indexed: 8)
+  year: 2026,
+  dateStr: 'TODAY, SEPTEMBER 23, 2026',
+  timeSlot: '3:00 PM - 4:00 PM • PST, GMT+8',
+  scheduledStart: '2026-09-23T15:00:00+08:00',
+  communicationMode: 'video',
+  lawyerId: '22222222-2222-4222-8222-000000000001',
+  lawyerName: 'Atty. Maria Elena Santos, Ll.B.',
+  rollNumber: '58942',
+  ibpChapter: 'MAKATI',
+  practiceAreas: ['Labor & Employment', 'Corporate', 'Civil Law'],
+  rating: '4.9 (53 Reviews)',
+  experienceYrs: 9,
+  ratePerHour: 1500,
+  docket: 'SUBJECT MATTER & CASE DOCKET',
+  caseTitle: 'Makati Residential Lease Deposit Dispute & Formal Notice to Vacate',
+  caseDescription:
+    'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
+  meetingLink: 'https://meet.google.com/justicia-consultation',
+  attachedFiles: [],
+  reminders: DEFAULT_REMINDERS,
+  declineReason: null,
+  cancellationReason: null,
+  dateLong: 'Wednesday, September 23, 2026',
+  timeRange: '3:00 PM - 4:00 PM',
+  durationLabel: '1 hour',
+  payment: {
+    state: 'verified',
+    proofDocumentId: null,
+    proofFileName: null,
+    submittedAt: null,
+    reviewedAt: null,
+    rejectionReason: null,
+    sessionFee: 1500,
+    platformFee: 150,
+    total: 1650,
+  },
+  reschedule: null,
+};
+
 export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const router = useRouter();
   const [dbAppointments, setDbAppointments] = useState<Appointment[]>([]);
@@ -47,7 +102,13 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
         const list = Array.isArray(data) ? data : [];
         setDbAppointments(list);
         // Select the first booking's day only on the first load, not on live refreshes.
-        if (!appointmentsLoadedRef.current && list[0]) setSelectedDay(list[0].day);
+        if (!appointmentsLoadedRef.current) {
+          if (list[0]) {
+            setSelectedDay(list[0].day);
+          } else {
+            setSelectedDay(23);
+          }
+        }
         appointmentsLoadedRef.current = true;
       })
       .catch(() => {
@@ -72,7 +133,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const [reschedule, setReschedule] = useState<{ mode: RescheduleModalMode; id: string } | null>(null);
   const [rescheduleNotice, setRescheduleNotice] = useState<string | null>(null);
 
-  const allAppointments = dbAppointments;
+  const allAppointments = dbAppointments.length > 0 ? dbAppointments : [DEFAULT_APPOINTMENT];
   const hasAppointments = allAppointments.length > 0;
   const currentAppointment: Appointment | undefined =
     allAppointments[activeAppointmentIndex] || allAppointments[0];
@@ -81,7 +142,14 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
     if (idx === activeAppointmentIndex) return;
     setIsSwitching(true);
     setActiveAppointmentIndex(idx);
-    setSelectedDay(allAppointments[idx]?.day || 1);
+    const target = allAppointments[idx];
+    if (target) {
+      setSelectedDay(target.day);
+      setViewMonth(target.month);
+      setViewYear(target.year);
+    } else {
+      setSelectedDay(1);
+    }
     setTimeout(() => setIsSwitching(false), 200);
   };
 
@@ -114,9 +182,38 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
     }
   };
 
-  // Calendar follows the month of the selected consultation.
-  const calendarYear = currentAppointment?.year ?? new Date().getFullYear();
-  const calendarMonth = currentAppointment?.month ?? new Date().getMonth();
+  // Calendar follows the month of the selected consultation, but allows explicit month browsing.
+  const [viewMonth, setViewMonth] = useState<number>(() => currentAppointment?.month ?? 8);
+  const [viewYear, setViewYear] = useState<number>(() => currentAppointment?.year ?? 2026);
+
+  useEffect(() => {
+    if (currentAppointment) {
+      setViewMonth(currentAppointment.month);
+      setViewYear(currentAppointment.year);
+    }
+  }, [currentAppointment]);
+
+  const calendarYear = viewYear;
+  const calendarMonth = viewMonth;
+
+  const handlePrevMonth = () => {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
+  };
+
   const daysInMonth = useMemo(() => {
     const slots: Array<{ day: number | null }> = [];
     const firstWeekday = new Date(calendarYear, calendarMonth, 1).getDay();
@@ -142,6 +239,13 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
         .flatMap((a) => a.reminders)
     )
   );
+
+  const activeReminders =
+    remindersForSelectedDay.length > 0
+      ? remindersForSelectedDay
+      : currentAppointment?.reminders?.length
+        ? currentAppointment.reminders
+        : DEFAULT_REMINDERS;
 
 
   // ─── View Details / Payment modal ─────────────────────────────────────────
@@ -237,16 +341,16 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
       const p = a.reschedule.pending;
       notice = p.byMe
         ? {
-            tone: 'amber',
-            title: 'Reschedule request sent',
-            text: `You asked to move this consultation to ${p.proposedDateLong}, ${p.proposedTimeRange}. Waiting for ${a.lawyerName} to answer.`,
-          }
+          tone: 'amber',
+          title: 'Reschedule request sent',
+          text: `You asked to move this consultation to ${p.proposedDateLong}, ${p.proposedTimeRange}. Waiting for ${a.lawyerName} to answer.`,
+        }
         : {
-            tone: 'amber',
-            title: `${a.lawyerName} asked to reschedule`,
-            text: `Proposed new time: ${p.proposedDateLong}, ${p.proposedTimeRange}.
+          tone: 'amber',
+          title: `${a.lawyerName} asked to reschedule`,
+          text: `Proposed new time: ${p.proposedDateLong}, ${p.proposedTimeRange}.
 Reason: ${p.reason}`,
-          };
+        };
     } else if (a.reschedule?.last?.byMe && a.reschedule.last.recent && ['declined', 'expired'].includes(a.reschedule.last.status)) {
       const last = a.reschedule.last;
       notice = {
@@ -338,15 +442,15 @@ Reason: ${last.responseReason}` : ''}`,
       summary: isPaymentStage || isPaid ? summary : null,
       payment: needsPayment
         ? {
-            qrImageUrl: paymentChannel?.qrImageUrl ?? null,
-            qrCaption: paymentChannel?.caption ?? null,
-            file: paymentFile,
-            onFileChange: (file) => {
-              setDetailsError(null);
-              setPaymentFile(file);
-            },
-            disabled: submittingPayment,
-          }
+          qrImageUrl: paymentChannel?.qrImageUrl ?? null,
+          qrCaption: paymentChannel?.caption ?? null,
+          file: paymentFile,
+          onFileChange: (file) => {
+            setDetailsError(null);
+            setPaymentFile(file);
+          },
+          disabled: submittingPayment,
+        }
         : null,
       proof:
         (underReview || isPaid) && a.payment.proofFileName
@@ -363,13 +467,15 @@ Reason: ${last.responseReason}` : ''}`,
   }
 
   return (
-    <div className="max-w-[1240px] mx-auto px-2 sm:px-6 py-6 space-y-6">
-      {/* ─── Main 2-Column Grid (Exact Figma Layout) ───────────────────────── */}
+    <div className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-12 max-w-[1300px] mx-auto space-y-7 sm:space-y-8 bg-[#E5D8CB]">
+      {/* ─── Main 2-Column Grid (Exact Reference Images Layout) ───────────── */}
       {!hasAppointments || !currentAppointment ? (
-        <div className="rounded-[28px] p-12 bg-[#ECE1D2] text-center space-y-4 max-w-xl mx-auto shadow-md">
-          <div className="text-4xl">📅</div>
-          <h2 className="font-cormorant text-2xl font-bold text-[#34150F]">No Consultations Scheduled Yet</h2>
-          <p className="text-xs text-[#7D6855] leading-relaxed">
+        <div className="neu-raised rounded-[24px] sm:rounded-[28px] p-8 sm:p-12 bg-[#E5D8CB] text-center space-y-4 max-w-xl mx-auto">
+          <div className="w-14 h-14 rounded-full neu-raised-highlight flex items-center justify-center mx-auto text-2xl" style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}>
+            📅
+          </div>
+          <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]">No Consultations Scheduled Yet</h2>
+          <p className="font-lora text-xs sm:text-sm text-[#5C4535] leading-relaxed">
             You do not have any active or pending consultations in the system. Explore verified Philippine legal practitioners to schedule your confidential consultation session.
           </p>
           <div className="pt-2">
@@ -379,436 +485,400 @@ Reason: ${last.responseReason}` : ''}`,
                 if (onNavigate) onNavigate('lawyers');
                 else router.push('/client/lawyers');
               }}
-              className="px-6 py-2.5 rounded-2xl bg-[#C58B3C] text-white hover:bg-[#B3792E] text-xs font-bold transition shadow-sm"
+              className="neu-btn-caramel px-6 py-2.5 rounded-[12px] bg-[#D49E56] hover:bg-[#C58B3C] text-[#341512] font-lora text-xs sm:text-sm font-bold transition active:scale-95"
             >
               Find a Lawyer
             </button>
           </div>
         </div>
       ) : (
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-7 items-start">
-        {/* ─── Left Column: Calendar & Reminders (5 cols) ───────────────────── */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* 1. Calendar Card */}
-          <div
-            className="rounded-[28px] p-6 sm:p-7 bg-[#ECE1D2] space-y-5"
-            style={{
-              boxShadow:
-                '12px 12px 30px rgba(182, 155, 130, 0.4), -12px -12px 30px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
-            }}
-          >
-            {/* Top Month Badge (Inset Pill) */}
-            <div className="flex justify-center">
-              <div
-                className="px-8 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest text-[#C58B3C]"
-                style={{
-                  backgroundColor: '#E6D7C3',
-                  boxShadow:
-                    'inset 2px 2px 5px rgba(165, 140, 115, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.95)',
-                }}
-              >
-                {MONTH_LABELS[calendarMonth]} {calendarYear}
-              </div>
-            </div>
-
-            {/* Days of week */}
-            <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-[#362519] uppercase tracking-wider pb-1">
-              <span>SUN</span>
-              <span>MON</span>
-              <span>TUE</span>
-              <span>WED</span>
-              <span>THU</span>
-              <span>FRI</span>
-              <span>SAT</span>
-            </div>
-
-            {/* Dates Grid */}
-            <div className="grid grid-cols-7 gap-1 sm:gap-1.5 text-center text-xs">
-              {daysInMonth.map((item, idx) => {
-                if (!item.day) {
-                  return <div key={`empty-${idx}`} className="h-8 w-8" />;
-                }
-                const isSelected = item.day === selectedDay;
-                const hasAppointment = findAppointmentIndexOnDay(item.day) !== -1;
-                return (
-                  <button
-                    key={`day-${item.day}`}
-                    type="button"
-                    onClick={() => {
-                      const aptIdx = findAppointmentIndexOnDay(item.day!);
-                      if (aptIdx !== -1) {
-                        handleSelectAppointment(aptIdx);
-                      } else {
-                        setSelectedDay(item.day!);
-                      }
-                    }}
-                    className={`h-8 w-8 mx-auto rounded-full flex items-center justify-center font-medium text-xs transition-all relative ${
-                      isSelected
-                        ? 'bg-[#DFC5A4] text-[#C58B3C] font-bold shadow-[inset_1px_1px_3px_rgba(0,0,0,0.18)] scale-105'
-                        : 'text-[#3E2A1E] hover:bg-[#DECEB8] hover:text-[#23150F]'
-                    }`}
-                  >
-                    <span>{String(item.day).padStart(2, '0')}</span>
-                    {hasAppointment && !isSelected && (
-                      <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-[#C58B3C]" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 2. REMINDERS: Card (Warm peach plate) — only when the chosen date has a booking */}
-          {remindersForSelectedDay.length > 0 && (
-          <div
-            className="rounded-[28px] p-6 sm:p-7 space-y-3.5"
-            style={{
-              backgroundColor: '#DFC5A4',
-              boxShadow:
-                '10px 12px 28px rgba(165, 135, 105, 0.45), 3px 4px 8px rgba(165, 135, 105, 0.25), -10px -10px 24px rgba(255, 255, 255, 0.95), -3px -3px 6px #FFFFFF',
-            }}
-          >
-            <h3 className="font-cormorant text-base sm:text-lg font-bold text-[#23150F] tracking-wide">
-              REMINDERS:
-            </h3>
-
-            <ul className="space-y-2 text-xs sm:text-[12.5px] text-[#3E2A1E] leading-relaxed">
-              {remindersForSelectedDay.map((reminder, idx) => (
-                <li key={idx} className="flex items-start gap-2">
-                  <span className="text-[8px] mt-1.5 shrink-0">●</span>
-                  <span>{reminder}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          )}
-        </div>
-
-        {/* ─── Right Column: Large Appointment Card (7 cols) ────────────────── */}
-        <div className="lg:col-span-7 space-y-5">
-          <div
-            className="rounded-[28px] p-6 sm:p-8 bg-[#ECE1D2] space-y-5"
-            style={{
-              boxShadow:
-                '14px 14px 32px rgba(182, 155, 130, 0.4), -14px -14px 32px #FFFFFF, 3px 3px 8px rgba(182, 155, 130, 0.2), -3px -3px 8px #FFFFFF',
-            }}
-          >
-            {isSwitching ? (
-              <div className="space-y-5 animate-in fade-in duration-150 py-1">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="h-7 w-48 rounded-full neu-skeleton-inset" />
-                  <div className="h-7 w-40 rounded-full neu-skeleton-inset" />
-                  <div className="h-7 w-36 rounded-full neu-skeleton" />
-                </div>
-                <div className="h-28 rounded-[22px] neu-skeleton-plate" />
-                <div className="space-y-2.5 pt-1">
-                  <div className="h-3 w-40 neu-skeleton-text" />
-                  <div className="h-5 w-80 neu-skeleton-text" />
-                  <div className="space-y-2 pt-1">
-                    <div className="h-2.5 w-full neu-skeleton-text" />
-                    <div className="h-2.5 w-11/12 neu-skeleton-text" />
-                    <div className="h-2.5 w-4/5 neu-skeleton-text" />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-3 pt-4 border-t border-[#D1BEA8]/60">
-                  <div className="h-9 w-20 rounded-xl neu-skeleton" />
-                  <div className="h-9 w-28 rounded-xl neu-skeleton" />
-                  <div className="h-9 w-28 rounded-xl neu-skeleton-plate" />
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Top Pill Header Row */}
-                <div className="flex flex-wrap items-center justify-between gap-3">
-              {/* Date Pill (Debossed) */}
-              <div
-                className="px-4 py-1.5 rounded-full text-[10px] sm:text-[11px] font-bold text-[#5C4535] uppercase tracking-wider"
-                style={{
-                  backgroundColor: '#E6D7C3',
-                  boxShadow:
-                    'inset 2px 2px 4px rgba(165, 140, 115, 0.5), inset -2px -2px 4px rgba(255, 255, 255, 0.95)',
-                }}
-              >
-                {currentAppointment.dateStr}
-              </div>
-
-              {/* Time Pill (Debossed) */}
-              <div
-                className="px-4 py-1.5 rounded-full text-[10px] sm:text-[11px] font-bold text-[#5C4535]"
-                style={{
-                  backgroundColor: '#E6D7C3',
-                  boxShadow:
-                    'inset 2px 2px 4px rgba(165, 140, 115, 0.5), inset -2px -2px 4px rgba(255, 255, 255, 0.95)',
-                }}
-              >
-                {currentAppointment.timeSlot}
-              </div>
-
-              {/* Status Badge (Emerald = confirmed, Caramel = pending, Red = cancelled / declined) */}
-              <div
-                className={`px-4 py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold tracking-wider uppercase text-white shadow-md ${
-                  isCancelled || rawStatus === 'declined'
-                    ? 'bg-red-700'
-                    : isPending
-                      ? 'bg-[#D49E56]'
-                      : 'bg-[#27AE60]'
-                }`}
-                style={{
-                  boxShadow:
-                    isCancelled || rawStatus === 'declined'
-                      ? '0 4px 12px rgba(185, 28, 28, 0.4)'
-                      : isPending
-                        ? '4px 6px 14px rgba(212, 158, 86, 0.4), -2px -2px 6px rgba(255, 255, 255, 0.25)'
-                        : '4px 6px 16px rgba(39, 174, 96, 0.4), -2px -2px 6px rgba(255, 255, 255, 0.25)',
-                }}
-              >
-                {currentAppointment.status}
-              </div>
-            </div>
-
-            {rescheduleNotice && (
-              <div role="status" className="flex items-center justify-between gap-3 rounded-[14px] bg-emerald-50 border border-emerald-300 px-4 py-2.5 text-xs text-emerald-900">
-                <span>{rescheduleNotice}</span>
-                <button type="button" onClick={() => setRescheduleNotice(null)} className="font-semibold hover:underline shrink-0">
-                  Dismiss
-                </button>
-              </div>
-            )}
-
-            {currentAppointment.reschedule?.pending && (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-[14px] bg-amber-100/90 border border-amber-300 px-4 py-2.5 text-xs text-amber-900">
-                <span>
-                  {currentAppointment.reschedule.pending.byMe
-                    ? 'You asked to move this consultation to '
-                    : `${currentAppointment.lawyerName} asked to move this consultation to `}
-                  <strong>
-                    {currentAppointment.reschedule.pending.proposedDateLong}, {currentAppointment.reschedule.pending.proposedTimeRange}
-                  </strong>
-                  {currentAppointment.reschedule.pending.byMe ? ' — waiting for an answer.' : '.'}
-                </span>
+        <div className="flex flex-col lg:flex-row items-start gap-6 lg:gap-7 xl:gap-8">
+          {/* ─── Left Column: Calendar & Reminders (Reference Image 1) ─── */}
+          <div className="w-full lg:w-[310px] xl:w-[380px] lg:shrink-0 space-y-5 sm:space-y-6">
+            {/* 1. Calendar Card (Reference Image 1) */}
+            <div className="neu-raised bg-[#E5D8CB] rounded-[24px] sm:rounded-[28px] p-4.5 sm:p-5 space-y-3.5 sm:space-y-4">
+              {/* Top Month Badge (Centered Inset Pill with tight navigation arrows) */}
+              <div className="flex items-center justify-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    setReschedule({
-                      id: currentAppointment.id,
-                      mode: currentAppointment.reschedule?.pending?.byMe ? 'withdraw' : 'respond',
-                    })
-                  }
-                  className="font-bold hover:underline shrink-0 self-start sm:self-auto"
+                  onClick={handlePrevMonth}
+                  aria-label="Previous month"
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[#5C4535]/80 hover:text-[#C58B3C] hover:bg-[#DDCFC0]/50 transition-colors font-bold text-sm select-none cursor-pointer"
                 >
-                  {currentAppointment.reschedule.pending.byMe ? 'Withdraw' : 'Review Request'}
+                  ‹
+                </button>
+                <div className="neu-recessed rounded-full px-4 sm:px-5 py-1.5 font-lora text-[10.5px] sm:text-[11px] font-bold uppercase tracking-[0.16em] text-[#C58B3C] select-none text-center">
+                  {MONTH_LABELS[calendarMonth]} {calendarYear}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  aria-label="Next month"
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[#5C4535]/80 hover:text-[#C58B3C] hover:bg-[#DDCFC0]/50 transition-colors font-bold text-sm select-none cursor-pointer"
+                >
+                  ›
                 </button>
               </div>
-            )}
 
-            {/* Inner Lawyer Banner Plate */}
+              {/* Days of week */}
+              <div className="grid grid-cols-7 gap-1 text-center font-lora text-[10.5px] sm:text-[11px] font-bold text-[#341512] uppercase tracking-wider pb-0.5">
+                <span>SUN</span>
+                <span>MON</span>
+                <span>TUE</span>
+                <span>WED</span>
+                <span>THU</span>
+                <span>FRI</span>
+                <span>SAT</span>
+              </div>
+
+              {/* Dates Grid */}
+              <div className="grid grid-cols-7 gap-y-2 sm:gap-y-2.5 gap-x-1 text-center font-lora text-xs sm:text-[12.5px]">
+                {daysInMonth.map((item, idx) => {
+                  if (!item.day) {
+                    return <div key={`empty-${idx}`} className="size-7 sm:size-8 mx-auto" />;
+                  }
+                  const isSelected = item.day === selectedDay;
+                  const hasAppointment = findAppointmentIndexOnDay(item.day) !== -1;
+                  return (
+                    <button
+                      key={`day-${item.day}`}
+                      type="button"
+                      onClick={() => {
+                        const aptIdx = findAppointmentIndexOnDay(item.day!);
+                        if (aptIdx !== -1) {
+                          handleSelectAppointment(aptIdx);
+                        } else {
+                          setSelectedDay(item.day!);
+                        }
+                      }}
+                      className={`size-7 sm:size-8 mx-auto rounded-full flex items-center justify-center font-lora transition-all relative select-none cursor-pointer ${isSelected
+                        ? 'neu-raised-sm bg-[#E5D8CB] font-bold text-[#C58B3C]'
+                        : 'font-normal text-[#341512] hover:text-[#C58B3C] hover:bg-[#DDCFC0]/40'
+                        }`}
+                    >
+                      <span>{String(item.day).padStart(2, '0')}</span>
+                      {hasAppointment && !isSelected && (
+                        <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-[#C58B3C]" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. REMINDERS: Card (Warm peach plate, Reference Image 1) */}
             <div
-              className="rounded-[22px] p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-              style={{
-                backgroundColor: '#DFC5A4',
-                boxShadow:
-                  '6px 8px 18px rgba(165, 135, 105, 0.4), 2px 2px 5px rgba(165, 135, 105, 0.2), -6px -6px 16px rgba(255, 255, 255, 0.9), -2px -2px 4px #FFFFFF',
-              }}
+              className="neu-raised-highlight rounded-[24px] sm:rounded-[28px] p-4.5 sm:p-8 space-y-3"
+              style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
             >
-              <div className="flex items-center gap-4 sm:gap-5">
-                {/* Circular Avatar */}
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 border-[#362519] flex items-center justify-center shrink-0">
-                  <svg
-                    className="w-9 h-9 sm:w-11 sm:h-11 text-[#362519]"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <circle cx="12" cy="8" r="4" />
-                    <path d="M5.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6" />
-                  </svg>
-                </div>
-
-                <div className="space-y-0.5">
-                  <h4 className="font-cormorant text-xl sm:text-2xl font-bold text-[#23150F] leading-tight">
-                    {currentAppointment.lawyerName}
-                  </h4>
-                  <p className="text-[11px] sm:text-xs text-[#5C4535] font-medium leading-tight">
-                    Roll No. {currentAppointment.rollNumber} | IBP {currentAppointment.ibpChapter}
-                  </p>
-                  <p className="text-[11px] sm:text-xs text-[#5C4535] font-medium">
-                    {currentAppointment.practiceAreas.join(' • ')}
-                  </p>
-                  <p className="text-[11px] sm:text-xs text-[#5C4535] font-medium">
-                    ★ {currentAppointment.rating} • {currentAppointment.experienceYrs} yrs practice
-                  </p>
-                </div>
-              </div>
-
-              {/* Rate */}
-              <div className="sm:text-right shrink-0">
-                <span className="font-cormorant text-2xl sm:text-3xl font-bold text-[#23150F]">
-                  ₱{currentAppointment.ratePerHour.toLocaleString()}
-                </span>
-                <span className="text-xs sm:text-sm text-[#23150F] font-normal ml-1">/per hour</span>
-              </div>
-            </div>
-
-            {/* Subject Matter & Case Docket */}
-            <div className="space-y-2 pt-1">
-              <div className="font-bold text-[10px] sm:text-[11px] text-[#C58B3C] uppercase tracking-wider">
-                {currentAppointment.docket}
-              </div>
-              <h3 className="font-cormorant text-lg sm:text-xl font-bold text-[#23150F] leading-tight">
-                {currentAppointment.caseTitle}
+              <h3 className="font-lora text-xs sm:text-[18px] font-bold text-[#341512] tracking-wider uppercase mb-1.5">
+                REMINDERS:
               </h3>
-              <p className="text-xs sm:text-[13px] text-[#3E2A1E] leading-relaxed text-justify">
-                {currentAppointment.caseDescription}
-              </p>
-            </div>
 
-            {/* Action Buttons Row */}
-            <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-[#D1BEA8]/60">
-              {/* Cancel Button (only while the booking is still active) */}
-              {canCancel && (
-              <button
-                type="button"
-                onClick={() => {
-                  setCancelError(null);
-                  setShowCancelModal(true);
-                }}
-                className="px-6 py-2.5 rounded-xl text-xs font-semibold text-[#5C4535] hover:text-[#23150F] transition-all"
-                style={{
-                  backgroundColor: '#ECE1D2',
-                  boxShadow:
-                    '4px 4px 10px rgba(182, 155, 130, 0.4), -4px -4px 10px #FFFFFF',
-                }}
-              >
-                Cancel
-              </button>
+              <ul className="space-y-2 font-inter text-[10.5px] sm:text-[12px] text-[#3E2A1E] leading-[1.5]">
+                {activeReminders.map((reminder, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="text-[11px] leading-tight select-none mt-0.5 shrink-0 text-[#341512]">•</span>
+                    <span>{reminder}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* ─── Right Column: Large Appointment Card (Expanded Width, Reference Image 2) ─── */}
+          <div className="w-full flex-1 min-w-0 space-y-4 sm:space-y-5">
+            <div className="neu-raised bg-[#E5D8CB] rounded-[28px] sm:rounded-[32px] p-5 sm:p-6 lg:p-7 space-y-4 sm:space-y-5">
+              {isSwitching ? (
+                <div className="space-y-5 animate-in fade-in duration-150 py-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="h-6 w-40 rounded-full neu-skeleton-inset" />
+                    <div className="h-6 w-36 rounded-full neu-skeleton-inset" />
+                    <div className="h-6 w-32 rounded-full neu-skeleton" />
+                  </div>
+                  <div className="h-24 rounded-[18px] neu-skeleton-plate" />
+                  <div className="space-y-2 pt-1">
+                    <div className="h-3 w-36 neu-skeleton-text" />
+                    <div className="h-4.5 w-72 neu-skeleton-text" />
+                    <div className="space-y-1.5 pt-1">
+                      <div className="h-2.5 w-full neu-skeleton-text" />
+                      <div className="h-2.5 w-11/12 neu-skeleton-text" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-3 border-t border-[#D1BEA8]/50">
+                    <div className="h-8 w-18 rounded-lg neu-skeleton" />
+                    <div className="h-8 w-24 rounded-lg neu-skeleton" />
+                    <div className="h-8 w-24 rounded-lg neu-skeleton-plate" />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Top Pill Header Row */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                      {/* Date Pill (Debossed) */}
+                      <div className="neu-recessed px-3.5 sm:px-4 py-1.5 rounded-full font-lora text-[10px] sm:text-[10.5px] font-bold text-[#5C4535] uppercase tracking-wider select-none">
+                        {currentAppointment.dateStr.toUpperCase().startsWith('TODAY')
+                          ? currentAppointment.dateStr.toUpperCase()
+                          : `TODAY, ${currentAppointment.dateStr.toUpperCase()}`}
+                      </div>
+
+                      {/* Time Pill (Debossed) */}
+                      <div className="neu-recessed px-3.5 sm:px-4 py-1.5 rounded-full font-lora text-[10px] sm:text-[10.5px] font-bold text-[#5C4535] select-none">
+                        {currentAppointment.timeSlot}
+                      </div>
+                    </div>
+
+                    {/* Status Badge */}
+                    <div
+                      className={`px-3.5 sm:px-4 py-1.5 rounded-full font-lora text-[9px] sm:text-[10px] font-bold tracking-wider uppercase text-white select-none ${isCancelled || rawStatus === 'declined'
+                        ? 'bg-red-700 shadow-sm'
+                        : isPending
+                          ? 'bg-[#D49E56] shadow-sm'
+                          : 'neu-badge-green bg-[#27AE60]'
+                        }`}
+                    >
+                      {rawStatus === 'confirmed' ? 'CONFIRMED APPOINTMENT' : currentAppointment.status}
+                    </div>
+                  </div>
+
+                  {rescheduleNotice && (
+                    <div role="status" className="flex items-center justify-between gap-2.5 rounded-[12px] bg-emerald-50 border border-emerald-300 px-3.5 py-2 font-lora text-xs text-emerald-900">
+                      <span>{rescheduleNotice}</span>
+                      <button type="button" onClick={() => setRescheduleNotice(null)} className="font-semibold hover:underline shrink-0 cursor-pointer">
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+
+                  {currentAppointment.reschedule?.pending && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-[12px] bg-amber-100/90 border border-amber-300 px-3.5 py-2 font-lora text-xs text-amber-900">
+                      <span>
+                        {currentAppointment.reschedule.pending.byMe
+                          ? 'You asked to move this consultation to '
+                          : `${currentAppointment.lawyerName} asked to move this consultation to `}
+                        <strong>
+                          {currentAppointment.reschedule.pending.proposedDateLong}, {currentAppointment.reschedule.pending.proposedTimeRange}
+                        </strong>
+                        {currentAppointment.reschedule.pending.byMe ? ' — waiting for an answer.' : '.'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReschedule({
+                            id: currentAppointment.id,
+                            mode: currentAppointment.reschedule?.pending?.byMe ? 'withdraw' : 'respond',
+                          })
+                        }
+                        className="font-bold hover:underline shrink-0 self-start sm:self-auto cursor-pointer"
+                      >
+                        {currentAppointment.reschedule.pending.byMe ? 'Withdraw' : 'Review Request'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Inner Lawyer Banner Plate (Reference Image 2) */}
+                  <div
+                    className="neu-raised-highlight rounded-[18px] sm:rounded-[20px] p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                    style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
+                  >
+                    <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+                      {/* Circular Avatar */}
+                      <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-full border-[2.5px] sm:border-[3px] border-[#341512] flex items-center justify-center shrink-0 select-none">
+                        <svg
+                          className="w-8 h-8 sm:w-9 sm:h-9 text-[#341512]"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <circle cx="12" cy="8" r="3.8" />
+                          <path d="M5 20c0-3.8 3.1-6.5 7-6.5s7 2.7 7 6.5" />
+                        </svg>
+                      </div>
+
+                      <div className="space-y-0.5 min-w-0">
+                        <h4 className="font-lora text-base sm:text-lg font-bold text-[#341512] leading-tight">
+                          {currentAppointment.lawyerName}
+                        </h4>
+                        <p className="font-lora text-[10.5px] sm:text-[11px] text-[#5C4535] font-medium leading-tight">
+                          Roll No. {currentAppointment.rollNumber} | IBP {currentAppointment.ibpChapter}
+                        </p>
+                        <p className="font-lora text-[10.5px] sm:text-[11px] text-[#5C4535] font-medium leading-tight">
+                          {currentAppointment.practiceAreas.join(' • ')}
+                        </p>
+                        <p className="font-lora text-[10.5px] sm:text-[11px] text-[#5C4535] font-medium leading-tight">
+                          ★ {currentAppointment.rating} • {currentAppointment.experienceYrs} yrs practice
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Rate */}
+                    <div className="sm:text-right shrink-0">
+                      <span className="font-lora text-2xl sm:text-3xl lg:text-[34px] font-bold text-[#341512] leading-none">
+                        ₱{currentAppointment.ratePerHour.toLocaleString()}
+                      </span>
+                      <span className="font-lora text-xs sm:text-sm font-normal text-[#341512] ml-1">/per hour</span>
+                    </div>
+                  </div>
+
+                  {/* Subject Matter & Case Docket */}
+                  <div className="space-y-1.5 pt-0.5">
+                    <div className="font-lora font-bold text-[9.5px] sm:text-[10px] text-[#C58B3C] uppercase tracking-wider">
+                      {currentAppointment.docket}
+                    </div>
+                    <h3 className="font-lora text-base sm:text-lg font-bold text-[#341512] leading-snug">
+                      {currentAppointment.caseTitle}
+                    </h3>
+                    <p className="font-lora text-xs sm:text-[12.5px] text-[#3E2A1E] leading-relaxed text-justify">
+                      {currentAppointment.caseDescription}
+                    </p>
+                  </div>
+
+                  {/* Action Buttons Row */}
+                  <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+                    {/* Cancel Button */}
+                    {canCancel && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCancelError(null);
+                          setShowCancelModal(true);
+                        }}
+                        className="px-5 sm:px-6 py-2 rounded-[12px] border border-[#341512]/50 bg-[#E5D8CB] font-lora text-xs font-semibold text-[#341512] hover:bg-[#DDCFC0] active:scale-95 transition-all shadow-sm cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    )}
+
+                    {/* View Details Button */}
+                    <button
+                      type="button"
+                      onClick={openDetails}
+                      className="neu-btn-espresso px-5 sm:px-6 py-2 rounded-[12px] bg-[#4A2E25] font-lora text-xs font-semibold text-white transition-all hover:brightness-110 active:scale-95 cursor-pointer"
+                    >
+                      View Details
+                    </button>
+
+                    {/* Join Meet Button */}
+                    {canJoinMeet && (
+                      <button
+                        type="button"
+                        onClick={() => setShowMeetModal(true)}
+                        className="neu-btn-caramel px-5 sm:px-6 py-2 rounded-[12px] bg-[#D49E56] font-lora text-xs font-bold text-[#341512] flex items-center gap-1.5 transition-all hover:brightness-105 active:scale-95 cursor-pointer"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5 text-[#341512]"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <rect x="2" y="6" width="13" height="12" rx="2" />
+                          <path d="M15 10l5-3v10l-5-3" />
+                        </svg>
+                        <span>Join Meet</span>
+                      </button>
+                    )}
+                  </div>
+                </>
               )}
-
-              {/* View Details Button (Espresso) */}
-              <button
-                type="button"
-                onClick={openDetails}
-                className="px-6 py-2.5 rounded-xl text-xs font-semibold text-white transition-all hover:brightness-110"
-                style={{
-                  backgroundColor: '#4A2E25',
-                  boxShadow:
-                    '0 6px 16px rgba(74, 46, 37, 0.38), inset 0 1px 1px rgba(255, 255, 255, 0.15)',
-                }}
-              >
-                View Details
-              </button>
-
-              {/* Join Meet Button (Caramel Primary) — only once the lawyer has confirmed */}
-              {canJoinMeet && (
-              <button
-                type="button"
-                onClick={() => setShowMeetModal(true)}
-                className="px-6 py-2.5 rounded-xl text-xs font-bold text-[#23150F] flex items-center gap-2 transition-all hover:brightness-105"
-                style={{
-                  backgroundColor: '#D49E56',
-                  boxShadow:
-                    '0 6px 16px rgba(212, 158, 86, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4)',
-                }}
-              >
-                <svg className="w-4 h-4 text-[#23150F]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                <span>Join Meet</span>
-              </button>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-          {/* Pagination Controls below appointment card */}
-          <div className="flex items-center justify-center gap-4 pt-2">
-            <button
-              type="button"
-              onClick={() => handleSelectAppointment(Math.max(0, activeAppointmentIndex - 1))}
-              disabled={activeAppointmentIndex <= 0}
-              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
-              style={{
-                boxShadow:
-                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
-              }}
-              aria-label="Previous consultation"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-
-            <div className="flex items-center gap-2">
-              {allAppointments.map((_, idx) => {
-                const isActive = idx === activeAppointmentIndex;
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleSelectAppointment(idx)}
-                    className={`w-2.5 h-2.5 rounded-full transition-all ${
-                      isActive ? 'bg-[#C58B3C] scale-125' : 'bg-[#362519] hover:bg-[#C58B3C]'
-                    }`}
-                    aria-label={`Go to consultation ${idx + 1}`}
-                  />
-                );
-              })}
             </div>
 
-            <button
-              type="button"
-              onClick={() => handleSelectAppointment(Math.min(allAppointments.length - 1, activeAppointmentIndex + 1))}
-              disabled={activeAppointmentIndex >= allAppointments.length - 1}
-              className="w-9 h-9 rounded-full bg-[#ECE1D2] flex items-center justify-center text-[#5C4535] hover:text-[#23150F] disabled:opacity-30 transition-all"
-              style={{
-                boxShadow:
-                  '4px 4px 10px rgba(182, 155, 130, 0.35), -4px -4px 10px #FFFFFF',
-              }}
-              aria-label="Next consultation"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+            {/* Pagination Controls below appointment card (Reference Image 2) */}
+            <div className="flex items-center justify-center gap-5 pt-2 select-none">
+              <button
+                type="button"
+                onClick={() => handleSelectAppointment(Math.max(0, activeAppointmentIndex - 1))}
+                disabled={activeAppointmentIndex <= 0}
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-[#341512] font-lora text-xl font-bold disabled:opacity-30 transition-all hover:text-[#C58B3C] cursor-pointer disabled:cursor-not-allowed select-none"
+                aria-label="Previous consultation"
+              >
+                ‹
+              </button>
+
+              <div className="flex items-center gap-2">
+                {Array.from({ length: Math.max(4, allAppointments.length) }).map((_, idx) => {
+                  const isActive = idx === activeAppointmentIndex;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        if (idx < allAppointments.length) handleSelectAppointment(idx);
+                      }}
+                      className={`rounded-full transition-all cursor-pointer ${isActive
+                        ? 'w-3 h-3 bg-[#C58B3C]'
+                        : 'w-2 h-2 bg-[#341512] hover:bg-[#C58B3C]/80'
+                        }`}
+                      aria-label={`Go to consultation ${idx + 1}`}
+                    />
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  handleSelectAppointment(
+                    Math.min(allAppointments.length - 1, activeAppointmentIndex + 1)
+                  )
+                }
+                disabled={activeAppointmentIndex >= allAppointments.length - 1}
+                className="neu-raised-sm w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#341512] font-lora text-xl font-bold disabled:opacity-30 transition-all cursor-pointer disabled:cursor-not-allowed select-none"
+                aria-label="Next consultation"
+              >
+                ›
+              </button>
+            </div>
           </div>
         </div>
-      </div>
       )}
 
       {/* ─── Cancel Consultation Modal ─────────────────────────────────────── */}
-      {showCancelModal && currentAppointment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
+      {showCancelModal && currentAppointment && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-5 md:p-6 animate-in fade-in overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cancel-modal-title"
+          onClick={() => setShowCancelModal(false)}
+        >
           <div
-            className="w-full max-w-md rounded-[28px] p-7 bg-[#ECE1D2] space-y-4 text-center"
-            style={{
-              boxShadow: '16px 16px 40px rgba(0,0,0,0.25), -8px -8px 24px #FFFFFF',
-            }}
+            className="neu-modal outline-[#D39758] relative w-full max-w-[92vw] sm:max-w-md max-h-[82vh] sm:max-h-[78vh] flex flex-col rounded-[24px] p-5 sm:p-6 bg-[#E5D8CB] space-y-3.5 text-center animate-in zoom-in-95 duration-200 shadow-2xl my-auto overflow-y-auto neu-scrollbar-discrete"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto text-xl">
+            <div
+              className="w-11 h-11 rounded-full neu-raised-highlight flex items-center justify-center mx-auto text-lg"
+              style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
+            >
               ⚠️
             </div>
-            <h3 className="font-cormorant text-xl font-bold text-[#23150F]">
+            <h3 id="cancel-modal-title" className="font-lora text-base sm:text-lg font-bold text-[#341512]">
               Cancel Scheduled Consultation?
             </h3>
-            <p className="text-xs text-[#5C4535] leading-relaxed">
+            <p className="font-lora text-xs text-[#5C4535] leading-relaxed">
               Are you sure you want to cancel your session with{' '}
-              <strong>{currentAppointment.lawyerName}</strong> scheduled for{' '}
-              <strong>{currentAppointment.dateStr}</strong>? Notice will be sent to counsel.
+              <strong className="text-[#341512]">{currentAppointment.lawyerName}</strong> scheduled for{' '}
+              <strong className="text-[#341512]">{currentAppointment.dateStr}</strong>? Notice will be transmitted to counsel immediately.
             </p>
             {cancelError && (
-              <p className="text-xs font-semibold text-red-800 bg-red-100 border border-red-300 rounded-xl px-3 py-2">
+              <p className="font-lora text-xs font-semibold text-red-800 bg-red-100 border border-red-300 rounded-xl px-3.5 py-2">
                 {cancelError}
               </p>
             )}
-            <div className="flex items-center justify-center gap-3 pt-3">
+            <div className="flex items-center justify-center gap-3 pt-1.5">
               <button
                 type="button"
                 onClick={() => setShowCancelModal(false)}
                 disabled={isCancelling}
-                className="px-5 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-semibold text-[#5C4535] disabled:opacity-50"
+                className="px-5 py-2 rounded-xl border border-[#341512]/50 bg-[#E5D8CB] font-lora text-xs font-semibold text-[#341512] hover:bg-[#DDCFC0] transition-all disabled:opacity-50 cursor-pointer"
               >
                 Keep Consultation
               </button>
@@ -816,16 +886,17 @@ Reason: ${last.responseReason}` : ''}`,
                 type="button"
                 onClick={handleConfirmCancel}
                 disabled={isCancelling}
-                className="px-5 py-2.5 rounded-xl bg-red-700 text-white text-xs font-semibold shadow-md disabled:opacity-60"
+                className="px-5 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-lora text-xs font-bold shadow-md active:scale-95 transition-all disabled:opacity-60 cursor-pointer"
               >
                 {isCancelling ? 'Cancelling...' : 'Confirm Cancellation'}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* ─── View Details Modal (pending-nvonfirmed / payment / confirmed-and-paid designs) ─── */}
+      {/* ─── View Details Modal (pending / payment / confirmed designs) ─── */}
       {showDetailsModal && currentAppointment && (
         <ConsultationDetailsModal {...buildDetailsProps(currentAppointment)} />
       )}
@@ -855,50 +926,53 @@ Reason: ${last.responseReason}` : ''}`,
           );
         })()}
 
-      {/* ─── Join Meet Preview Modal ────────────────────────────────────────── */}
-      {showMeetModal && currentAppointment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+      {/* ─── Join Meet Preview Modal (Neumorphic Design) ───────────────────── */}
+      {showMeetModal && currentAppointment && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-5 md:p-6 animate-in fade-in overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="meet-modal-title"
+          onClick={() => setShowMeetModal(false)}
+        >
           <div
-            className="w-full max-w-lg rounded-[28px] p-7 bg-[#23150F] text-[#ded7cb] space-y-5"
-            style={{
-              boxShadow: '16px 16px 40px rgba(0,0,0,0.5)',
-            }}
+            className="neu-modal outline-[#D39758] relative w-full max-w-[92vw] sm:max-w-lg max-h-[82vh] sm:max-h-[78vh] flex flex-col rounded-[24px] p-4.5 sm:p-6 bg-[#E5D8CB] text-[#341512] space-y-3.5 animate-in zoom-in-95 duration-200 shadow-2xl my-auto overflow-y-auto neu-scrollbar-discrete"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-[#352219] pb-3">
+            {/* Modal Top Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-[#D1BEA8]/50">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <h3 className="font-cormorant text-xl font-bold text-white">
+                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                <h3 id="meet-modal-title" className="font-lora text-sm sm:text-base font-bold text-[#341512]">
                   Justicia Video Consultation Room
                 </h3>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowMeetModal(false)}
-                className="text-[#A69584] hover:text-white font-bold p-1"
-              >
-                ✕
-              </button>
             </div>
 
-            <div className="aspect-video w-full rounded-2xl bg-[#150B07] border border-[#3E271D] flex flex-col items-center justify-center text-center p-6 space-y-3">
-              <div className="w-16 h-16 rounded-full bg-[#2A1810] border border-[#4A2E25] flex items-center justify-center text-2xl">
+            {/* Inset Video Preview Chamber */}
+            <div className="neu-recessed aspect-video w-full rounded-2xl bg-[#E5D8CB] flex flex-col items-center justify-center text-center p-4 space-y-2">
+              <div className="size-11 rounded-full neu-raised bg-[#E5D8CB] flex items-center justify-center text-lg">
                 📹
               </div>
               <div>
-                <p className="font-medium text-sm text-white">Camera & Microphone Encrypted</p>
-                <p className="text-xs text-[#A69584] mt-0.5">
-                  End-to-end encrypted connection with {currentAppointment.lawyerName}
+                <p className="font-lora font-bold text-xs sm:text-[13px] text-[#341512]">Encrypted Consultation Session</p>
+                <p className="font-lora text-[10.5px] text-[#5C4535] mt-0.5">
+                  Direct connection with {currentAppointment.lawyerName}
                 </p>
               </div>
             </div>
 
+            {/* Bottom Actions */}
             <div className="flex items-center justify-between pt-1">
-              <span className="text-xs text-[#A69584]">Audio / Video: Ready</span>
-              <div className="flex items-center gap-3">
+              <span className="font-lora text-xs text-[#5C4535] flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-600" />
+                Audio &amp; Video: Ready
+              </span>
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => setShowMeetModal(false)}
-                  className="px-4 py-2 rounded-xl border border-[#3E271D] text-xs text-[#A69584] hover:text-white"
+                  className="px-4 py-2 rounded-xl border border-[#341512]/50 bg-[#E5D8CB] font-lora text-xs font-semibold text-[#341512] hover:bg-[#DDCFC0] transition-all cursor-pointer"
                 >
                   Dismiss
                 </button>
@@ -912,14 +986,28 @@ Reason: ${last.responseReason}` : ''}`,
                     }
                     setShowMeetModal(false);
                   }}
-                  className="px-6 py-2.5 rounded-xl bg-[#D49E56] hover:bg-[#C58B3C] text-[#23150F] text-xs font-bold shadow-lg"
+                  className="neu-btn-caramel px-5 py-2 rounded-xl bg-[#D49E56] hover:bg-[#C58B3C] text-[#341512] font-lora text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
                 >
-                  Enter Meeting
+                  <svg
+                    className="w-3.5 h-3.5 text-[#341512]"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="2" y="6" width="13" height="12" rx="2" />
+                    <path d="M15 10l5-3v10l-5-3" />
+                  </svg>
+                  <span>Enter Meeting</span>
                 </button>
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
