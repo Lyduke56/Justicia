@@ -142,7 +142,7 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
         );
       case 'pending':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+          <span className="admin-status admin-status-pending">
             <ClockIcon className="w-3.5 h-3.5" />
             Pending Review
           </span>

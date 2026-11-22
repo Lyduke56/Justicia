@@ -9,6 +9,11 @@ const cardClass = 'admin-surface';
 
 export function AdminSecurityAuditView({ initialLogs = [] }: { initialLogs?: AdminAuditEntry[] }) {
   const [logs, setLogs] = useState(initialLogs);
+  const [previousData, setPreviousData] = useState(initialLogs);
+  if (previousData !== initialLogs) {
+    setPreviousData(initialLogs);
+    setLogs(initialLogs);
+  }
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState(false);

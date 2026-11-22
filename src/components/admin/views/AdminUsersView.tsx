@@ -1,5 +1,7 @@
 'use client';
 
+import { refreshAdminTabs } from '@/lib/live/adminRefresh';
+
 import { useMemo, useState } from 'react';
 import { getAdminUsersData, updateUserRoleAction, sendUserPasswordResetAction } from '@/app/actions/adminData';
 import type { AdminUserAccount } from '@/types/admin';
@@ -10,6 +12,11 @@ const cardClass = 'admin-surface';
 
 export function AdminUsersView({ initialUsers = [], initialRole = 'all', initialSelectedId = null }: { initialUsers?: AdminUserAccount[]; initialRole?: RoleFilter; initialSelectedId?: string | null }) {
   const [users, setUsers] = useState(initialUsers);
+  const [previousData, setPreviousData] = useState(initialUsers);
+  if (previousData !== initialUsers) {
+    setPreviousData(initialUsers);
+    setUsers(initialUsers);
+  }
   const [roleFilter, setRoleFilter] = useState<RoleFilter>(initialRole);
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
@@ -32,7 +39,7 @@ export function AdminUsersView({ initialUsers = [], initialRole = 'all', initial
     try {
       const result = await updateUserRoleAction(selected.id, nextRole);
       if (result.error) setMessage(result.error);
-      else { await refresh(); setMessage('Role updated.'); setNextRole(null); }
+      else { await refresh(); refreshAdminTabs(); setMessage('Role updated.'); setNextRole(null); }
     } catch { setMessage('The role update could not be completed. Please refresh and try again.');
     } finally { setBusy(false); }
   };
@@ -49,10 +56,10 @@ export function AdminUsersView({ initialUsers = [], initialRole = 'all', initial
 
   return <div className="admin-page">
     <h1 className="sr-only">User accounts</h1>
-    <div className="admin-filters">{(['all', 'client', 'lawyer', 'admin'] as const).map((role) => <button key={role} type="button" onClick={() => setRoleFilter(role)} aria-pressed={roleFilter === role} className="admin-filter"><span className="text-xs font-semibold capitalize text-[#705C49]">{role === 'all' ? 'All accounts' : `${role}s`}</span><span className="font-inter text-sm font-semibold">{role === 'all' ? users.length : users.filter((user) => user.role === role).length}</span></button>)}</div>
+    <div className="admin-filters">{(['all', 'client', 'lawyer', 'admin'] as const).map((role) => <button key={role} type="button" onClick={() => setRoleFilter(role)} aria-pressed={roleFilter === role} className="admin-filter"><span className="text-xs font-semibold capitalize text-[#705C49]">{role === 'all' ? 'All accounts' : `${role}s`}</span><span className="admin-count">{role === 'all' ? users.length : users.filter((user) => user.role === role).length}</span></button>)}</div>
     <div className="admin-search"><label htmlFor="admin-user-search" className="sr-only">Search accounts</label><input id="admin-user-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name or email" className="admin-field mt-2 w-full max-w-lg px-4 py-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-[#946525]" /><p className="mt-2 text-xs text-[#7D6855]">Showing {filtered.length} of {users.length} loaded accounts</p></div>
     <section className={`${cardClass} overflow-hidden`} aria-label="User accounts"><div className="overflow-x-auto"><table className="admin-table w-full min-w-[600px] text-left text-sm"><thead className="border-b border-[#D8CAAD] bg-[#E5D7C5] text-xs text-[#5C4535]"><tr><th className="px-5 py-4 font-semibold">Account</th><th className="px-5 py-4 font-semibold">Role</th><th className="px-5 py-4 font-semibold">Joined</th><th className="px-5 py-4 font-semibold"><span className="sr-only">Actions</span></th></tr></thead><tbody className="divide-y divide-[#E8DCCB]">
-      {filtered.map((user) => <tr key={user.id} className="hover:bg-[#F5EDE2]"><td className="px-5 py-4"><span className="block font-semibold">{user.fullName}</span><span className="text-xs text-[#7D6855]">{user.email}</span></td><td className="px-5 py-4 capitalize">{user.role}</td><td className="px-5 py-4 text-xs text-[#705C49]">{new Date(user.createdAt).toLocaleDateString('en-PH')}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => { setSelectedId(user.id); setNextRole(user.role); setMessage(null); }} className="admin-control px-2 py-1 text-xs font-semibold text-[#946525] hover:text-[#6B4517] focus-visible:outline-2 focus-visible:outline-[#946525]">Manage</button></td></tr>)}
+      {filtered.map((user) => <tr key={user.id} className="hover:bg-[#F5EDE2]"><td className="px-5 py-4"><span className="block font-semibold">{user.fullName}</span><span className="text-xs text-[#7D6855]">{user.email}</span></td><td className="px-5 py-4"><span className="admin-status admin-status-neutral capitalize">{user.role}</span></td><td className="px-5 py-4 text-xs text-[#705C49]">{new Date(user.createdAt).toLocaleDateString('en-PH')}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => { setSelectedId(user.id); setNextRole(user.role); setMessage(null); }} className="admin-control px-2 py-1 text-xs font-semibold text-[#946525] hover:text-[#6B4517] focus-visible:outline-2 focus-visible:outline-[#946525]">Manage</button></td></tr>)}
       {!filtered.length && <tr><td colSpan={4} className="px-5 py-12 text-center text-sm text-[#7D6855]">{users.length ? 'No accounts match your search.' : 'No accounts are available.'}</td></tr>}
     </tbody></table></div></section>
     {selected && <div className="fixed inset-0 z-50 flex justify-end"><button type="button" aria-label="Close account details" onClick={() => setSelectedId(null)} className="absolute inset-0 w-full bg-black/55" /><aside role="dialog" aria-modal="true" aria-labelledby="admin-account-title" className="admin-drawer relative z-10 flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[#D8CAAD] bg-[#EFE5D8] p-6 shadow-2xl sm:p-8"><div className="flex items-start justify-between gap-3 border-b border-[#D8CAAD] pb-5"><div><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E5D7C5] text-[#946525]"><UserGroupIcon className="h-5 w-5" /></span><h2 id="admin-account-title" className="mt-3 font-lora text-lg font-semibold">{selected.fullName}</h2><p className="text-sm text-[#705C49]">{selected.email}</p></div><button type="button" onClick={() => setSelectedId(null)} aria-label="Close account details" className="admin-control p-2 focus-visible:outline-2 focus-visible:outline-[#946525]">×</button></div>
