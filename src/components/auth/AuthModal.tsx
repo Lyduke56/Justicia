@@ -1,7 +1,8 @@
 'use client';
 
+import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import React, { useEffect, useRef, useState } from 'react';
-import { ScalesLogo } from '@/components/landing/LawIcons';
+
 import { SignInForm } from './SignInForm';
 import { SignUpForm } from './SignUpForm';
 import { ForgotPasswordForm } from './ForgotPasswordForm';
@@ -94,10 +95,7 @@ export function AuthModal({
           {/* Header */}
           <div className="text-center mb-6">
             <div className="flex items-center justify-center gap-2 mb-3">
-              <ScalesLogo className="w-6 h-6 text-[#c59341]" />
-              <span className="font-cinzel font-bold tracking-[0.25em] text-[#e6ded2] text-base">
-                JUSTICIA
-              </span>
+              <JusticiaLogo className="w-44 h-auto text-[#C59341]" />
             </div>
             <h2 className="font-cinzel text-xl font-bold text-[#ded7cb] tracking-wide">
               {mode === 'signin' && 'Welcome Back'}

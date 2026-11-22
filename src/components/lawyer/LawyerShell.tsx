@@ -1,5 +1,6 @@
 'use client';
 
+import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { signOutAction } from '@/app/actions/auth';
@@ -207,7 +208,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
             onClick={navigateToDashboard}
             className="font-cinzel text-sm sm:text-base tracking-[0.2em] text-[#ded7cb] hover:text-[#C58B3C] transition-colors"
           >
-            [LOGO HERE]
+            <JusticiaLogo />
           </button>
         </div>
 
@@ -444,9 +445,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
             <div className="relative w-72 max-w-[80vw] bg-[#dbc8b8] h-full shadow-2xl p-5 flex flex-col justify-between z-10">
               <div className="space-y-6">
                 <div className="flex items-center justify-between pb-3 border-b border-[#D1BEA8]">
-                  <span className="font-cinzel text-sm font-semibold tracking-wider text-[#34150F]">
-                    JUSTICIA LAWYER
-                  </span>
+                  <span className="flex items-center gap-2"><JusticiaLogo className="w-28 h-auto" /> LAWYER</span>
                   <button
                     type="button"
                     onClick={() => setMobileMenuOpen(false)}

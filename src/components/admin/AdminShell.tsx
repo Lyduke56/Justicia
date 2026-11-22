@@ -1,5 +1,6 @@
 'use client';
 
+import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import './admin.css';
@@ -63,7 +64,7 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
         <button type="button" aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileOpen} aria-haspopup="dialog" onClick={() => setMobileOpen((open) => !open)} className="rounded-lg p-2 hover:text-[#C58B3C] focus-visible:outline-2 focus-visible:outline-[#C58B3C] md:hidden">
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={mobileOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'} /></svg>
         </button>
-        <Link href="/admin/dashboard" className="truncate rounded-sm font-cinzel text-sm tracking-[0.16em] hover:text-[#C58B3C] focus-visible:outline-2 focus-visible:outline-[#C58B3C] sm:text-base">JUSTICIA <span className="text-[#C58B3C]">ADMIN</span></Link>
+        <Link href="/admin/dashboard" className="truncate rounded-sm font-cinzel text-sm tracking-[0.16em] hover:text-[#C58B3C] focus-visible:outline-2 focus-visible:outline-[#C58B3C] sm:text-base"><JusticiaLogo className="inline-block w-32 h-auto align-middle" /> <span className="text-[#C58B3C]">ADMIN</span></Link>
       </div>
       <div className="relative">
         <button type="button" aria-label="Account menu" aria-expanded={accountOpen} aria-controls="admin-account-menu" onClick={() => setAccountOpen((open) => !open)} className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-[#352219] focus-visible:outline-2 focus-visible:outline-[#C58B3C]">
@@ -88,7 +89,7 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
       {mobileOpen && <div id="admin-mobile-navigation" className="fixed inset-0 z-50 md:hidden">
         <button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="absolute inset-0 w-full bg-black/55" />
         <aside aria-label="Mobile admin navigation" className="relative flex h-full w-72 max-w-[85vw] flex-col justify-between overflow-y-auto border-r border-[#D1BEA8] bg-[#DECEB8] p-5 shadow-2xl">
-          <div><div className="mb-5 flex items-center justify-between border-b border-[#C8B59E] pb-4"><span className="font-cinzel text-sm font-semibold tracking-wider">JUSTICIA ADMIN</span><button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="rounded-lg p-2 focus-visible:outline-2 focus-visible:outline-[#9A6A27]">×</button></div><nav aria-label="Main navigation" className="space-y-2">{links(true)}</nav></div>
+          <div><div className="mb-5 flex items-center justify-between border-b border-[#C8B59E] pb-4"><span className="flex items-center gap-2"><JusticiaLogo className="w-28 h-auto" /> ADMIN</span><button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="rounded-lg p-2 focus-visible:outline-2 focus-visible:outline-[#9A6A27]">×</button></div><nav aria-label="Main navigation" className="space-y-2">{links(true)}</nav></div>
           <div className="space-y-2 border-t border-[#C8B59E] pt-4"><Link href="/admin/settings" onClick={() => setMobileOpen(false)} aria-current={settingsActive ? 'page' : undefined} className={navClass(settingsActive)}><GearIcon className="h-5 w-5 text-[#5C4535]" />Settings</Link><form action={signOutAction}><button type="submit" className={`${navClass(false)} text-left`}><LogoutIcon className="h-5 w-5 text-[#5C4535]" />Sign out</button></form></div>
         </aside>
       </div>}

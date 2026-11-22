@@ -1,6 +1,7 @@
+import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import type { Metadata } from 'next';
 import { ForgotPasswordForm } from '@/components/auth/ForgotPasswordForm';
-import { ScalesLogo } from '@/components/landing/LawIcons';
+
 import Link from 'next/link';
 
 export const metadata: Metadata = { title: 'Reset Password' };
@@ -15,10 +16,7 @@ export default function ForgotPasswordPage() {
         {/* Logo header */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center justify-center gap-2 mb-4 group">
-            <ScalesLogo className="w-7 h-7 text-[#c59341] group-hover:text-[#d6a54f] transition-colors" />
-            <span className="font-cinzel font-bold tracking-[0.3em] text-[#e6ded2] text-lg group-hover:text-white transition-colors">
-              JUSTICIA
-            </span>
+            <JusticiaLogo className="w-44 h-auto text-[#C59341]" />
           </Link>
 
           <h1 className="font-cinzel text-2xl font-bold text-[#ded7cb] tracking-wide">

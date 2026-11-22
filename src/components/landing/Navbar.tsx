@@ -1,5 +1,6 @@
 'use client';
 
+import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'motion/react';
@@ -60,8 +61,7 @@ export function Navbar({ onOpenSignIn }: NavbarProps) {
             href="/"
             className="group flex items-center gap-2.5 font-lora text-sm sm:text-base tracking-[0.2em] text-[#ded7cb] hover:text-[#f3ece0] transition-colors duration-250"
           >
-            <span className="w-2 h-2 rounded-full bg-[#c5944e] group-hover:scale-125 group-hover:shadow-[0_0_8px_rgba(197,148,78,0.8)] transition-all duration-300" />
-            <span className="font-bold tracking-[0.22em]">JUSTICIA</span>
+            <JusticiaLogo className="w-32 sm:w-36 h-auto text-[#C59341]" />
           </Link>
         </div>
 
