@@ -1,9 +1,15 @@
 import type { Metadata } from 'next';
-import { AdminFeatureStatus } from '@/components/admin/AdminFeatureStatus';
-import { DocumentTextIcon } from '@/components/admin/AdminIcons';
+import { connection } from 'next/server';
+import { getAdminReportsData } from '@/app/actions/reportActions';
+import { AdminReportsView } from '@/components/admin/views/AdminReportsView';
 
-export const metadata: Metadata = { title: 'Reports | Justicia Admin' };
+export const metadata: Metadata = {
+  title: 'Reports | Justicia Admin',
+  description: 'Review reported clients and lawyers, their evidence, and decide on suspensions or terminations.',
+};
 
-export default function AdminReportsPage() {
-  return <AdminFeatureStatus eyebrow="Administration" title="Reports" description="Report review is not connected to the admin portal yet." icon={<DocumentTextIcon className="h-6 w-6" />} items={['List reports submitted by users.', 'Review the reported content and associated account.', 'Record a resolution and notify the reporter.']} />;
+export default async function AdminReportsPage() {
+  await connection();
+  const reports = await getAdminReportsData();
+  return <AdminReportsView initialReports={reports} />;
 }

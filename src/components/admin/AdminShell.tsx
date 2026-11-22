@@ -9,13 +9,14 @@ import './admin.css';
 import { usePathname } from 'next/navigation';
 import { signOutAction } from '@/app/actions/auth';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
-import { HomeIcon, UserCircleIcon, GearIcon, ShieldCheckIcon, ScaleIcon, UserGroupIcon, DocumentTextIcon, LogoutIcon } from './AdminIcons';
+import { HomeIcon, UserCircleIcon, GearIcon, ShieldCheckIcon, ScaleIcon, UserGroupIcon, DocumentTextIcon, LogoutIcon, FlagIcon } from './AdminIcons';
 
 const navigation = [
   { name: 'Overview', href: '/admin/dashboard', icon: HomeIcon, active: (path: string) => path === '/admin/dashboard' },
   { name: 'Verification queue', href: '/admin/lawyers/verification-queue', icon: ShieldCheckIcon, active: (path: string) => path.startsWith('/admin/lawyers/verification-queue') },
   { name: 'Lawyer directory', href: '/admin/lawyers', icon: ScaleIcon, active: (path: string) => path === '/admin/lawyers' || (path.startsWith('/admin/lawyers/') && !path.startsWith('/admin/lawyers/verification-queue')) },
   { name: 'User accounts', href: '/admin/users', icon: UserGroupIcon, active: (path: string) => path.startsWith('/admin/users') },
+  { name: 'Reports', href: '/admin/reports', icon: FlagIcon, active: (path: string) => path.startsWith('/admin/reports') },
   { name: 'Audit log', href: '/admin/settings/security-audit-log', icon: DocumentTextIcon, active: (path: string) => path.startsWith('/admin/settings/security-audit-log') },
 ];
 
@@ -80,7 +81,8 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
         </button>
         {accountOpen && <div id="admin-account-menu" className="admin-account-menu absolute right-0 top-full z-50 mt-3 w-60 max-w-[calc(100vw-32px)] p-3 text-xs">
           <div className="border-b border-[#CBB6A1] px-3 py-2"><p className="truncate font-semibold">{user.fullName}</p><p className="truncate text-[#A69584]">{user.email}</p></div>
-          <Link href="/admin/settings" onNavigate={(event) => navigateTab(event, "/admin/settings")} onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><GearIcon className="h-4 w-4 text-[#C58B3C]" />Settings</Link>
+          <Link href="/admin/profile" onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><UserCircleIcon className="h-4 w-4 text-[#C58B3C]" />My profile</Link>
+          <Link href="/admin/settings" onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><GearIcon className="h-4 w-4 text-[#C58B3C]" />Settings</Link>
           <form action={signOutAction} className="border-t border-[#CBB6A1] pt-1"><button type="submit" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><LogoutIcon className="h-4 w-4 text-[#C58B3C]" />Sign out</button></form>
         </div>}
       </div>

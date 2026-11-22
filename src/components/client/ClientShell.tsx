@@ -101,7 +101,7 @@ export function ClientShell({ user, children }: ClientShellProps) {
     () =>
       fetchLive('notifications', { role: 'client' })
         .then((data) => {
-          if (data && data.length > 0) setLiveNotifs(data);
+          if (data) setLiveNotifs(data);
         })
         .catch(() => {}),
     []

@@ -1,11 +1,15 @@
 import Link from 'next/link';
 import { UserGroupIcon, DocumentTextIcon, GearIcon } from '@/components/admin/AdminIcons';
+import { getPersonalAccountAction } from '@/app/actions/accountActions';
+import { AccountSettings } from '@/components/account/AccountSettings';
 
 const cardClass = 'admin-surface p-6';
 
-export function AdminSettingsView() {
+export async function AdminSettingsView() {
+  const account = await getPersonalAccountAction();
   return <div className="admin-page">
     <h1 className="sr-only">Settings</h1>
+    {account.success ? <AccountSettings account={account.account} /> : <p role="alert" className="text-sm text-red-700">{account.error}</p>}
 
     <div className="grid gap-6 md:grid-cols-2">
       <section className={cardClass} aria-labelledby="account-tools-heading">

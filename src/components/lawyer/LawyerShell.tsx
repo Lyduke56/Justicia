@@ -110,7 +110,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
     () =>
       fetchLive('notifications', { role: 'lawyer' })
         .then((data) => {
-          if (data && data.length > 0) setLiveLawyerNotifs(data);
+          if (data) setLiveLawyerNotifs(data);
         })
         .catch(() => {}),
     []

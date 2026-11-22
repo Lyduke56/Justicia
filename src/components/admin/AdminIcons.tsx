@@ -98,6 +98,15 @@ export function DocumentTextIcon({ className = 'w-5 h-5' }: { className?: string
   );
 }
 
+export function FlagIcon({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 22V4" />
+      <path d="M4 4h12l-2 4 2 4H4" />
+    </svg>
+  );
+}
+
 export function LogoutIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={className}>

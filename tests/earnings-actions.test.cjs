@@ -93,7 +93,13 @@ function makeDb(state) {
       neq(k, v) { filters.push((r) => r[k] !== v); return q; },
       in(k, vs) { filters.push((r) => vs.includes(r[k])); return q; },
       is(k, v) { filters.push((r) => (r[k] ?? null) === v); return q; },
-      not(k, o, v) { filters.push((r) => (o === 'is' ? (r[k] ?? null) !== v : r[k] !== v)); return q; },
+      not(k, o, v) {
+        if (o === 'like') {
+          const pattern = new RegExp('^' + v.replace(/%/g, '.*').replace(/_/g, '.') + '$');
+          filters.push((r) => !pattern.test(r[k]));
+        } else filters.push((r) => (o === 'is' ? (r[k] ?? null) !== v : r[k] !== v));
+        return q;
+      },
       gte(k, v) { filters.push((r) => r[k] >= v); return q; },
       lte(k, v) { filters.push((r) => r[k] <= v); return q; },
       gt(k, v) { filters.push((r) => r[k] > v); return q; },
@@ -189,9 +195,11 @@ function makeClock(iso) {
   return clock;
 }
 
-const compiled = ts.transpileModule(fs.readFileSync('src/app/actions/consultationActions.ts', 'utf8'), {
+const compile = (file) => ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText;
+const compiled = compile('src/app/actions/consultationActions.ts');
+const compiledAccountStatus = compile('src/lib/moderation/accountStatus.ts');
 
 let seq = 0;
 const uuid = (prefix = '33333333') => `${prefix}-${String(++seq).padStart(4, '0')}-4333-8333-${String(seq).padStart(12, '0')}`;
@@ -200,6 +208,7 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
   const clock = makeClock(now);
   const state = {
     userId: null,
+    userMetadata: {},
     log: [],
     signals: [],
     logs: [],
@@ -229,6 +238,36 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
   const db = makeDb(state);
   const exports = {};
   const sink = (level) => (...args) => state.logs.push({ level, text: args.map(String).join(' ') });
+  const sandboxRequire = (name) => {
+    if (name === '@/lib/account/preferences') {
+      const mod = {};
+      const source = ts.transpileModule(fs.readFileSync('src/lib/account/preferences.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+      vm.runInNewContext(source, { exports: mod });
+      return mod;
+    }
+    if (name === 'crypto') return crypto;
+    if (name === 'next/cache') return { revalidatePath() {} };
+    if (name === 'next/server') return { after: (fn) => fn() };
+    if (name === '@/lib/realtime/live') {
+      return { emitLive: async (userIds, scopes) => { state.signals.push({ userIds: [...userIds], scopes: [...scopes] }); } };
+    }
+    if (name === '@/lib/integrations/email') return { sendEmail: async () => ({ sent: false }) };
+    if (name === '@/lib/moderation/accountStatus') {
+      // The real module (account standing checks), sharing this fixture's database double.
+      const mod = {};
+      vm.runInNewContext(compiledAccountStatus, { exports: mod, Date: clock.Date, console: { error() {}, warn() {}, log() {} }, require: sandboxRequire });
+      return mod;
+    }
+    if (name === '@/lib/supabase/server') {
+      return {
+        createServiceClient: async () => db,
+        createClient: async () => ({
+          auth: { getUser: async () => ({ data: { user: state.userId ? { id: state.userId, email: 'x@test.ph', user_metadata: state.userMetadata } : null } }) },
+        }),
+      };
+    }
+    throw new Error(`unexpected import ${name}`);
+  };
   vm.runInNewContext(compiled, {
     exports,
     Date: clock.Date,
@@ -238,23 +277,7 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
     URL,
     setTimeout,
     console: { error: sink('error'), warn: sink('warn'), log() {} },
-    require(name) {
-      if (name === 'crypto') return crypto;
-      if (name === 'next/cache') return { revalidatePath() {} };
-      if (name === 'next/server') return { after: (fn) => fn() };
-      if (name === '@/lib/realtime/live') {
-        return { emitLive: async (userIds, scopes) => { state.signals.push({ userIds: [...userIds], scopes: [...scopes] }); } };
-      }
-      if (name === '@/lib/supabase/server') {
-        return {
-          createServiceClient: async () => db,
-          createClient: async () => ({
-            auth: { getUser: async () => ({ data: { user: state.userId ? { id: state.userId, email: 'x@test.ph', user_metadata: {} } : null } }) },
-          }),
-        };
-      }
-      throw new Error(`unexpected import ${name}`);
-    },
+    require: sandboxRequire,
   });
 
   const as = (userId) => { state.userId = userId; return exports; };
@@ -311,6 +334,26 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
 }
 
 const NOV_25_10AM = '2026-11-25T10:00:00+08:00';
+
+test('notification preference filters consultation alerts before pagination while preserving security and message notices', async () => {
+  const f = fixture();
+  const notices = f.state.tables.notifications;
+  notices.push({ id: 'security', user_id: CLIENT, type: 'account_suspended', created_at: '2026-11-01' });
+  notices.push({ id: 'message', user_id: CLIENT, type: 'new_message', created_at: '2026-11-01' });
+  notices.push({ id: 'other-user', user_id: CLIENT_2, type: 'new_message', created_at: '2026-11-20' });
+  for (let i = 0; i < 20; i++) notices.push({ id: `consultation-${i}`, user_id: CLIENT, type: 'consultation_approved', created_at: '2026-11-20' });
+  notices.push({ id: 'payment', user_id: CLIENT, type: 'payment_confirmed', created_at: '2026-11-20' });
+  notices.push({ id: 'meeting', user_id: CLIENT, type: 'meeting_starting', created_at: '2026-11-20' });
+  f.state.userMetadata = { justicia_preferences: { consultationNotifications: false } };
+  const hidden = await f.as(CLIENT).getUserNotificationsAction();
+  assert.deepEqual(Array.from(hidden, n => n.id).sort(), ['message', 'security']);
+  assert.equal(notices.length, 25, 'history is retained');
+  f.state.userMetadata = { justicia_preferences: { consultationNotifications: true } };
+  const visible = await f.as(CLIENT).getUserNotificationsAction();
+  assert.equal(visible.length, 15);
+  assert.ok(visible.some(n => n.type === 'consultation_approved'));
+  assert.ok(visible.every(n => n.user_id === CLIENT));
+});
 
 // ═══ 1. Recording the sale through the real payment flow ════════════════════
 
