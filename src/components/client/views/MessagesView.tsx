@@ -8,6 +8,7 @@ import { fetchLive } from '@/lib/live/fetchLive';
 import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
 import { addLawyerReviewAction } from '@/app/actions/reviewActions';
 import { ReportAccountModal } from '@/components/shared/ReportAccountModal';
+import { ConsultationRatingDialog } from '@/components/client/ConsultationRatingDialog';
 
 interface MessageItem {
   id: string;
@@ -564,7 +565,6 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                             </p>
                           </div>
                         </div>
-                        {!ratingOpen && (
                           <div className="flex items-center gap-2 shrink-0">
                             <button
                               type="button"
@@ -581,10 +581,11 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                               Rate Lawyer
                             </button>
                           </div>
-                        )}
                       </div>
 
                       {ratingOpen && (
+                        <ConsultationRatingDialog lawyerName={ratePrompt.lawyerName} busy={ratingBusy}
+                          onClose={() => { setRatingOpen(false); setRatingError(null); }}>
                         <form onSubmit={submitRating} className="space-y-2.5">
                           <div className="flex items-center gap-1" role="radiogroup" aria-label="Star rating">
                             {[1, 2, 3, 4, 5].map((s) => (
@@ -609,6 +610,7 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                             ))}
                           </div>
                           <textarea
+                            aria-label="Consultation feedback"
                             value={ratingComment}
                             onChange={(e) => setRatingComment(e.target.value)}
                             maxLength={5000}
@@ -638,6 +640,7 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                             </button>
                           </div>
                         </form>
+                        </ConsultationRatingDialog>
                       )}
                     </div>
                   ) : null}
