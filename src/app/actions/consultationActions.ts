@@ -7,6 +7,7 @@ import { emitLive, type LiveScope } from '@/lib/realtime/live';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { checkAccountAccess } from '@/lib/moderation/accountStatus';
+import { accountPreferences } from '@/lib/account/preferences';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -2559,12 +2560,20 @@ export async function getUserNotificationsAction(
     const { db, user } = session;
 
     // Surface "consultation starting soon" alerts on the bell (15 minutes before a confirmed meeting).
-    await ensureMeetingNotifications(db, user.id);
+    const { consultationNotifications } = accountPreferences(user.user_metadata);
+    if (consultationNotifications) await ensureMeetingNotifications(db, user.id);
 
-    const { data, error } = await db
+    let notificationQuery = db
       .from('notifications')
       .select('id, type, title, body, created_at, is_read, metadata')
-      .eq('user_id', user.id)
+      .eq('user_id', user.id);
+    // Keep history intact, but respect the user's bell preference before pagination.
+    // Security, moderation and direct-message notifications are never filtered out.
+    if (!consultationNotifications) {
+      notificationQuery = notificationQuery.not('type', 'like', 'consultation_%')
+        .not('type', 'like', 'payment_%').neq('type', 'meeting_starting');
+    }
+    const { data, error } = await notificationQuery
       .order('created_at', { ascending: false })
       .limit(15);
     if (error) {

@@ -93,7 +93,13 @@ function makeDb(state) {
       neq(k, v) { filters.push((r) => r[k] !== v); return q; },
       in(k, vs) { filters.push((r) => vs.includes(r[k])); return q; },
       is(k, v) { filters.push((r) => (r[k] ?? null) === v); return q; },
-      not(k, o, v) { filters.push((r) => (o === 'is' ? (r[k] ?? null) !== v : r[k] !== v)); return q; },
+      not(k, o, v) {
+        if (o === 'like') {
+          const pattern = new RegExp('^' + v.replace(/%/g, '.*').replace(/_/g, '.') + '$');
+          filters.push((r) => !pattern.test(r[k]));
+        } else filters.push((r) => (o === 'is' ? (r[k] ?? null) !== v : r[k] !== v));
+        return q;
+      },
       gte(k, v) { filters.push((r) => r[k] >= v); return q; },
       lte(k, v) { filters.push((r) => r[k] <= v); return q; },
       gt(k, v) { filters.push((r) => r[k] > v); return q; },
@@ -202,6 +208,7 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
   const clock = makeClock(now);
   const state = {
     userId: null,
+    userMetadata: {},
     log: [],
     signals: [],
     logs: [],
@@ -232,6 +239,12 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
   const exports = {};
   const sink = (level) => (...args) => state.logs.push({ level, text: args.map(String).join(' ') });
   const sandboxRequire = (name) => {
+    if (name === '@/lib/account/preferences') {
+      const mod = {};
+      const source = ts.transpileModule(fs.readFileSync('src/lib/account/preferences.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+      vm.runInNewContext(source, { exports: mod });
+      return mod;
+    }
     if (name === 'crypto') return crypto;
     if (name === 'next/cache') return { revalidatePath() {} };
     if (name === 'next/server') return { after: (fn) => fn() };
@@ -249,7 +262,7 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
       return {
         createServiceClient: async () => db,
         createClient: async () => ({
-          auth: { getUser: async () => ({ data: { user: state.userId ? { id: state.userId, email: 'x@test.ph', user_metadata: {} } : null } }) },
+          auth: { getUser: async () => ({ data: { user: state.userId ? { id: state.userId, email: 'x@test.ph', user_metadata: state.userMetadata } : null } }) },
         }),
       };
     }
@@ -321,6 +334,26 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
 }
 
 const NOV_25_10AM = '2026-11-25T10:00:00+08:00';
+
+test('notification preference filters consultation alerts before pagination while preserving security and message notices', async () => {
+  const f = fixture();
+  const notices = f.state.tables.notifications;
+  notices.push({ id: 'security', user_id: CLIENT, type: 'account_suspended', created_at: '2026-11-01' });
+  notices.push({ id: 'message', user_id: CLIENT, type: 'new_message', created_at: '2026-11-01' });
+  notices.push({ id: 'other-user', user_id: CLIENT_2, type: 'new_message', created_at: '2026-11-20' });
+  for (let i = 0; i < 20; i++) notices.push({ id: `consultation-${i}`, user_id: CLIENT, type: 'consultation_approved', created_at: '2026-11-20' });
+  notices.push({ id: 'payment', user_id: CLIENT, type: 'payment_confirmed', created_at: '2026-11-20' });
+  notices.push({ id: 'meeting', user_id: CLIENT, type: 'meeting_starting', created_at: '2026-11-20' });
+  f.state.userMetadata = { justicia_preferences: { consultationNotifications: false } };
+  const hidden = await f.as(CLIENT).getUserNotificationsAction();
+  assert.deepEqual(Array.from(hidden, n => n.id).sort(), ['message', 'security']);
+  assert.equal(notices.length, 25, 'history is retained');
+  f.state.userMetadata = { justicia_preferences: { consultationNotifications: true } };
+  const visible = await f.as(CLIENT).getUserNotificationsAction();
+  assert.equal(visible.length, 15);
+  assert.ok(visible.some(n => n.type === 'consultation_approved'));
+  assert.ok(visible.every(n => n.user_id === CLIENT));
+});
 
 // ═══ 1. Recording the sale through the real payment flow ════════════════════
 
