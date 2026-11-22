@@ -47,6 +47,9 @@ export function fetchLive<K extends keyof LiveResources>(
   })
     .then(async (res) => {
       const body = (await res.json().catch(() => null)) as { data?: unknown; error?: string } | null;
+      if (res.status === 401 || body?.error === 'Unauthorized') {
+        return null as unknown as LiveResources[K];
+      }
       if (!res.ok || !body || !('data' in body)) {
         throw new Error(body?.error || `Request failed (${res.status})`);
       }

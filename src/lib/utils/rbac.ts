@@ -35,7 +35,7 @@ export const ROLE_ROUTE_PREFIXES: Record<UserRole, string[]> = {
   // '/api/live' = read-only tab loaders (each loader checks the session user itself).
   client: ['/client', '/ai-assistant', '/legal-research', '/consultations', '/cases', '/documents', '/messages', '/profile', '/settings', '/api/live'],
   lawyer: ['/lawyer', '/api/live'],
-  admin: ['/admin'],
+  admin: ['/admin', '/api/admin'],
 };
 
 /**
@@ -59,7 +59,7 @@ export function getDashboardForRole(role: UserRole): string {
  */
 export function isAuthorizedForRoute(role: UserRole, pathname: string): boolean {
   const allowedPrefixes = ROLE_ROUTE_PREFIXES[role] ?? [];
-  return allowedPrefixes.some((prefix) => pathname.startsWith(prefix));
+  return allowedPrefixes.some((prefix) => (pathname === prefix || pathname.startsWith(prefix + '/')));
 }
 
 /**

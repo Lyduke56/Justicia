@@ -26,7 +26,7 @@ import { DocumentsView } from '@/components/documents/DocumentsView';
 import { MessagesView } from '@/components/client/views/MessagesView';
 import { KeepAliveViews } from '@/components/live/KeepAliveViews';
 import { useLiveRefresh } from '@/components/live/LiveProvider';
-import { fetchLive } from '@/lib/live/fetchLive';
+import { fetchLive, type LiveResources } from '@/lib/live/fetchLive';
 
 export type LawyerViewKey =
   | 'dashboard'
@@ -104,7 +104,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [liveLawyerNotifs, setLiveLawyerNotifs] = useState<any[]>([]);
+  const [liveLawyerNotifs, setLiveLawyerNotifs] = useState<LiveResources['notifications']>([]);
 
   const loadNotifications = useCallback(
     () =>

@@ -4,7 +4,7 @@ import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { KeepAliveViews } from '@/components/live/KeepAliveViews';
 import { useLiveRefresh } from '@/components/live/LiveProvider';
-import { fetchLive } from '@/lib/live/fetchLive';
+import { fetchLive, type LiveResources } from '@/lib/live/fetchLive';
 import { useRouter, usePathname } from 'next/navigation';
 import { signOutAction } from '@/app/actions/auth';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
@@ -25,7 +25,6 @@ import {
 import { DashboardView } from './views/DashboardView';
 import { FindLawyerView } from './views/FindLawyerView';
 import { MessagesView } from './views/MessagesView';
-import { CasesView } from './views/CasesView';
 import { DocumentsView } from '@/components/documents/DocumentsView';
 import { ConsultationsView } from './views/ConsultationsView';
 import { AIAssistantChat } from './AIAssistantChat';
@@ -96,7 +95,7 @@ export function ClientShell({ user, children }: ClientShellProps) {
   const [mobileMenuOpen,    setMobileMenuOpen]    = useState(false);
   const [userDropdownOpen,  setUserDropdownOpen]  = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [liveNotifs, setLiveNotifs] = useState<any[]>([]);
+  const [liveNotifs, setLiveNotifs] = useState<LiveResources['notifications']>([]);
 
   const loadNotifications = useCallback(
     () =>
