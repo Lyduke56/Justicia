@@ -1,5 +1,7 @@
 'use client';
 
+import { refreshAdminTabs } from '@/lib/live/adminRefresh';
+
 import React, { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { reviewLawyerApplicationAction, type ReviewDecision } from '@/app/actions/adminLawyerReview';
@@ -34,6 +36,7 @@ export function AdminLawyerReviewPanel({
         setFeedback({ type: 'error', text: res.error });
       } else {
         setFeedback({ type: 'success', text: res.message || 'Decision applied successfully.' });
+        refreshAdminTabs();
         router.refresh();
       }
     });

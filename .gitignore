@@ -43,4 +43,5 @@ next-env.d.ts
 
 # local
 .skills
-.agents
+.agents
+/docs/

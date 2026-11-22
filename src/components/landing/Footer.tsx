@@ -1,9 +1,10 @@
 'use client';
 
+import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import React from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
-import { ScalesLogo } from './LawIcons';
+
 
 export function Footer() {
   return (
@@ -17,16 +18,9 @@ export function Footer() {
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
         {/* Brand & Motto */}
         <div className="flex items-center gap-3">
-          <motion.div
-            whileHover={{ rotate: [-4, 4, 0] }}
-            transition={{ duration: 0.5 }}
-          >
-            <ScalesLogo className="w-5 h-5 text-[#c5944e]" />
-          </motion.div>
+
           <div className="flex flex-col">
-            <span className="font-cinzel font-bold text-sm tracking-[0.2em] text-[#ded7cb]">
-              JUSTICIA
-            </span>
+            <JusticiaLogo className="h-9 w-auto text-[#C59341]" />
             <span className="font-cinzel text-[10px] tracking-widest text-[#8c8072]">
               NEMO EST SUPRA LEGES
             </span>

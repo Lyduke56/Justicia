@@ -1,0 +1,31 @@
+import type { SVGProps } from 'react';
+
+type LogoProps = SVGProps<SVGSVGElement> & { markOnly?: boolean };
+
+/** Outlined serif lettering: stable proportions without a font-loading dependency. */
+export function JusticiaLogo({ className = 'h-9 w-auto', markOnly = false, ...props }: LogoProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox={markOnly ? '96 6 48 64' : '0 0 240 72'}
+      width={markOnly ? 48 : 240} height={markOnly ? 64 : 72}
+      fill="currentColor" role="img" aria-label="Justicia" focusable="false" className={className} {...props}>
+      {!markOnly && <g>
+        {/* J, u, s */}
+        <path d="M15 13h26v2l-8 1v34c0 13-6 19-16 19C8 69 3 64 3 59c0-3 2-5 5-5s5 2 5 5c0 2-1 3-2 4 1 2 3 3 6 3 6 0 8-5 8-14V16l-10-1z" />
+        <path d="M43 29l13-2v26c0 6 2 9 6 9 4 0 7-3 10-6V31l-6-1v-2l14-1v34l6 1v2l-14 2v-7c-4 5-8 7-13 7-8 0-11-5-11-13V32l-5-1z" />
+        <path d="M109 29v10h-2c-2-7-5-10-10-10-4 0-7 2-7 6 0 4 4 6 10 9 8 4 12 7 12 12 0 7-6 11-14 11-5 0-10-2-13-4V52h2c2 8 6 12 12 12 5 0 8-3 8-6 0-4-4-6-10-9-8-4-12-7-12-13 0-6 5-10 13-10 4 0 8 1 11 3z" transform="translate(-2 0) scale(.94 1)" />
+        {/* i, c, i, a; both i dots are preserved. */}
+        <path d="M146 17a4 4 0 1 0 8 0 4 4 0 1 0-8 0M143 30l13-3v35l5 1v2h-19v-2l6-1V33l-5-1z" />
+        <path d="M188 31c-2-3-6-5-10-5-11 0-18 9-18 21 0 12 7 20 17 20 6 0 11-3 14-9l-2-1c-3 4-6 6-10 6-7 0-11-7-11-17 0-11 4-17 10-17 2 0 4 1 4 3-1 1-2 2-2 4 0 3 2 4 4 4 3 0 5-2 5-5 0-2 0-3-1-4z" />
+        <path d="M196 17a4 4 0 1 0 8 0 4 4 0 1 0-8 0M193 30l13-3v35l5 1v2h-19v-2l6-1V33l-5-1z" />
+        <path fillRule="evenodd" d="M214 34c0-5 6-8 12-8 9 0 13 4 13 12v22c0 3 1 4 3 3v2c-6 3-10 1-10-4-3 4-7 6-12 6-6 0-10-4-10-10 0-8 8-12 21-15v-5c0-6-2-8-6-8-3 0-5 1-5 3 2 4 0 7-3 7-2 0-3-2-3-5zm17 11c-10 3-14 6-14 11 0 4 2 7 6 7 3 0 6-2 8-5z" transform="translate(0 0) scale(.98 1)" />
+      </g>}
+      {/* The lowercase t is also the upright of the level balance. */}
+      <path d="M119 18l7-6v44c0 5 2 7 5 7 2 0 4-1 6-3l1 2c-3 4-6 5-10 5-6 0-9-4-9-10z" />
+      <path d="M104 25h36v3h-36z" />
+      <g fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+        <path d="m108 28-6 13h12zm28 0-6 13h12z" />
+      </g>
+      <path d="M101 41h14c-1 7-12 7-14 0m28 0h14c-1 7-12 7-14 0" />
+    </svg>
+  );
+}

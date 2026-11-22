@@ -21,7 +21,7 @@ export async function proxy(request: NextRequest) {
   const demoCookie = request.cookies.get('justicia_demo_session')?.value;
   const hasDemoCookie = Boolean(demoCookie);
 
-  if (hasDemoParam) {
+  if (hasDemoParam && !pathname.startsWith('/api/')) {
     const isAdmin = demoParam === 'admin' || (pathname.startsWith('/admin') && demoParam !== 'client' && demoParam !== 'lawyer');
     const isLawyer = !isAdmin && (demoParam === 'lawyer' || pathname.startsWith('/lawyer'));
     const roleForDemo = isAdmin ? 'admin' : isLawyer ? 'lawyer' : 'client';
@@ -68,6 +68,9 @@ export async function proxy(request: NextRequest) {
 
   // 5. Check route authorization
   if (!isAuthorizedForRoute(role, pathname)) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = getDashboardForRole(role);
     return NextResponse.redirect(dashboardUrl);

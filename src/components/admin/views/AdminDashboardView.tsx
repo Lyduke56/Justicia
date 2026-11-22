@@ -26,7 +26,7 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
 
     <div className="grid gap-5 sm:grid-cols-3">
       {stats.map(({ label, value, note, href, icon: Icon }) => <Link key={href} href={href} className={`admin-metric block p-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#946525]`}>
-        <div className="flex items-start justify-between gap-3"><span className="text-xs font-semibold text-[#705C49]">{label}</span><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E5D7C5] text-[#946525]"><Icon className="h-5 w-5" /></span></div>
+        <div className="flex items-start justify-between gap-3"><span className="text-xs font-semibold text-[#705C49]">{label}</span><span className="flex h-9 w-9 items-center justify-center admin-icon-well rounded-xl"><Icon className="h-5 w-5" /></span></div>
         <div className="admin-plate mt-4 px-5 py-4"><p className="font-lora text-4xl font-semibold leading-none">{value}</p><p className="mt-2 text-xs text-[#5C4535]">{note}</p></div>
       </Link>)}
     </div>
@@ -52,7 +52,7 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
         </div>
         {recentAuditEntries.length ? <ul className="divide-y divide-[#E8DCCB]">
           {recentAuditEntries.map((entry) => <li key={entry.id} className="flex items-start gap-3 py-4">
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#E5D7C5] text-[#946525]"><DocumentTextIcon className="h-4 w-4" /></span>
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center admin-icon-well rounded-xl"><DocumentTextIcon className="h-4 w-4" /></span>
             <div className="min-w-0"><p className="break-words text-sm font-medium">{entry.action.replaceAll('_', ' ').replaceAll('.', ' ')}</p><p className="mt-1 text-xs text-[#7D6855]">{new Date(entry.timestamp).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}</p></div>
           </li>)}
         </ul> : <p className="py-10 text-center text-sm text-[#7D6855]">No administrative activity has been recorded yet.</p>}

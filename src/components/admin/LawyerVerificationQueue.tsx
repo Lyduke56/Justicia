@@ -1,5 +1,7 @@
 'use client';
 
+import { refreshAdminTabs } from '@/lib/live/adminRefresh';
+
 import React, { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -136,6 +138,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
         );
 
         setModalState({ open: false, lawyer: null, decision: 'approved', note: '' });
+        refreshAdminTabs();
         router.refresh();
       }
     });
@@ -177,9 +180,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
           >
             <span>Pending Review</span>
             {counts.pending > 0 && (
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'pending' ? 'bg-[#23150F] text-[#80501F]' : 'bg-[#C58B3C] text-white'
-              }`}>
+              <span className="admin-count">
                 {counts.pending}
               </span>
             )}
@@ -193,7 +194,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
           >
             <span>Needs Info</span>
             {counts.needs_resubmission > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-200 text-orange-900">
+              <span className="admin-count">
                 {counts.needs_resubmission}
               </span>
             )}
@@ -256,7 +257,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
         <div
           className="admin-surface p-12 text-center space-y-3"
         >
-          <div className="w-14 h-14 rounded-full bg-[#C58B3C]/10 text-[#C58B3C] flex items-center justify-center mx-auto text-2xl">
+          <div className="admin-icon-well w-14 h-14 rounded-full flex items-center justify-center mx-auto text-2xl">
             <span aria-hidden="true">—</span>
           </div>
           <h3 className="font-lora text-lg font-semibold text-[#34150F]">No applications found</h3>
@@ -307,7 +308,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                             isApproved
                               ? 'admin-status-success'
                               : isLawyerPending
-                              ? 'bg-amber-50 text-amber-800 border-amber-300'
+                              ? 'admin-status-pending'
                               : isNeedsInfo
                               ? 'admin-status-info'
                               : isRejected
@@ -350,16 +351,16 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
 
                   {/* Credentials Pills */}
                   <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-                    <span className="px-3 py-1.5 rounded-xl bg-[#23150F] text-[#FAF6F0] text-xs font-mono font-bold tracking-wider">
+                    <span className="admin-chip admin-chip-credential font-mono tracking-wider">
                       ROLL #{lawyer.roll_number || 'PENDING'}
                     </span>
                     {lawyer.ibp_chapter && (
-                      <span className="admin-plate px-3 py-1.5 text-[#5C4535] text-xs font-semibold">
+                      <span className="admin-chip">
                         {lawyer.ibp_chapter}
                       </span>
                     )}
                     {lawyer.bar_passer_year && (
-                      <span className="admin-plate px-3 py-1.5 text-[#5C4535] text-xs font-semibold">
+                      <span className="admin-chip">
                         Bar Passer: {lawyer.bar_passer_year}
                       </span>
                     )}
@@ -378,7 +379,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
                         lawyer.practice_areas.map((area) => (
                           <span
                             key={area}
-                            className="px-2 py-0.5 rounded-lg bg-[#C58B3C]/15 text-[#34150F] font-medium text-[11px]"
+                            className="admin-chip"
                           >
                             {area}
                           </span>
