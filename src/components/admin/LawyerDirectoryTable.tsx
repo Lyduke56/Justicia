@@ -250,7 +250,7 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
       <div
         className="admin-surface overflow-hidden"
       >
-        <div className="overflow-x-auto">
+        <div className="admin-table-well overflow-x-auto">
           <table className="admin-table w-full text-left border-collapse">
             <thead>
               <tr className="text-[11px] font-semibold">

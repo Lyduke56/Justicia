@@ -10,7 +10,6 @@ import { AdminLawyersView } from './views/AdminLawyersView';
 import { AdminVerificationQueueView } from './views/AdminVerificationQueueView';
 import { AdminUsersView } from './views/AdminUsersView';
 import { AdminSecurityAuditView } from './views/AdminSecurityAuditView';
-import { AdminSettingsView } from './views/AdminSettingsView';
 
 interface Resources {
   dashboard: DashboardData;
@@ -101,5 +100,4 @@ export const adminTabViews: Record<string, () => ReactNode> = {
   '/admin/lawyers': () => <AdminTab resource="lawyers">{data => <AdminLawyersView lawyers={data} />}</AdminTab>,
   '/admin/users': () => <AdminTab resource="users">{data => <AdminUsersView initialUsers={data} />}</AdminTab>,
   '/admin/settings/security-audit-log': () => <AdminTab resource="audit">{data => <AdminSecurityAuditView initialLogs={data} />}</AdminTab>,
-  '/admin/settings': () => <AdminSettingsView />,
 };

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AdminSettingsView } from '@/components/admin/views/AdminSettingsView';
 
 export const metadata: Metadata = {
   title: 'Platform Settings & Governance | Justicia Admin',
@@ -6,6 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function AdminSettingsPage() {
-  // The persistent admin shell owns this tab and its data lifecycle.
-  return null;
+  return <AdminSettingsView />;
 }

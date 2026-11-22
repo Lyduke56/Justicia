@@ -159,7 +159,7 @@ export function AdminReportsView({
       )}
 
       <section className={`${cardClass} overflow-hidden`} aria-label="Reports">
-        <div className="overflow-x-auto">
+        <div className="admin-table-well overflow-x-auto">
           <table className="admin-table w-full min-w-[860px] text-left text-sm">
             <thead className="border-b border-[#D8CAAD] bg-[#E5D7C5] text-xs text-[#5C4535]">
               <tr>
