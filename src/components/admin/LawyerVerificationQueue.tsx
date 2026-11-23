@@ -6,6 +6,7 @@ import React, { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { reviewLawyerApplicationAction, type ReviewDecision } from '@/app/actions/adminLawyerReview';
+import { formatAttorneyName } from '@/lib/utils/attorneyName';
 
 export interface LawyerQueueItem {
   user_id: string;
@@ -536,7 +537,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: Props) {
 
               {modalState.decision === 'approved' && (
                 <p className="text-emerald-900 bg-emerald-50 p-3 rounded-xl border border-emerald-200">
-                  By approving, Atty. {modalState.lawyer.full_name} will be granted full access to the Counsel Portal
+                  By approving, {formatAttorneyName(modalState.lawyer.full_name)} will be granted full access to the Counsel Portal
                   and their public profile will be activated on &quot;Find a Lawyer&quot;.
                 </p>
               )}

@@ -161,7 +161,7 @@ export function AdminReportsView({
       <section className={`${cardClass} overflow-hidden`} aria-label="Reports">
         <div className="admin-table-well overflow-x-auto">
           <table className="admin-table w-full min-w-[860px] text-left text-sm">
-            <thead className="border-b border-[#D8CAAD] bg-[#E5D7C5] text-xs text-[#5C4535]">
+            <thead className="text-xs text-[#5C4535]">
               <tr>
                 <th className="px-5 py-4 font-semibold">Reported account</th>
                 <th className="px-5 py-4 font-semibold">Reason</th>
@@ -174,7 +174,7 @@ export function AdminReportsView({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E8DCCB]">
+            <tbody>
               {filtered.map((r) => (
                 <tr key={r.id} className="hover:bg-[#F5EDE2]">
                   <td className="px-5 py-4">

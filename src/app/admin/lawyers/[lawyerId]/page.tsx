@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase/server';
 import { AdminLawyerReviewPanel } from '@/components/admin/AdminLawyerReviewPanel';
+import { formatAttorneyName } from '@/lib/utils/attorneyName';
 
 export const metadata: Metadata = {
   title: 'Lawyer Credential Dossier | Justicia Admin',
@@ -46,6 +47,7 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
   const isPending = profile.verification_status === 'pending';
   const isNeedsInfo = profile.verification_status === 'needs_resubmission';
   const isRejected = profile.verification_status === 'rejected';
+  const lawyerName = formatAttorneyName(profile.full_name);
 
   return (
     <div className="admin-page">
@@ -67,7 +69,7 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
 
           <div className="flex items-center gap-3 mt-1.5 flex-wrap">
             <h1 className="font-lora text-4xl sm:text-5xl font-medium text-[#34150F] tracking-tight">
-              Atty. {profile.full_name}
+              {lawyerName}
             </h1>
 
             <span
@@ -253,7 +255,7 @@ export default async function AdminLawyerDetailPage({ params }: Props) {
           {/* Review Decision Interactive Panel */}
           <AdminLawyerReviewPanel
             lawyerId={lawyerId}
-            lawyerName={profile.full_name}
+            lawyerName={lawyerName}
             currentStatus={profile.verification_status}
             adminNotes={profile.admin_notes}
             rejectionReason={profile.rejection_reason}

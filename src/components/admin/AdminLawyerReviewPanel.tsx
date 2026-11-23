@@ -51,7 +51,7 @@ export function AdminLawyerReviewPanel({
           Verification decision
         </h3>
         <p className="text-xs text-[#7D6855] mt-1">
-          Review Atty. {lawyerName}. This decision immediately updates the lawyer&apos;s access rights.
+          Review {lawyerName}. This decision immediately updates the lawyer&apos;s access rights.
         </p>
       </div>
 

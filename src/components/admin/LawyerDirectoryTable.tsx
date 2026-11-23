@@ -263,7 +263,7 @@ export function LawyerDirectoryTable({ lawyers }: LawyerDirectoryTableProps) {
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E8DCCB]/70 text-xs">
+            <tbody className="text-xs">
               {filteredLawyers.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-16 text-center text-[#705744]">

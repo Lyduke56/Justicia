@@ -75,10 +75,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 8px;
-  border-radius: 16px;
-  background: #dfd0bf;
-  box-shadow: var(--admin-recessed);
 }
 .admin-portal .admin-control,
 .admin-portal .admin-filter {
@@ -100,20 +96,24 @@
 }
 .admin-portal .admin-control:hover:not(:disabled),
 .admin-portal .admin-filter:hover:not(:disabled) { background: #eddfcc; }
+.admin-portal .admin-filter {
+  border-radius: 12px;
+  box-shadow: -3px -3px 7px rgba(255, 247, 237, 0.62),
+    3px 4px 9px rgba(164, 143, 124, 0.16);
+}
 .admin-portal .admin-control:active:not(:disabled),
-.admin-portal .admin-filter:active:not(:disabled),
-.admin-portal .admin-filter[aria-pressed="true"] {
+.admin-portal .admin-filter:active:not(:disabled) {
   background: var(--admin-warm);
   box-shadow: var(--admin-pressed);
 }
 .admin-portal .admin-filter[aria-pressed="true"] {
-  /* Keep selection legible when shadows are subtle or unavailable. */
-  color: #603c17;
-  outline: 1px solid var(--admin-edge);
-  outline-offset: -1px;
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  background: #e4d0b6;
+  color: #4a2e25;
+  box-shadow: -3px -3px 7px rgba(255, 247, 237, 0.6),
+    3px 4px 9px rgba(164, 143, 124, 0.18);
 }
+.admin-portal .admin-filter[aria-pressed="true"]:hover:not(:disabled) { background: #e8d7c2; }
+.admin-portal .admin-filter[aria-pressed="true"] > span:first-child { color: #4a2e25; }
 .admin-portal .admin-primary {
   background: #4a2e25;
   color: #e5d8cb;
@@ -181,25 +181,15 @@
   border-inline-start: 3px solid #956727;
 }
 .admin-portal .admin-table-well {
-  padding: 6px;
   border-radius: inherit;
-  background: #e2d5c8;
-  box-shadow: inset 3px 3px 10px rgba(143, 119, 98, 0.16),
-    inset -3px -3px 10px rgba(255, 247, 237, 0.48);
-}
-.admin-portal .admin-surface:has(> .admin-table-well) {
-  box-shadow: -6px -6px 18px rgba(255, 247, 237, 0.58),
-    6px 7px 20px rgba(164, 143, 124, 0.19);
 }
 .admin-portal .admin-table {
   /* Keep the table inside its horizontal scroller on narrow screens. */
   position: relative;
   border-collapse: separate;
   border-spacing: 0;
-  border-radius: 14px;
+  border-radius: 20px;
   background: #e9ded2;
-  box-shadow: 2px 3px 9px rgba(143, 119, 98, 0.1),
-    -2px -2px 9px rgba(255, 247, 237, 0.38);
   font-family: var(--font-inter), Arial, sans-serif;
 }
 .admin-portal .admin-table thead {
@@ -212,25 +202,46 @@
 }
 .admin-portal .admin-table thead tr { background: transparent; }
 .admin-portal .admin-table th {
-  border-bottom: 1px solid #c6af99;
-  background: linear-gradient(180deg, #f3e7d9, #e6d3bd);
-  box-shadow: inset 0 1px 0 rgba(255, 249, 240, 0.9),
-    inset 0 -2px 3px rgba(143, 119, 98, 0.12);
+  border: 0;
+  background: #e9dac9;
   font-weight: 600;
 }
-.admin-portal .admin-table th:first-child { border-top-left-radius: 14px; }
-.admin-portal .admin-table th:last-child { border-top-right-radius: 14px; }
+.admin-portal .admin-table th:first-child { border-top-left-radius: 20px; }
+.admin-portal .admin-table th:last-child { border-top-right-radius: 20px; }
 .admin-portal .admin-table tbody td {
   background: #e9ded2;
-  box-shadow: inset 0 1px 0 rgba(255, 249, 240, 0.48);
   font-size: 13px;
   transition: background-color 150ms ease;
 }
 .admin-portal .admin-table tbody tr:nth-child(even) td { background: #ecdfd1; }
-.admin-portal .admin-table tbody tr + tr td { border-top: 1px solid #d2bfac; }
 .admin-portal .admin-table tbody tr:is(:hover, :focus-within) td { background: #f5e9db; }
-.admin-portal .admin-table tbody tr:last-child td:first-child { border-bottom-left-radius: 14px; }
-.admin-portal .admin-table tbody tr:last-child td:last-child { border-bottom-right-radius: 14px; }
+.admin-portal .admin-table tbody tr:last-child td:first-child { border-bottom-left-radius: 20px; }
+.admin-portal .admin-table tbody tr:last-child td:last-child { border-bottom-right-radius: 20px; }
+
+/* Table-heavy views use the quieter card depth of the client and lawyer portals. */
+.admin-portal .admin-page:has(.admin-table) {
+  --admin-raised: -4px -4px 12px rgba(255, 247, 237, 0.55),
+    4px 5px 14px rgba(164, 143, 124, 0.17);
+  --admin-control-shadow: -2px -2px 6px rgba(255, 247, 237, 0.55),
+    2px 3px 7px rgba(164, 143, 124, 0.16);
+  --admin-recessed: inset 2px 2px 6px rgba(164, 143, 124, 0.14),
+    inset -2px -2px 6px rgba(255, 247, 237, 0.48);
+  --admin-pressed: inset 2px 2px 5px rgba(164, 143, 124, 0.22),
+    inset -2px -2px 5px rgba(255, 247, 237, 0.5);
+}
+.admin-portal .admin-page:has(.admin-table) .admin-table tbody td {
+  background: #eee4da;
+}
+.admin-portal .admin-page:has(.admin-table) .admin-table tbody tr:nth-child(even) td { background: #ede2d7; }
+.admin-portal .admin-page:has(.admin-table) .admin-table tbody tr:is(:hover, :focus-within) td { background: #f5eae0; }
+.admin-portal .admin-page:has(.admin-table) .admin-status {
+  box-shadow: -1px -1px 3px rgba(255, 247, 237, 0.55),
+    1px 2px 4px rgba(143, 119, 98, 0.12);
+}
+.admin-portal .admin-page:has(.admin-table) :is(.admin-count, .admin-chip) {
+  box-shadow: inset 1px 1px 3px rgba(143, 119, 98, 0.14),
+    inset -1px -1px 3px rgba(255, 247, 237, 0.45);
+}
 .admin-portal .admin-section-title { font-family: var(--font-lora), Georgia, serif; font-size: 18px; font-weight: 600; }
 .admin-portal .admin-search { flex: 1 1 240px; min-width: 0; }
 .admin-portal .admin-drawer { background: var(--admin-paper); }
@@ -334,8 +345,8 @@
   border-radius: 999px;
   background: #dfcdb6;
   color: #603c17;
-  box-shadow: inset 2px 2px 4px rgba(143, 119, 98, 0.28),
-    inset -2px -2px 4px rgba(255, 247, 237, 0.75);
+  box-shadow: inset 1px 1px 3px rgba(143, 119, 98, 0.16),
+    inset -1px -1px 3px rgba(255, 247, 237, 0.5);
   font-family: var(--font-inter), Arial, sans-serif;
   font-size: 11px;
   font-weight: 700;
@@ -345,8 +356,8 @@
 .admin-portal .admin-filter[aria-pressed="true"] .admin-count {
   background: #74502b;
   color: #fff4e6;
-  box-shadow: inset 2px 2px 4px rgba(42, 24, 16, 0.35),
-    inset -1px -1px 2px rgba(255, 238, 211, 0.22);
+  box-shadow: inset 1px 1px 3px rgba(42, 24, 16, 0.2),
+    inset -1px -1px 2px rgba(255, 238, 211, 0.12);
 }
 .admin-portal .admin-chip {
   display: inline-flex;
@@ -426,10 +437,12 @@
   .admin-portal .admin-choice:has(input:checked),
   .admin-portal .admin-filter[aria-pressed="true"] { border: 3px solid Highlight; }
   .admin-portal .admin-table-well,
-  .admin-portal .admin-surface:has(> .admin-table-well),
   .admin-portal .admin-table,
   .admin-portal .admin-table th,
   .admin-portal .admin-table td { box-shadow: none; }
+  .admin-portal .admin-page:has(.admin-table) :is(.admin-table-well, .admin-table, .admin-table th, .admin-table td, .admin-status) {
+    box-shadow: none;
+  }
   .admin-portal .admin-table th,
   .admin-portal .admin-table tbody tr + tr td { border-color: CanvasText; }
   .admin-portal :is(button, a, input, select, textarea):focus-visible { outline-color: Highlight; }

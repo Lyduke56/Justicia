@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { writeAuditLog, createNotification } from '@/lib/notifications';
 import type { Database, LawyerVerificationStatus, VerificationStatus } from '@/types/database';
+import { formatAttorneyName } from '@/lib/utils/attorneyName';
 
 export type ReviewDecision = 'approved' | 'rejected' | 'needs_resubmission';
 
@@ -160,13 +161,15 @@ export async function reviewLawyerApplicationAction(
     revalidatePath('/lawyer/verification');
     revalidatePath('/lawyer/dashboard');
 
+    const lawyerName = formatAttorneyName(profile.full_name);
+
     return {
       success: true,
       message: decision === 'approved'
-        ? `Atty. ${profile.full_name} has been approved and granted full portal access.`
+        ? `${lawyerName} has been approved and granted full portal access.`
         : decision === 'needs_resubmission'
-        ? `Request for additional info sent to Atty. ${profile.full_name}.`
-        : `Application for Atty. ${profile.full_name} has been rejected.`,
+        ? `Request for additional info sent to ${lawyerName}.`
+        : `Application for ${lawyerName} has been rejected.`,
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'An error occurred during review';
