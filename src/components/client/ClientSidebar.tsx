@@ -28,6 +28,8 @@ interface ClientSidebarProps {
   onSettings: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
+  /** Accessible name for the desktop sidebar column. */
+  ariaLabel?: string;
 }
 
 const PILL_SPRING = { type: 'spring', stiffness: 430, damping: 36, mass: 0.85 } as const;
@@ -106,7 +108,7 @@ function SidebarBody({
   onSelect,
   onSettings,
   pillId,
-}: Omit<ClientSidebarProps, 'mobileOpen' | 'onCloseMobile'> & { pillId: string }) {
+}: Omit<ClientSidebarProps, 'mobileOpen' | 'onCloseMobile' | 'ariaLabel'> & { pillId: string }) {
   return (
     <>
       <motion.nav
@@ -153,7 +155,7 @@ function SidebarBody({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function ClientSidebar(props: ClientSidebarProps) {
-  const { mobileOpen, onCloseMobile, onSelect, onSettings, ...rest } = props;
+  const { mobileOpen, onCloseMobile, onSelect, onSettings, ariaLabel = 'Client portal navigation', ...rest } = props;
 
   // Esc closes the mobile drawer.
   useEffect(() => {
@@ -168,7 +170,7 @@ export function ClientSidebar(props: ClientSidebarProps) {
       {/* ── Desktop column ── */}
       <aside
         className="client-sidebar hidden w-64 shrink-0 flex-col justify-between overflow-y-auto border-r border-[#341512]/10 px-4 pb-8 pt-10 md:flex"
-        aria-label="Client portal navigation"
+        aria-label={ariaLabel}
       >
         <SidebarBody {...rest} onSelect={onSelect} onSettings={onSettings} pillId="client-side-pill" />
       </aside>

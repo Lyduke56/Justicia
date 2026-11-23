@@ -36,6 +36,10 @@ type MenuKey = 'notifications' | 'user' | null;
 
 interface ClientTopbarProps {
   user: { fullName: string; email?: string };
+  /** Extra identity line under the email in the account card (e.g. a lawyer's roll number). */
+  accountDetail?: string;
+  /** localStorage key for the "notifications seen" timestamp; separate per portal. */
+  seenKey?: string;
   homeActive: boolean;
   settingsActive: boolean;
   notifications: Notification[];
@@ -125,9 +129,9 @@ const LIST: Variants = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function readSeenAt(): number {
+function readSeenAt(key: string): number {
   try {
-    return Number(window.localStorage.getItem(SEEN_KEY)) || 0;
+    return Number(window.localStorage.getItem(key)) || 0;
   } catch {
     return 0;
   }
@@ -239,6 +243,8 @@ function Popover({
 // ─── Component ────────────────────────────────────────────────────────────────
 export function ClientTopbar({
   user,
+  accountDetail,
+  seenKey = SEEN_KEY,
   homeActive,
   settingsActive,
   notifications,
@@ -251,7 +257,7 @@ export function ClientTopbar({
 }: ClientTopbarProps) {
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
   // Notifications load client-side after mount, so reading storage here can't cause a hydration mismatch.
-  const [seenAt, setSeenAt] = useState(() => (typeof window === 'undefined' ? 0 : readSeenAt()));
+  const [seenAt, setSeenAt] = useState(() => (typeof window === 'undefined' ? 0 : readSeenAt(seenKey)));
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const clusterRef = useRef<HTMLDivElement>(null);
 
@@ -267,7 +273,7 @@ export function ClientTopbar({
     const now = Date.now();
     setSeenAt(now);
     try {
-      window.localStorage.setItem(SEEN_KEY, String(now));
+      window.localStorage.setItem(seenKey, String(now));
     } catch {
       /* storage unavailable: still cleared for this session */
     }
@@ -495,6 +501,9 @@ export function ClientTopbar({
                     <div className="min-w-0">
                       <p className="truncate font-lora text-[15px] font-semibold leading-tight text-[#341512]">{user.fullName}</p>
                       {user.email && <p className="mt-0.5 truncate text-[11.5px] text-[#341512]/55">{user.email}</p>}
+                      {accountDetail && (
+                        <p className="mt-0.5 truncate text-[10.5px] font-semibold uppercase tracking-wider text-[#8C5A1E]">{accountDetail}</p>
+                      )}
                     </div>
                   </motion.div>
 
