@@ -7,6 +7,7 @@ import { DashboardSearchInput } from '@/components/client/DashboardSearchInput';
 import { LawyerGridSection } from '@/components/client/LawyerGridSection';
 import type { LawyerItem } from '@/components/client/LawyerCard';
 import { createClient } from '@/lib/supabase/client';
+import { useViewActive } from '@/components/live/LiveProvider';
 
 const FALLBACK_LAWYERS: LawyerItem[] = [
   { id: 'lawyer-1', name: 'Atty. Maria Elena Santos, LL.B.', rollNumber: '58942', chapter: 'MAKATI', specializations: ['Labor & Employment', 'Corporate', 'Civil Law'], isVerified: true },
@@ -85,6 +86,17 @@ export function DashboardView({ firstName }: DashboardViewProps) {
   // If the user has "reduce motion" turned on in their device, skip the animation.
   const reduceMotion = useReducedMotion();
 
+  // The portal keeps tabs mounted (and preloads them hidden). Each time this tab becomes visible,
+  // bump a key that remounts the animated layout so the entrance plays again. (State adjusted
+  // during render, React's pattern for reacting to a changed value without an effect.)
+  const isViewActive = useViewActive();
+  const [wasViewActive, setWasViewActive] = useState(isViewActive);
+  const [entranceKey, setEntranceKey] = useState(0);
+  if (isViewActive !== wasViewActive) {
+    setWasViewActive(isViewActive);
+    if (isViewActive) setEntranceKey((k) => k + 1);
+  }
+
   useEffect(() => {
     const supabase = createClient();
     supabase
@@ -100,6 +112,7 @@ export function DashboardView({ firstName }: DashboardViewProps) {
 
   return (
     <motion.div
+      key={entranceKey}
       variants={page}
       initial={reduceMotion ? false : 'hidden'}
       animate="show"

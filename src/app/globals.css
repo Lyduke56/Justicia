@@ -1,6 +1,20 @@
 @import "tailwindcss";
 
 :root {
+  /* Neumorphic light/shadow for small raised elements, relative to the #E5D8CB surface.
+     Coloured buttons reuse these so they sit on the parchment like the plain ones. */
+  --neu-raised-sm-shadow:
+    5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.2);
+  /* Pressed-in: thin surface rim outside, inset shade inside (same as .neu-recessed, tighter). */
+  --neu-pressed-sm-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 3px 3px 7px 0 rgba(0, 0, 0, 0.22),
+    inset -3px -3px 6px 0 rgba(255, 255, 255, 0.18);
+
   --background: #0d0805;
   --foreground: #ded6cb;
   --gold-primary: #c59341;
@@ -98,19 +112,8 @@ body {
   will-change: opacity, transform;
 }
 
-@keyframes lawyerPopoverEnter {
-  from { opacity: 0; transform: translateY(-6px) scale(0.95); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.lawyer-popover-enter {
-  transform-origin: top right;
-  animation: lawyerPopoverEnter 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .lawyer-portal .client-view-enter,
-  .lawyer-popover-enter {
+  .lawyer-portal .client-view-enter {
     animation: none;
   }
 
@@ -297,8 +300,9 @@ body {
 .neu-btn-caramel {
   background-color: #d49e56;
   box-shadow:
-    0 6px 16px rgba(212, 158, 86, 0.4),
-    inset 0 1px 1px rgba(255, 255, 255, 0.4);
+    var(--neu-raised-sm-shadow),
+    inset 1px 1px 2px 0 rgba(255, 255, 255, 0.35),
+    inset -1px -1px 2px 0 rgba(120, 80, 30, 0.18);
   border: none;
   transition: all 140ms ease;
 }
@@ -308,7 +312,7 @@ body {
 }
 
 .neu-btn-caramel:active {
-  box-shadow: inset 2px 2px 6px rgba(140, 96, 32, 0.6);
+  box-shadow: var(--neu-pressed-sm-shadow);
 }
 
 /* Tactile Capsule Button with real physical plunge & inset shadow */
@@ -353,8 +357,9 @@ body {
 .neu-btn-espresso {
   background-color: #4a2e25;
   box-shadow:
-    0 6px 16px rgba(74, 46, 37, 0.38),
-    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    var(--neu-raised-sm-shadow),
+    inset 1px 1px 2px 0 rgba(255, 255, 255, 0.14),
+    inset -1px -1px 2px 0 rgba(0, 0, 0, 0.3);
   border: none;
   transition: all 140ms ease;
 }
@@ -364,15 +369,16 @@ body {
 }
 
 .neu-btn-espresso:active {
-  box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--neu-pressed-sm-shadow);
 }
 
 /* Confirmed appointment badge (vibrant emerald pill) */
 .neu-badge-green {
   background-color: #27ae60;
   box-shadow:
-    4px 6px 16px rgba(39, 174, 96, 0.4),
-    -2px -2px 6px rgba(255, 255, 255, 0.25);
+    var(--neu-raised-sm-shadow),
+    inset 1px 1px 2px 0 rgba(255, 255, 255, 0.25),
+    inset -1px -1px 2px 0 rgba(0, 60, 25, 0.2);
   border: none;
 }
 
@@ -397,154 +403,6 @@ body {
     inset 3px 3px 7px rgba(177, 160, 146, 0.55),
     inset -3px -3px 7px rgba(252, 238, 223, 0.8);
   font-family: var(--font-lora), Georgia, serif;
-}
-
-.lawyer-portal aside nav button,
-.lawyer-portal aside > div:last-child button {
-  height: 44px;
-  min-height: 44px;
-  border-radius: 15px;
-  padding: 8px 16px;
-  gap: 10px;
-  color: #341512;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 28px;
-}
-
-.lawyer-portal aside nav button[data-active="true"] {
-  background: #dbc9ba;
-  box-shadow:
-    1px 1px 2px rgba(241, 221, 205, 0.3),
-    -1px -1px 2px rgba(197, 181, 167, 0.5),
-    inset -5px 5px 10px rgba(197, 181, 167, 0.2),
-    inset 5px -5px 10px rgba(197, 181, 167, 0.2),
-    inset -5px -5px 10px rgba(241, 221, 205, 0.9),
-    inset 5px 5px 13px rgba(197, 181, 167, 0.75);
-  font-weight: 400;
-  line-height: 20px;
-}
-
-.lawyer-portal aside {
-  height: min(579px, calc(100vh - 64px));
-  align-self: flex-start;
-  justify-content: flex-start;
-  padding: 16px 11px 43px 13px;
-  border-right: 1px solid rgba(0, 0, 0, 0.25);
-  background: rgba(133, 68, 30, 0.1);
-  scrollbar-width: none;
-}
-
-.lawyer-portal aside::-webkit-scrollbar {
-  display: none;
-}
-
-.lawyer-portal aside nav {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding-top: 29px;
-}
-
-.lawyer-portal aside nav > button {
-  margin: 0 !important;
-}
-
-.lawyer-portal aside nav > button:nth-child(6) {
-  margin-top: 2px !important;
-}
-.lawyer-portal aside nav > button:nth-child(7) {
-  margin-top: 1px !important;
-  opacity: 1;
-  cursor: not-allowed;
-}
-
-.lawyer-portal aside nav button svg,
-.lawyer-portal aside > div:last-child button svg {
-  width: 24px;
-  height: 24px;
-  flex: none;
-  color: #341512;
-}
-
-.lawyer-portal aside > div:last-child {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  flex: none;
-  margin-top: 26px;
-  padding-top: 0;
-}
-
-.lawyer-portal aside > div:last-child > hr {
-  flex: none;
-  width: 143px;
-  height: 1px;
-  margin: 0 0 23px 38px;
-  border: 0;
-  background: rgba(0, 0, 0, 0.3);
-}
-
-.lawyer-portal aside > div:last-child > button,
-.lawyer-portal aside > div:last-child > form {
-  margin: 0 !important;
-}
-
-@media (min-width: 768px) {
-  .lawyer-portal > header {
-    padding-left: 55px;
-    padding-right: 46px;
-  }
-
-  .lawyer-portal #lawyer-nav-logo {
-    font-family: var(--font-lora), Georgia, serif;
-    font-size: 20px;
-    font-weight: 400;
-    line-height: 28px;
-    letter-spacing: 0.4px;
-  }
-
-  .lawyer-portal > header > div:last-child {
-    gap: 17px;
-  }
-
-  .lawyer-portal > header > div:last-child > div {
-    display: flex;
-    align-items: center;
-  }
-
-  .lawyer-portal > header > div:last-child > button,
-  .lawyer-portal
-    > header
-    > div:last-child
-    > div
-    > button:not(#lawyer-nav-user-menu) {
-    width: 29px;
-    height: 29px;
-    padding: 0;
-  }
-
-  .lawyer-portal > header > div:last-child > button svg,
-  .lawyer-portal
-    > header
-    > div:last-child
-    > div
-    > button:not(#lawyer-nav-user-menu)
-    svg {
-    width: 29px;
-    height: 29px;
-  }
-
-  .lawyer-portal #lawyer-nav-user-menu {
-    width: 45px;
-    height: 45px;
-    padding: 0;
-  }
-
-  .lawyer-portal #lawyer-nav-user-menu svg {
-    width: 45px;
-    height: 45px;
-  }
 }
 
 .lawyer-designed-view .neu-card,
@@ -619,660 +477,170 @@ body {
   }
 }
 
-.lawyer-dashboard {
-  max-width: 1196px;
-  padding: 48px 66px 44px;
+/* ── Lawyer dashboard ───────────────────────────────────────────────────────
+   Layout lives in the views (Tailwind); these are the few surfaces Tailwind can't express.
+   .lawyer-page is the Consultations root. --neu-dark / --neu-light let the client wells and
+   thumbs (.client-neu-*) work here. */
+.lawyer-dash,
+.lawyer-page {
+  --neu-dark: 190 174 159;
+  --neu-light: 255 248 240;
   font-family: var(--font-lora), Georgia, serif;
 }
 
-.lawyer-dashboard > .grid:first-child {
-  gap: 20px;
+/* KPI well (its recessed shadow is set by the CARVE entrance) */
+.lawyer-dash-kpi {
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.2);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.lawyer-dash-kpi:focus-visible {
+  outline: 2px solid #c58b3c;
+  outline-offset: 3px;
+}
+/* The plate's transform belongs to its entrance, so hover lifts it with `translate`. */
+.lawyer-dash-plate {
+  transition: translate 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.lawyer-dash-kpi:hover .lawyer-dash-plate {
+  translate: 0 -3px;
+}
+.lawyer-dash-kpi-arrow {
+  opacity: 0;
+  translate: -4px 0;
+  transition:
+    opacity 200ms ease,
+    translate 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lawyer-dash-kpi:hover .lawyer-dash-kpi-arrow,
+.lawyer-dash-kpi:focus-visible .lawyer-dash-kpi-arrow {
+  opacity: 1;
+  translate: 0 0;
 }
 
-.lawyer-dashboard > .grid:first-child .neu-card-md {
-  height: 158px;
-  padding: 16px 22px 21px;
-  border-radius: 10px;
-}
-
-.lawyer-dashboard > .grid:first-child .neu-card-md h3 {
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.lawyer-dashboard > .grid:first-child .neu-plate {
-  height: 88px;
-  min-height: 88px;
-  margin-top: 0;
-  padding: 10px 16px 12px;
-  border-radius: 10px;
-  box-shadow: var(--dashboard-pill-raised);
-}
-
-.lawyer-dashboard > .grid:first-child .neu-plate svg {
-  width: 42px;
-  height: 42px;
-}
-
-.lawyer-dashboard > .grid:first-child .neu-plate span {
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 40px;
-  font-weight: 600;
-}
-
-.lawyer-dashboard > .grid:first-child .neu-plate p {
-  font-size: 7px;
-  margin-top: 2px;
-}
-
-.lawyer-dashboard > hr {
-  max-width: 78%;
-  margin: 38px auto 44px !important;
-  border-top: 2px solid rgba(52, 21, 18, 0.26);
-}
-
-.lawyer-dashboard > .flex .neu-plate,
-.lawyer-consultations > .grid .neu-plate.rounded-full {
-  border-radius: 20px;
-  padding: 8px 22px;
-  font-weight: 500;
-}
-
-.lawyer-dashboard > .flex .neu-plate {
-  width: min(310px, 100%);
-  height: 44px;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.lawyer-dashboard > .overflow-hidden {
-  margin-top: 12px !important;
-}
-
-.lawyer-dashboard > hr + .flex {
-  margin-bottom: 0 !important;
-}
-
-@media (min-width: 1280px) {
-  .lawyer-designed-view .lawyer-dashboard .neu-card {
-    height: 440px;
-    padding: 27px 38px 41px;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .lawyer-dashboard .neu-card > * + * {
-    margin-top: 25px !important;
-  }
-
-  .lawyer-dashboard .neu-card > * {
-    margin-bottom: 0 !important;
-  }
-
-  .lawyer-dashboard .neu-card > div:last-child {
-    margin-top: auto !important;
-  }
-
-  .lawyer-dashboard .neu-card > .neu-plate {
-    min-height: 109px;
-    padding: 14px 16px;
-  }
-
-  .lawyer-dashboard .neu-card > .space-y-1\.5 {
-    padding-top: 0;
-  }
-
-  .lawyer-dashboard .neu-card > .space-y-1\.5 > p:first-child {
-    font-size: 7px;
-  }
-
-  .lawyer-dashboard .neu-card > .space-y-1\.5 h3 {
-    font-size: 16px;
-  }
-
-  .lawyer-dashboard .neu-card > .space-y-1\.5 p:last-child {
-    font-family: var(--font-inter), Arial, sans-serif;
-    font-size: 10px;
-    line-height: 15px;
-    text-align: justify;
-  }
-}
-
-.lawyer-dashboard .neu-card .neu-plate h4,
-.lawyer-consultations .neu-card .neu-plate h4,
-.lawyer-dashboard .neu-card h3,
-.lawyer-consultations .neu-card h3 {
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 17px;
-}
-
-.lawyer-dashboard .neu-card .neu-plate p,
-.lawyer-consultations .neu-card .neu-plate p {
-  font-size: 11px;
-}
-
-.lawyer-dashboard .neu-card .neu-plate svg,
-.lawyer-consultations .neu-card .neu-plate svg {
-  max-width: 80px;
-  max-height: 80px;
-}
-
-/* Lawyer dashboard pills: dimensions and material taken from the Figma frame. */
-.lawyer-dashboard {
-  --dashboard-pill-raised:
-    -5px 5px 10px rgba(206, 194, 183, 0.2),
-    5px -5px 10px rgba(206, 194, 183, 0.2),
-    -5px -5px 10px rgba(252, 238, 223, 0.9),
-    5px 5px 13px rgba(206, 194, 183, 0.9),
-    inset 1px 1px 2px rgba(252, 238, 223, 0.3),
-    inset -1px -1px 2px rgba(206, 194, 183, 0.5);
-  --dashboard-pill-recessed:
+/* Filter / sort pills and the search field: recessed, rise a touch on hover, press back in
+   while open or focused */
+.lawyer-dash-filter,
+.lawyer-field {
+  background: #e5d8cb;
+  box-shadow:
     1px 1px 2px rgba(252, 238, 223, 0.3),
     -1px -1px 2px rgba(206, 194, 183, 0.5),
-    inset -5px 5px 10px rgba(206, 194, 183, 0.2),
-    inset 5px -5px 10px rgba(206, 194, 183, 0.2),
-    inset -5px -5px 10px rgba(252, 238, 223, 0.9),
-    inset 5px 5px 13px rgba(206, 194, 183, 0.9);
+    inset 4px 4px 9px rgba(206, 194, 183, 0.85),
+    inset -4px -4px 8px rgba(252, 238, 223, 0.9);
+  transition: box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  outline: none;
 }
-
-.lawyer-dashboard > hr + .flex {
-  flex-wrap: wrap;
-}
-
-.lawyer-dashboard > hr + .flex .lawyer-dashboard-heading-pill {
-  background: rgba(211, 151, 88, 0.3);
-  border-radius: 20px;
-  box-shadow: var(--dashboard-pill-raised);
-  color: rgba(52, 21, 18, 0.8);
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.32px;
-  justify-content: flex-start;
-  padding-left: 29px;
-}
-
-.lawyer-dashboard .lawyer-dashboard-filter-pill {
-  width: min(246px, 100%);
-  height: 33px;
-  padding: 0 17px;
-  gap: 0;
-  justify-content: space-between;
-  flex: none;
-  border-radius: 10px;
-  background: #e5d8cb;
-  box-shadow: var(--dashboard-pill-recessed);
-  color: rgba(52, 21, 18, 0.8);
-  font-family: var(--font-inter), Arial, sans-serif;
-  font-size: 11px;
-  font-weight: 400;
-  letter-spacing: 0.22px;
-  white-space: nowrap;
-}
-
-.lawyer-dashboard .lawyer-dashboard-filter-pill svg {
-  width: 18px;
-  height: 18px;
-  flex: none;
-}
-
-.lawyer-dashboard .lawyer-dashboard-view-pill {
-  position: relative;
-  width: 92px;
-  height: 33px;
-  padding: 0 10px 0 12px;
-  gap: 0;
-  justify-content: space-between;
-  flex: none;
-  border-radius: 10px;
-  background: #e5d8cb;
-  box-shadow: var(--dashboard-pill-recessed);
-}
-
-.lawyer-dashboard .lawyer-dashboard-view-pill::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 0 auto;
-  width: 45px;
-  border-radius: 0 10px 10px 0;
-  background: #e5d8cb;
+.lawyer-dash-filter:hover,
+.lawyer-field:hover {
   box-shadow:
-    -5px 5px 10px rgba(195, 184, 173, 0.2),
-    5px -5px 10px rgba(195, 184, 173, 0.2),
-    -5px -5px 10px rgba(255, 248, 233, 0.9),
-    5px 5px 13px rgba(195, 184, 173, 0.9),
-    inset 1px 1px 2px rgba(255, 248, 233, 0.3),
-    inset -1px -1px 2px rgba(195, 184, 173, 0.5);
-  pointer-events: none;
+    1px 1px 2px rgba(252, 238, 223, 0.3),
+    -1px -1px 2px rgba(206, 194, 183, 0.5),
+    inset 2px 2px 5px rgba(206, 194, 183, 0.7),
+    inset -2px -2px 5px rgba(252, 238, 223, 0.85);
 }
-
-.lawyer-dashboard .lawyer-dashboard-view-pill svg {
-  position: relative;
-  width: 24px;
-  height: 24px;
-  z-index: 1;
-}
-
-.lawyer-dashboard .lawyer-dashboard-date-pill,
-.lawyer-dashboard .lawyer-dashboard-time-pill,
-.lawyer-dashboard .lawyer-dashboard-status-pill {
-  height: 27px;
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  flex: none;
-  border-radius: 20px;
-  box-shadow: var(--dashboard-pill-raised);
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.16px;
-  white-space: nowrap;
-}
-
-.lawyer-dashboard .lawyer-dashboard-date-pill {
-  width: 142px;
-  padding-left: 13px;
-  background: #e5d8cb;
-  color: rgba(52, 21, 18, 0.8);
-}
-
-.lawyer-dashboard .lawyer-dashboard-time-pill {
-  width: 159px;
-  background: #e5d8cb;
-  color: rgba(52, 21, 18, 0.8);
-}
-
-.lawyer-dashboard .lawyer-dashboard-status-pill {
-  width: 140px;
-  height: 26px;
-  background: #33a94e;
-  color: #e5d8cb;
-}
-
-.lawyer-dashboard .lawyer-dashboard-message-pill {
-  width: 87px;
-  height: 25px;
-  padding: 0;
-  flex: none;
-  border-radius: 10px;
-  background: #e2c7ab;
+.lawyer-dash-filter[aria-expanded="true"],
+.lawyer-field:focus-within {
   box-shadow:
-    -5px 5px 10px rgba(203, 179, 154, 0.2),
-    5px -5px 10px rgba(203, 179, 154, 0.2),
-    -5px -5px 10px rgba(249, 219, 188, 0.9),
-    5px 5px 13px rgba(203, 179, 154, 0.9),
-    inset 1px 1px 2px rgba(249, 219, 188, 0.3),
-    inset -1px -1px 2px rgba(203, 179, 154, 0.5);
-  color: rgba(52, 21, 18, 0.8);
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.24px;
-  text-align: center;
+    1px 1px 2px rgba(252, 238, 223, 0.3),
+    -1px -1px 2px rgba(206, 194, 183, 0.5),
+    inset 5px 5px 11px rgba(206, 194, 183, 0.95),
+    inset -5px -5px 10px rgba(252, 238, 223, 0.95);
+}
+.lawyer-dash-filter:focus-visible,
+.lawyer-field:focus-within {
+  outline: 2px solid #c58b3c;
+  outline-offset: 3px;
 }
 
-.lawyer-dashboard .lawyer-dashboard-cancel-pill,
-.lawyer-dashboard .lawyer-dashboard-details-pill,
-.lawyer-dashboard .lawyer-dashboard-join-pill {
-  height: 35px;
-  padding: 0;
-  flex: none;
-  border-radius: 10px;
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.24px;
+/* Consultations status tabs: sideways scroll on phones without a visible scrollbar */
+.lawyer-consult-tabs {
+  scrollbar-width: none;
+}
+.lawyer-consult-tabs::-webkit-scrollbar {
+  display: none;
 }
 
-.lawyer-dashboard .lawyer-dashboard-cancel-pill {
-  width: 97px;
-  border: 1px solid rgba(52, 21, 18, 0.8);
-  background: #e5d8cb;
-  box-shadow: none;
-  color: #341512;
+/* Carved divider (also under the table header) */
+.lawyer-dash-groove {
+  height: 2px;
+  border-radius: 2px;
+  box-shadow:
+    inset 1px 1px 1px rgba(160, 140, 125, 0.45),
+    inset -1px -1px 1px rgba(255, 248, 240, 0.85);
 }
 
-.lawyer-dashboard .lawyer-dashboard-details-pill {
-  width: 111px;
-  background: rgba(52, 21, 18, 0.8);
-  box-shadow: var(--dashboard-pill-raised);
-  color: #e5d8cb;
+.lawyer-dash-surface:focus-visible {
+  outline: 2px solid #c58b3c;
+  outline-offset: 4px;
 }
 
-.lawyer-dashboard .lawyer-dashboard-join-pill {
-  width: 110px;
-  gap: 5px;
-  background: rgba(211, 151, 88, 0.7);
-  box-shadow: var(--dashboard-pill-raised);
-  color: #341512;
-}
-
-.lawyer-dashboard .lawyer-dashboard-join-pill svg {
-  width: 22px;
-  height: 22px;
-}
-
-.lawyer-dashboard .neu-card > div:last-child > div {
-  gap: 18px;
-  margin-right: -2px;
-}
-
-.lawyer-dashboard .lawyer-dashboard-prev-pill {
+/* Table rows sit flush on the surface and lift out of it on hover */
+.lawyer-dash-row {
   background: transparent;
-  box-shadow: none;
-  font-size: 30px;
-  font-weight: 400;
+  box-shadow:
+    0 0 0 0 rgba(206, 194, 183, 0),
+    0 0 0 0 rgba(252, 238, 223, 0);
+  transition:
+    background-color 200ms ease,
+    box-shadow 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    translate 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lawyer-dash-row:nth-child(even) {
+  background: rgba(211, 151, 88, 0.06);
+}
+.lawyer-dash-row:hover {
+  background: #e8dccf;
+  translate: 0 -1px;
+  box-shadow:
+    4px 4px 10px 0 rgba(206, 194, 183, 0.8),
+    -4px -4px 9px 0 rgba(252, 238, 223, 0.9);
 }
 
-.lawyer-dashboard .lawyer-dashboard-next-pill {
-  background: #e5d8cb;
-  box-shadow: var(--dashboard-pill-raised);
-  font-size: 30px;
-  font-weight: 400;
+/* Rows that only show information: a soft tint on hover instead of the lift */
+.lawyer-dash-row.is-static:hover {
+  translate: none;
+  background: rgba(211, 151, 88, 0.1);
+  box-shadow:
+    0 0 0 0 rgba(206, 194, 183, 0),
+    0 0 0 0 rgba(252, 238, 223, 0);
 }
 
-@media (min-width: 1280px) {
-  .lawyer-dashboard > hr + .flex {
-    position: relative;
-  }
-
-  .lawyer-dashboard > hr + .flex > div:last-child {
-    position: absolute;
-    top: 10px;
-    right: 5px;
-    width: 359px;
-    gap: 21px;
-  }
-
-  .lawyer-dashboard .neu-card > div:first-child > div:first-child {
-    gap: 15px;
-  }
-
-  .lawyer-dashboard .lawyer-dashboard-status-pill {
-    margin-right: -2px;
-  }
-
-  .lawyer-dashboard .lawyer-dashboard-message-pill {
-    margin-right: 19px;
-    position: relative;
-    top: 1px;
-  }
+/* Earnings chart: the chosen month is a column pressed into the card; others tint on hover */
+.lawyer-chart-column {
+  background: rgba(211, 151, 88, 0.12);
+  box-shadow:
+    inset 3px 3px 7px rgba(206, 194, 183, 0.75),
+    inset -3px -3px 7px rgba(252, 238, 223, 0.85);
+}
+.lawyer-chart-hit {
+  outline: none;
+  transition: background-color 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.lawyer-chart-hit:enabled:hover:not([aria-pressed="true"]) {
+  background: rgba(211, 151, 88, 0.07);
+}
+.lawyer-chart-hit:focus-visible {
+  outline: 2px solid #c58b3c;
+  outline-offset: -2px;
 }
 
-.lawyer-dashboard > .flex:last-child {
-  gap: 51px;
-  padding-left: 18px;
-  margin-top: 38px !important;
-}
-
-.lawyer-dashboard > .flex:last-child > div {
-  gap: 4px;
-}
-
-@media (max-width: 639px) {
-  .lawyer-dashboard .neu-card > div:last-child > div {
-    flex-wrap: wrap;
+@media (prefers-reduced-motion: reduce) {
+  .lawyer-dash-plate,
+  .lawyer-dash-kpi-arrow,
+  .lawyer-dash-row {
+    transition: none;
   }
-
-  .lawyer-dashboard > hr + .flex > div:last-child {
-    width: 100%;
-    gap: 5px;
-  }
-
-  .lawyer-dashboard .lawyer-dashboard-filter-pill {
-    width: calc(100% - 97px);
-    min-width: 0;
-  }
-
-  .lawyer-dashboard .lawyer-dashboard-filter-pill span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-}
-
-.lawyer-consultations {
-  max-width: 1196px;
-  padding: 44px 70px 60px 66px;
-  font-family: var(--font-lora), Georgia, serif;
-}
-
-.lawyer-consultations > .space-y-4 {
-  padding: 29px;
-  background: var(--lawyer-paper);
-  border-radius: 16px;
-  box-shadow: var(--lawyer-raised-shadow);
-}
-
-.lawyer-consultations > .space-y-4 > div + div {
-  margin-top: 28px;
-}
-
-.lawyer-consultations > .space-y-4 button,
-.lawyer-consultations > .space-y-4 input,
-.lawyer-consultations > .space-y-4 select {
-  border-radius: 8px;
-  font-size: 11px;
-}
-
-.lawyer-consultations > .grid {
-  column-gap: 35px;
-  margin-top: 55px !important;
-}
-
-@media (min-width: 1280px) {
-  .lawyer-portal[data-view="consultations"] #lawyer-main-content {
-    scrollbar-gutter: stable;
-  }
-
-  .lawyer-consultations {
-    padding-right: 64px;
-  }
-
-  .lawyer-consultations > .grid {
-    grid-template-columns: 360px minmax(0, 1fr);
-  }
-
-  .lawyer-consultations > .grid > div:first-child {
-    width: 360px;
-  }
-
-  .lawyer-consultations > .grid > div:first-child > .neu-plate.rounded-full {
-    width: 360px;
-    height: 44px;
-    justify-content: center;
-    font-size: 16px;
-    margin-bottom: 0 !important;
-  }
-
-  .lawyer-consultations > .grid > div:first-child > .neu-card-md {
-    width: 359px;
-    height: 254px;
-    margin-left: 1px;
-    margin-top: 28px;
-    margin-bottom: 31px !important;
-    padding-top: 17px;
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
-  .lawyer-consultations > .grid > div:first-child > .neu-card-md[data-weeks="6"] {
-    height: 285px;
-  }
-
-  .lawyer-consultations .neu-card-md > div:nth-child(2) {
-    height: 27px;
-    margin-block-start: 14px !important;
-    margin-block-end: 4px !important;
-    font-family: var(--font-lora), Georgia, serif;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.26px;
-    color: #341512;
-  }
-
-  .lawyer-consultations .neu-card-md > div:nth-child(3) {
-    height: 146px;
-    margin-block-start: 4px !important;
-    grid-template-rows: repeat(5, 22px);
-    row-gap: 9px;
-    align-items: start;
-    font-family: var(--font-lora), Georgia, serif;
-    font-size: 13px;
-    font-weight: 500;
-    color: #341512;
-  }
-
-  .lawyer-consultations .neu-card-md > div:first-child {
-    margin-block-end: 14px !important;
-  }
-
-  .lawyer-consultations .neu-card-md[data-weeks="6"] > div:nth-child(3) {
-    height: 177px;
-    grid-template-rows: repeat(6, 22px);
-  }
-
-  .lawyer-consultations .neu-card-md > div:nth-child(3) button {
-    width: 23px;
-    height: 23px;
-  }
-
-  .lawyer-consultations .neu-card-md > div:nth-child(3) button:not(:disabled) {
-    width: 28px;
-    height: 28px;
-  }
-
-  .lawyer-consultations
-    > .grid
-    > div:first-child
-    > .neu-plate:not(.rounded-full) {
-    width: 359px;
-    height: 251px;
-    margin-left: 1px;
-    padding: 16px 24px 16px 23px;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .lawyer-consultations
-    > .grid
-    > div:first-child
-    > .neu-plate:not(.rounded-full)
-    > h4 {
-    font-family: var(--font-lora), Georgia, serif;
-    font-size: 14px;
-    line-height: 18px;
-    margin-bottom: 6px !important;
-  }
-
-  .lawyer-consultations
-    > .grid
-    > div:first-child
-    > .neu-plate:not(.rounded-full)
-    > div {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding-top: 5px;
-    padding-right: 0;
-  }
-
-  .lawyer-consultations
-    > .grid
-    > div:first-child
-    > .neu-plate:not(.rounded-full)
-    > div
-    > button {
-    height: 33px;
-    flex-shrink: 0;
-    padding: 0 17px 0 20px;
-  }
-
-  .lawyer-consultations
-    > .grid
-    > div:first-child
-    > .neu-plate:not(.rounded-full)
-    > div
-    > button:not(:last-child) {
-    margin-bottom: 17px !important;
-  }
-
-  .lawyer-designed-view .lawyer-consultations .neu-card {
-    min-height: 546px;
-    padding: 25px 30px 28px;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .lawyer-consultations .neu-card > * {
-    margin-bottom: 0 !important;
-  }
-
-  .lawyer-consultations .neu-card > * + * {
-    margin-top: 28px !important;
-  }
-
-  .lawyer-consultations .neu-card > div:last-child {
-    margin-top: auto !important;
-  }
-
-  .lawyer-consultations .neu-card > div:first-child .neu-inset-sm,
-  .lawyer-consultations .neu-card > div:first-child .neu-badge-green {
-    height: 26px;
-    display: flex;
-    align-items: center;
-    padding: 0 12px;
-    font-size: 8px;
-    white-space: nowrap;
-  }
-
-  .lawyer-consultations .neu-card > .neu-plate {
-    height: 109px;
-    min-height: 109px;
-    padding: 6px 16px 7px 13px;
-  }
-
-  .lawyer-consultations .neu-card > .neu-plate > div:first-child {
-    gap: 3px;
-    position: relative;
-    top: 2px;
-  }
-
-  .lawyer-consultations .neu-card > .neu-plate p {
-    font-size: 8px;
-    line-height: 12px;
-  }
-
-  .lawyer-consultations .neu-card > .neu-plate h4 {
-    font-size: 16px;
-  }
-
-  .lawyer-consultations .neu-card > .neu-plate button {
-    height: 30px;
-    padding: 0 16px;
-    font-size: 10px;
-  }
-
-  .lawyer-consultations .neu-card > .space-y-1\.5 > p:first-child {
-    font-size: 7px;
-    margin-block-end: 2px !important;
-  }
-
-  .lawyer-consultations .neu-card > .space-y-1\.5 {
-    padding-top: 0;
-  }
-
-  .lawyer-consultations .neu-card > .space-y-1\.5 h3 {
-    font-size: 16px;
-  }
-
-  .lawyer-consultations .neu-card > .space-y-1\.5 > div p {
-    font-family: var(--font-inter), Arial, sans-serif;
-    font-size: 10px;
-    line-height: 15px;
-    text-align: justify;
+  .lawyer-dash-kpi:hover .lawyer-dash-plate,
+  .lawyer-dash-row:hover {
+    translate: none;
   }
 }
 
@@ -1401,731 +769,6 @@ body {
   }
 }
 
-.lawyer-consultations-pending-header {
-  margin-top: 71px !important;
-}
-
-.lawyer-consultations-pending-header > button {
-  width: min(749px, 100%);
-  height: 44px;
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 16px;
-  font-weight: 600;
-  text-align: center;
-}
-
-.lawyer-consultations-pending-header > select {
-  width: min(270px, 100%);
-  height: 40px;
-  padding: 0 16px;
-  font-family: var(--font-inter), Arial, sans-serif;
-  font-size: 14px;
-  border-radius: 10px;
-}
-
-/* Consultations pills use the same solid Figma materials as the dashboard. */
-.lawyer-consultations {
-  --consultation-pill-raised:
-    -5px 5px 10px rgba(206, 194, 183, 0.2),
-    5px -5px 10px rgba(206, 194, 183, 0.2),
-    -5px -5px 10px rgba(252, 238, 223, 0.9),
-    5px 5px 13px rgba(206, 194, 183, 0.9),
-    inset 1px 1px 2px rgba(252, 238, 223, 0.3),
-    inset -1px -1px 2px rgba(206, 194, 183, 0.5);
-  --consultation-pill-recessed:
-    1px 1px 2px rgba(252, 238, 223, 0.3),
-    -1px -1px 2px rgba(206, 194, 183, 0.5),
-    inset -5px 5px 10px rgba(206, 194, 183, 0.2),
-    inset 5px -5px 10px rgba(206, 194, 183, 0.2),
-    inset -5px -5px 10px rgba(252, 238, 223, 0.9),
-    inset 5px 5px 13px rgba(206, 194, 183, 0.9);
-  --consultation-warm-raised:
-    -5px 5px 10px rgba(203, 179, 154, 0.2),
-    5px -5px 10px rgba(203, 179, 154, 0.2),
-    -5px -5px 10px rgba(249, 219, 188, 0.9),
-    5px 5px 13px rgba(203, 179, 154, 0.9),
-    inset 1px 1px 2px rgba(249, 219, 188, 0.3),
-    inset -1px -1px 2px rgba(203, 179, 154, 0.5);
-  --consultation-warm-recessed:
-    1px 1px 2px rgba(249, 219, 188, 0.3),
-    -1px -1px 2px rgba(203, 179, 154, 0.5),
-    inset -5px 5px 10px rgba(203, 179, 154, 0.2),
-    inset 5px -5px 10px rgba(203, 179, 154, 0.2),
-    inset -5px -5px 10px rgba(249, 219, 188, 0.9),
-    inset 5px 5px 13px rgba(203, 179, 154, 0.9);
-}
-
-.lawyer-consultations > .space-y-4 .lawyer-consultations-tab {
-  width: 100%;
-  height: 33px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 5px;
-  background: #e5d8cb;
-  box-shadow: var(--consultation-pill-raised);
-  color: rgba(52, 21, 18, 0.8);
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.26px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
-  transition: box-shadow 180ms ease;
-}
-
-.lawyer-consultations-tabs {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 20px;
-}
-
-.lawyer-consultations
-  > .space-y-4
-  .lawyer-consultations-tab[aria-pressed="true"] {
-  background: rgba(211, 151, 88, 0.3);
-}
-
-.lawyer-consultations-tab:hover:not([aria-pressed="true"]) {
-  background: rgba(211, 151, 88, 0.15);
-}
-
-.lawyer-consultations-tab:active {
-  box-shadow: var(--consultation-pill-recessed);
-}
-
-.lawyer-consultations-tab:focus-visible {
-  outline: 2px solid #341512;
-  outline-offset: 3px;
-}
-
-.lawyer-consultations > .space-y-4 .lawyer-consultations-search-input,
-.lawyer-consultations > .space-y-4 .lawyer-consultations-area-filter {
-  height: 40px;
-  border-radius: 5px;
-  background: #e5d8cb;
-  box-shadow: var(--consultation-pill-recessed);
-  color: rgba(52, 21, 18, 0.8);
-  font-family: var(--font-inter), Arial, sans-serif;
-  font-size: 14px;
-  font-weight: 400;
-  letter-spacing: 0.28px;
-}
-
-.lawyer-consultations > .space-y-4 .lawyer-consultations-search-input {
-  padding: 0 13px;
-}
-
-.lawyer-consultations
-  > .space-y-4
-  .lawyer-consultations-search-input::placeholder {
-  color: rgba(52, 21, 18, 0.3);
-}
-
-.lawyer-consultations > .space-y-4 .lawyer-consultations-area-filter {
-  width: 100%;
-  padding-left: 22px;
-}
-
-.lawyer-consultations .lawyer-consultations-area-arrow {
-  position: absolute;
-  top: 7px;
-  right: 13px;
-  width: 26px;
-  height: 26px;
-  color: #341512;
-  pointer-events: none;
-}
-
-.lawyer-consultations > .space-y-4 .lawyer-consultations-search-button {
-  height: 33px;
-  padding: 0 20px;
-  border-radius: 20px;
-  background: rgba(211, 151, 88, 0.3);
-  box-shadow: var(--consultation-pill-raised);
-  color: #341512;
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.24px;
-  gap: 8px;
-  justify-content: center;
-  transition: box-shadow 180ms ease;
-}
-
-.lawyer-consultations .lawyer-consultations-search-button svg {
-  width: 14px;
-  height: 14px;
-}
-
-.lawyer-consultations .lawyer-consultations-search-button {
-  position: relative;
-  top: -1px;
-}
-
-.lawyer-consultations > .grid .neu-plate.lawyer-consultations-heading-pill,
-.lawyer-consultations-pending-header > .lawyer-consultations-pending-pill {
-  height: 44px;
-  border-radius: 20px;
-  background: rgba(211, 151, 88, 0.3);
-  box-shadow: var(--consultation-pill-raised);
-  color: rgba(52, 21, 18, 0.8);
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.32px;
-}
-
-.lawyer-consultations .neu-card-md .lawyer-consultations-month-pill {
-  width: 180px;
-  height: 33px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: #e5d8cb;
-  box-shadow: var(--consultation-pill-recessed);
-  color: #d39758;
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.28px;
-}
-
-.lawyer-consultations .lawyer-consultations-calendar-day {
-  border: 0;
-  background: transparent;
-  color: #341512;
-  cursor: default;
-  font: inherit;
-  transition: background-color 180ms ease, box-shadow 180ms ease, color 180ms ease;
-}
-
-.lawyer-consultations .lawyer-consultations-calendar-day:not(:disabled) {
-  cursor: pointer;
-}
-
-.lawyer-consultations .lawyer-consultations-calendar-day[data-current="true"] {
-  background: #e5d8cb;
-  color: #bc7b35;
-  font-weight: 700;
-  box-shadow:
-    -3px -3px 7px rgba(252, 238, 223, 0.9),
-    3px 3px 8px rgba(190, 174, 158, 0.8),
-    inset 1px 1px 1px rgba(255, 246, 232, 0.7),
-    inset -1px -1px 2px rgba(177, 154, 134, 0.35);
-}
-
-.lawyer-consultations .lawyer-consultations-calendar-day[data-filtered="true"] {
-  background: #e5d8cb;
-  color: #a96f32;
-  font-weight: 700;
-  box-shadow:
-    inset 3px 3px 6px rgba(181, 161, 144, 0.68),
-    inset -3px -3px 6px rgba(252, 238, 223, 0.9),
-    1px 1px 2px rgba(252, 238, 223, 0.5);
-}
-
-.lawyer-consultations .lawyer-consultations-calendar-day:hover:not(:disabled):not([data-current="true"]):not([data-filtered="true"]) {
-  background: #e5d8cb;
-  color: #bc7b35;
-  box-shadow:
-    -3px -3px 7px rgba(252, 238, 223, 0.85),
-    3px 3px 8px rgba(190, 174, 158, 0.7);
-}
-
-.lawyer-consultations .lawyer-consultations-calendar-day:active:not(:disabled) {
-  box-shadow:
-    inset 3px 3px 6px rgba(181, 161, 144, 0.68),
-    inset -3px -3px 6px rgba(252, 238, 223, 0.9);
-}
-
-.lawyer-consultations .lawyer-consultations-calendar-day:focus-visible {
-  outline: 2px solid #9a602e;
-  outline-offset: 3px;
-}
-
-.lawyer-consultations .lawyer-consultations-calendar-dot {
-  position: absolute;
-  bottom: 0;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #c58b3c;
-  box-shadow: 1px 1px 2px rgba(132, 88, 46, 0.45), -1px -1px 2px rgba(255, 246, 232, 0.8);
-}
-
-.lawyer-consultations .lawyer-consultations-appointment-pill {
-  width: 100%;
-  height: 33px;
-  padding: 0 17px 0 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border: 0;
-  border-radius: 10px;
-  background: #e2c7ab;
-  box-shadow: var(--consultation-warm-recessed);
-  color: rgba(52, 21, 18, 0.8);
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: box-shadow 180ms ease, transform 180ms ease;
-}
-
-.lawyer-consultations
-  .lawyer-consultations-appointment-pill[data-selected="true"] {
-  box-shadow: var(--consultation-warm-raised);
-}
-
-.lawyer-consultations
-  .lawyer-consultations-appointment-pill:hover:not([data-selected="true"]) {
-  box-shadow: var(--consultation-warm-raised);
-  transform: translateY(-1px);
-}
-
-.lawyer-consultations .lawyer-consultations-appointment-pill:active {
-  box-shadow: var(--consultation-warm-recessed);
-  transform: translateY(1px);
-}
-
-.lawyer-consultations .lawyer-consultations-appointment-pill:focus-visible {
-  outline: 2px solid #341512;
-  outline-offset: 2px;
-}
-
-.lawyer-consultations .lawyer-consultations-appointment-pill span:first-child {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.24px;
-  line-height: 15px;
-}
-
-.lawyer-consultations .lawyer-consultations-appointment-pill span:last-child {
-  flex: none;
-  max-width: 46%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0.2px;
-  line-height: 13px;
-}
-
-@media (max-width: 1279px) {
-  .lawyer-consultations-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    column-gap: 12px;
-    row-gap: 18px;
-  }
-}
-
-@media (max-width: 699px) {
-  .lawyer-consultations-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 10px;
-    row-gap: 16px;
-  }
-  .lawyer-consultations-tab {
-    font-size: 12px;
-  }
-}
-
-@media (max-width: 360px) {
-  .lawyer-consultations-tabs {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lawyer-consultations-tab,
-  .lawyer-consultations-appointment-pill,
-  .lawyer-consultations-calendar-day {
-    transition: none;
-  }
-}
-
-.lawyer-consultations .lawyer-consultations-carousel-controls {
-  gap: 52px;
-  padding-left: 31px;
-}
-
-.lawyer-consultations .lawyer-consultations-carousel-controls > div {
-  position: relative;
-  top: 7px;
-  gap: 4px;
-}
-
-.lawyer-consultations .lawyer-consultations-next-pill {
-  position: relative;
-  top: 4px;
-}
-
-.lawyer-consultations
-  .neu-card
-  > div:first-child
-  .lawyer-consultations-date-pill,
-.lawyer-consultations
-  .neu-card
-  > div:first-child
-  .lawyer-consultations-time-pill,
-.lawyer-consultations
-  .neu-card
-  > div:first-child
-  .lawyer-consultations-status-pill {
-  height: 27px;
-  padding: 0 12px;
-  flex: none;
-  border-radius: 20px;
-  box-shadow: var(--consultation-pill-raised);
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.16px;
-  white-space: nowrap;
-}
-
-.lawyer-consultations
-  .neu-card
-  > div:first-child
-  .lawyer-consultations-date-pill {
-  width: 143px;
-  background: #e5d8cb;
-  color: rgba(52, 21, 18, 0.8);
-}
-
-.lawyer-consultations
-  .neu-card
-  > div:first-child
-  .lawyer-consultations-time-pill {
-  width: 159px;
-  background: #e5d8cb;
-  color: rgba(52, 21, 18, 0.8);
-}
-
-.lawyer-consultations
-  .neu-card
-  > div:first-child
-  .lawyer-consultations-status-pill {
-  width: 140px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: #d39758;
-  color: #fff6e9;
-  text-align: center;
-  text-shadow: 0 1px 1px rgba(91, 55, 31, 0.22);
-  box-shadow:
-    -5px -5px 10px rgba(252, 238, 223, 0.9),
-    5px 5px 13px rgba(190, 174, 158, 0.85),
-    inset 1px 1px 2px rgba(255, 243, 222, 0.48),
-    inset -1px -1px 2px rgba(115, 69, 34, 0.4);
-}
-
-.lawyer-consultations
-  .neu-card
-  > div:first-child
-  .lawyer-consultations-status-pill[data-status="confirmed"] {
-  background: #33a94e;
-  box-shadow:
-    -5px -5px 10px rgba(252, 238, 223, 0.9),
-    5px 5px 13px rgba(190, 174, 158, 0.85),
-    inset 1px 1px 2px rgba(222, 255, 223, 0.45),
-    inset -1px -1px 2px rgba(17, 94, 35, 0.42);
-}
-
-.lawyer-consultations
-  .neu-card
-  > div:first-child
-  .lawyer-consultations-status-pill:is([data-status="cancelled"], [data-status="declined"]) {
-  background: #b65b51;
-  box-shadow:
-    -5px -5px 10px rgba(252, 238, 223, 0.9),
-    5px 5px 13px rgba(190, 174, 158, 0.85),
-    inset 1px 1px 2px rgba(255, 226, 217, 0.46),
-    inset -1px -1px 2px rgba(105, 37, 32, 0.42);
-}
-
-.lawyer-consultations
-  .neu-card
-  > div:first-child
-  .lawyer-consultations-status-pill[data-status="completed"] {
-  background: #e5d8cb;
-  color: #5c4437;
-  text-shadow: none;
-  box-shadow: var(--consultation-pill-raised);
-}
-
-.lawyer-consultations
-  .neu-card
-  > .neu-plate
-  .lawyer-consultations-message-pill {
-  width: 87px;
-  height: 25px;
-  padding: 0;
-  flex: none;
-  border-radius: 10px;
-  background: #e2c7ab;
-  box-shadow: var(--consultation-warm-raised);
-  color: rgba(52, 21, 18, 0.8);
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.24px;
-  position: relative;
-  top: 1px;
-}
-
-.lawyer-consultations .lawyer-consultations-cancel-pill,
-.lawyer-consultations .lawyer-consultations-details-pill,
-.lawyer-consultations .lawyer-consultations-join-pill,
-.lawyer-consultations .lawyer-consultations-approve-pill {
-  height: 35px;
-  border-radius: 10px;
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.24px;
-}
-
-.lawyer-consultations .lawyer-consultations-cancel-pill {
-  width: 97px;
-  padding: 0;
-  border: 1px solid rgba(52, 21, 18, 0.8);
-  background: #e5d8cb;
-  box-shadow: none;
-  color: #341512;
-}
-
-.lawyer-consultations .lawyer-consultations-details-pill {
-  min-width: 111px;
-  padding: 0 12px;
-  background: rgba(52, 21, 18, 0.8);
-  box-shadow: var(--consultation-pill-raised);
-  color: #e5d8cb;
-}
-
-.lawyer-consultations .lawyer-consultations-join-pill {
-  width: 110px;
-  padding: 0 0 0 12px;
-  gap: 4px;
-  justify-content: flex-start;
-  background: rgba(211, 151, 88, 0.7);
-  box-shadow: var(--consultation-pill-raised);
-  color: #341512;
-  cursor: pointer;
-  transition: box-shadow 180ms ease, background-color 180ms ease;
-}
-
-.lawyer-consultations .lawyer-consultations-join-pill:hover {
-  background: rgba(211, 151, 88, 0.8);
-}
-
-.lawyer-consultations .lawyer-consultations-join-pill:active {
-  box-shadow: var(--consultation-pill-recessed);
-}
-
-.lawyer-consultations .lawyer-consultations-join-pill svg {
-  width: 22px;
-  height: 22px;
-}
-
-.lawyer-consultations .lawyer-consultations-approve-pill {
-  min-width: 111px;
-  background: rgba(52, 21, 18, 0.8);
-  box-shadow: var(--consultation-pill-raised);
-  color: #e5d8cb;
-}
-
-.lawyer-consultations .lawyer-consultations-prev-pill {
-  background: transparent;
-  box-shadow: none;
-  font-size: 30px;
-  font-weight: 400;
-}
-
-.lawyer-consultations .lawyer-consultations-next-pill {
-  background: #e5d8cb;
-  box-shadow: var(--consultation-pill-raised);
-  font-size: 30px;
-  font-weight: 400;
-}
-
-.lawyer-consultations .lawyer-consultations-prev-pill img,
-.lawyer-consultations .lawyer-consultations-next-pill img {
-  flex: none;
-  max-width: none;
-}
-
-.lawyer-consultations-pending-header > .lawyer-consultations-pending-pill {
-  margin-left: 1px;
-}
-
-.lawyer-consultations-pending-header > .lawyer-consultations-period-pill {
-  margin-right: 0;
-  position: relative;
-  top: 2px;
-  background: #e5d8cb;
-  box-shadow: var(--consultation-pill-recessed);
-  color: rgba(52, 21, 18, 0.8);
-  font-family: var(--font-inter), Arial, sans-serif;
-  font-size: 14px;
-  font-weight: 400;
-  letter-spacing: 0.28px;
-}
-
-.lawyer-consultations-pending-header > .lawyer-consultations-period-arrow {
-  display: none;
-}
-
-@media (min-width: 1280px) {
-  .lawyer-consultations-pending-header {
-    position: relative;
-  }
-
-  .lawyer-consultations-pending-header > .lawyer-consultations-period-pill {
-    appearance: none;
-    padding-left: 20px;
-    padding-right: 42px;
-  }
-
-  .lawyer-consultations-pending-header > .lawyer-consultations-period-arrow {
-    display: block;
-    position: absolute;
-    top: 11px;
-    right: 13px;
-    width: 26px;
-    height: 26px;
-    color: #341512;
-    pointer-events: none;
-  }
-
-  .lawyer-consultations .neu-card > div:first-child > div:first-child {
-    gap: 15px;
-  }
-  .lawyer-consultations
-    .neu-card
-    > div:first-child
-    .lawyer-consultations-status-pill {
-    margin-right: 2px;
-  }
-  .lawyer-consultations
-    .neu-card
-    > .neu-plate
-    .lawyer-consultations-message-pill {
-    margin-right: 17px;
-  }
-  .lawyer-consultations .neu-card > div:last-child > div {
-    gap: 18px;
-    margin-right: 0;
-    position: relative;
-    top: 7px;
-  }
-}
-
-@media (min-width: 640px) and (max-width: 1279px) {
-  .lawyer-consultations > .space-y-4 {
-    padding: 20px;
-  }
-
-  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px;
-  }
-
-  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > div:first-child {
-    grid-column: 1 / -1;
-    max-width: none;
-  }
-
-  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > button {
-    width: 161px;
-    height: 40px;
-    justify-self: start;
-  }
-
-  .lawyer-consultations-pending-header {
-    margin-top: 40px !important;
-  }
-}
-
-@media (max-width: 639px) {
-  .lawyer-consultations > .space-y-4 {
-    padding: 16px;
-  }
-
-  .lawyer-consultations-pending-header {
-    margin-top: 32px !important;
-  }
-}
-
-@media (min-width: 1400px) {
-  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) {
-    display: grid;
-    grid-template-columns: 421px 161px 356px;
-    gap: 19px;
-    align-items: center;
-  }
-
-  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > div:first-child {
-    width: 421px;
-    max-width: none;
-  }
-
-  .lawyer-consultations
-    > .space-y-4
-    > .flex:nth-child(2)
-    > div:first-child
-    input {
-    height: 40px;
-    border-radius: 5px;
-    font-family: var(--font-inter), Arial, sans-serif;
-    font-size: 14px;
-  }
-
-  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > button {
-    width: 161px;
-    height: 33px;
-    padding: 0 0 0 47px;
-    justify-content: flex-start;
-    gap: 5px;
-  }
-
-  .lawyer-consultations > .space-y-4 > .flex:nth-child(2) > div:last-child {
-    width: 356px;
-    margin-left: 27px;
-    position: relative;
-    top: 3px;
-  }
-
-  .lawyer-consultations
-    > .space-y-4
-    > .flex:nth-child(2)
-    > div:last-child
-    select {
-    width: 100%;
-    height: 40px;
-    border-radius: 5px;
-  }
-}
-
-.lawyer-consultations .neu-card-md,
-.lawyer-consultations .neu-plate:not(.rounded-full) {
-  border-radius: 14px;
-}
-
 .lawyer-documents {
   max-width: 1196px;
   padding: 24px 38px;
@@ -2211,8 +854,6 @@ body {
 }
 
 @media (max-width: 640px) {
-  .lawyer-dashboard,
-  .lawyer-consultations,
   .lawyer-documents {
     padding: 20px 16px 40px;
   }
@@ -2222,6 +863,98 @@ body {
     height: auto;
     aspect-ratio: 16 / 13;
   }
+}
+
+/*
+ * Raised button sitting on the caramel highlight banner (.neu-raised-highlight over #E5D8CB,
+ * which composites to ~#E0C5A9). Same surface colour as the banner; the dark and light shadows
+ * are darker/lighter tints of that colour so the button reads as extruded from the banner.
+ */
+.neu-btn-banner {
+  background-color: #e0c5a9;
+  border: none;
+  box-shadow:
+    4px 4px 12px 0 rgba(176, 140, 104, 0.4),
+    -4px -4px 10px 0 rgba(248, 230, 210, 0.7),
+    4px -4px 10px 0 rgba(176, 140, 104, 0.08),
+    -4px 4px 10px 0 rgba(176, 140, 104, 0.08),
+    inset -1px -1px 2px 0 rgba(176, 140, 104, 0.25),
+    inset 1px 1px 2px 0 rgba(248, 230, 210, 0.45);
+  transition:
+    box-shadow 0.18s ease,
+    filter 0.18s ease,
+    transform 0.18s ease;
+}
+
+.neu-btn-banner:hover {
+  filter: brightness(1.03);
+}
+
+.neu-btn-banner:active {
+  transform: scale(0.97);
+  box-shadow:
+    inset 3px 3px 7px 0 rgba(176, 140, 104, 0.4),
+    inset -3px -3px 7px 0 rgba(248, 230, 210, 0.7);
+}
+
+.neu-btn-banner:focus-visible {
+  outline: 2px solid #c58b3c;
+  outline-offset: 3px;
+}
+
+/*
+ * Shadow-only version of .neu-raised-sm: the same light and shadow (tints of the #E5D8CB page
+ * surface) without setting a background, so coloured pills (status badges) keep their fill.
+ */
+.neu-raised-pill {
+  border: none;
+  box-shadow:
+    5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    -5px 5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    inset 1px 1px 2px 0 rgba(252, 238, 223, 0.3);
+}
+
+/* Small element pressed into the caramel banner (count pills, wells on .neu-raised-highlight). */
+.neu-inset-banner {
+  background-color: #dcc0a2;
+  border: none;
+  box-shadow:
+    inset 2px 2px 4px 0 rgba(176, 140, 104, 0.45),
+    inset -2px -2px 4px 0 rgba(248, 230, 210, 0.75);
+}
+
+/*
+ * Calendar day with a consultation: a small caramel-tinted bubble raised out of the recessed
+ * date well (#E5D8CB). Shadows are kept tight so neighbouring days don't blur together.
+ */
+.neu-day-booked {
+  background: linear-gradient(145deg, #eedfce, #e3cfb9);
+  border: none;
+  box-shadow:
+    2px 2px 4px 0 rgba(190, 168, 146, 0.7),
+    -2px -2px 4px 0 rgba(255, 248, 240, 0.9),
+    inset 0 0 0 1px rgba(211, 151, 88, 0.28);
+  transition:
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.neu-day-booked:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    3px 3px 5px 0 rgba(190, 168, 146, 0.75),
+    -2px -2px 5px 0 rgba(255, 248, 240, 0.95),
+    inset 0 0 0 1px rgba(211, 151, 88, 0.4);
+}
+
+.neu-day-booked:active {
+  transform: none;
+  box-shadow:
+    inset 2px 2px 4px 0 rgba(190, 168, 146, 0.7),
+    inset -2px -2px 4px 0 rgba(255, 248, 240, 0.85);
 }
 
 /* Raised containers / cards (Figma spec: large raised surface #E5D8CB) */
@@ -2468,6 +1201,95 @@ body {
     0 0 0 2px rgba(220, 38, 38, 0.35);
 }
 
+/* Destructive action (cancel booking, withdraw, decline). Like .neu-btn-caramel and
+   .neu-btn-espresso, the raised/pressed shadows are lit relative to the #E5D8CB surface. */
+.neu-btn-danger {
+  background-color: #b42318;
+  box-shadow:
+    var(--neu-raised-sm-shadow),
+    inset 1px 1px 2px 0 rgba(255, 255, 255, 0.25),
+    inset -1px -1px 2px 0 rgba(80, 10, 5, 0.25);
+  border: none;
+  transition: all 140ms ease;
+}
+
+.neu-btn-danger:hover {
+  background-color: #9f1f15;
+}
+
+.neu-btn-danger:active {
+  box-shadow: var(--neu-pressed-sm-shadow);
+}
+
+/* Shared modal entrance (NeuModal). */
+@keyframes neuOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes neuModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.neu-overlay-in {
+  animation: neuOverlayIn 0.18s ease-out both;
+}
+
+.neu-modal-in {
+  animation: neuModalIn 0.26s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Gentle idle float for empty-state icons. */
+@keyframes neuFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.neu-float {
+  animation: neuFloat 3.2s ease-in-out infinite;
+}
+
+/* Soft expanding ring (e.g. "meeting link ready" beacon). */
+@keyframes neuBeacon {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.neu-beacon {
+  animation: neuBeacon 1.8s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neu-overlay-in,
+  .neu-modal-in,
+  .neu-float,
+  .neu-beacon {
+    animation: none;
+  }
+}
+
 /* Sign-in modal container (Figma spec: inset body + outer rim, #D39758 outline) */
 .neu-modal {
   background-color: #e5d8cb;
@@ -2571,4 +1393,340 @@ input:-webkit-autofill:focus {
     inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9) !important;
   -webkit-text-fill-color: #34150f !important;
   transition: background-color 5000s ease-in-out 0s;
+}
+
+/* ── Client portal chrome: sidebar ─────────────────────────────────────────── */
+.client-sidebar {
+  background: #dbc9ba;
+  color: rgb(52 21 18 / 0.8);
+  font-family: var(--font-lora), Georgia, serif;
+}
+.client-side-row {
+  color: rgb(52 21 18 / 0.8);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 220ms ease;
+}
+.client-side-row:hover,
+.client-side-row[data-active] {
+  color: #341512;
+}
+.client-side-row[data-tone="danger"]:hover {
+  color: #8f2b1d;
+}
+.client-side-row:focus-visible {
+  box-shadow: 0 0 0 2px rgb(52 21 18 / 0.35);
+}
+/* Recessed well under the active tab (glides between rows via layoutId): pressed into the
+   #DBC9BA surface with shade on the top-left inner edge and light on the bottom-right. */
+.client-side-pill {
+  /* Matched to the reference: centre = surface colour; ~#CDBCAE shade top-left and
+     ~#E4D1C1 light bottom-right, each fading over ~12–15px. */
+  background: #dbc9ba;
+  box-shadow:
+    inset 6px 6px 12px rgb(160 140 125 / 0.36),
+    inset -6px -6px 12px rgb(250 238 226 / 0.5);
+}
+.client-side-hover {
+  background: rgb(52 21 18 / 0.055);
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity 220ms ease,
+    transform 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.client-side-row:hover .client-side-hover {
+  opacity: 1;
+  transform: scale(1);
+}
+.client-side-row[data-active] .client-side-hover {
+  opacity: 0;
+}
+.client-side-row[data-tone="danger"] .client-side-hover {
+  background: rgb(143 43 29 / 0.07);
+}
+.client-side-icon,
+.client-side-label {
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.client-side-row:hover .client-side-icon {
+  transform: translateX(1px) scale(1.1);
+}
+.client-side-row:hover .client-side-label {
+  transform: translateX(3px);
+}
+.client-side-row[data-tone="danger"]:hover .client-side-icon {
+  transform: translateX(3px);
+}
+
+/* ── Client portal chrome: top bar ─────────────────────────────────────────── */
+.client-topbar {
+  background: #341512;
+  box-shadow:
+    0 1px 0 rgb(0 0 0 / 0.25),
+    0 6px 18px -8px rgb(26 9 7 / 0.55);
+}
+.client-topbar-icon {
+  color: #e5d8cb;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.client-topbar-icon:focus-visible {
+  box-shadow: 0 0 0 2px rgb(229 216 203 / 0.45);
+}
+.client-topbar-halo {
+  background: radial-gradient(circle, rgb(229 216 203 / 0.16), rgb(229 216 203 / 0.08) 70%);
+}
+.client-topbar-icon[data-active] .client-topbar-halo {
+  background: radial-gradient(circle, rgb(229 216 203 / 0.2), rgb(229 216 203 / 0.11) 70%);
+  box-shadow: inset 0 0 0 1px rgb(229 216 203 / 0.08);
+}
+
+/* Popovers: parchment neumorphism, the same #E5D8CB surface as the page they drop onto.
+   Every interactive surface keeps the same 4 shadow layers (outer dark, outer light,
+   inset dark, inset light) so rest -> hover (raised) -> press (recessed) interpolates. */
+.client-popover {
+  --neu-dark: 190 174 159;
+  --neu-light: 255 248 240;
+  border-radius: 22px;
+  background: #e5d8cb;
+  border: 1px solid rgb(52 21 18 / 0.12);
+  color: #341512;
+  font-family: var(--font-inter), Arial, sans-serif;
+}
+.client-popover-caret {
+  position: absolute;
+  top: -7px;
+  right: var(--caret, 16px);
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  background: #e5d8cb;
+  border-left: 1px solid rgb(52 21 18 / 0.12);
+  border-top: 1px solid rgb(52 21 18 / 0.12);
+  border-top-left-radius: 3px;
+}
+/* Even-thickness ring around the monogram (no directional shadow, so it reads centred). */
+.client-avatar-ring {
+  background: #ebe0d5;
+  box-shadow: 0 0 0 1px rgb(52 21 18 / 0.08);
+}
+.client-popover-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(52 21 18 / 0.18) transparent;
+}
+.client-popover-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.client-popover-scroll::-webkit-scrollbar-thumb {
+  background: rgb(52 21 18 / 0.18);
+  border-radius: 999px;
+}
+
+/* Static neu primitives (soft) */
+.client-neu-well {
+  background: #e1d3c5;
+  box-shadow:
+    inset 2px 2px 5px rgb(var(--neu-dark) / 0.36),
+    inset -2px -2px 5px rgb(var(--neu-light) / 0.7);
+}
+.client-neu-raised-sm {
+  box-shadow:
+    2px 2px 5px rgb(var(--neu-dark) / 0.42),
+    -2px -2px 5px rgb(var(--neu-light) / 0.75);
+}
+.client-neu-thumb {
+  background: #e8dcd0;
+  box-shadow:
+    1.5px 1.5px 4px rgb(var(--neu-dark) / 0.42),
+    -1.5px -1.5px 4px rgb(var(--neu-light) / 0.75);
+}
+.client-neu-groove {
+  height: 2px;
+  border-radius: 2px;
+  box-shadow:
+    inset 1px 1px 1px rgb(var(--neu-dark) / 0.45),
+    inset -1px -1px 1px rgb(var(--neu-light) / 0.8);
+}
+.client-avatar {
+  color: #341512;
+  background: linear-gradient(140deg, #f0c27f, #c58b3c);
+  box-shadow: inset 0 0 0 1px rgb(255 240 210 / 0.35);
+}
+.client-unread-dot {
+  background: #c58b3c;
+  box-shadow: 0 0 0 3px rgb(197 139 60 / 0.18);
+  animation: clientUnreadPulse 2.4s ease-in-out infinite;
+}
+@keyframes clientUnreadPulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgb(197 139 60 / 0.18); }
+  50% { box-shadow: 0 0 0 6px rgb(197 139 60 / 0); }
+}
+
+/* Interactive neu surfaces. Cards and menu rows are RECESSED (inset shadows only), so
+   nothing spills past their edges. Every state keeps the same 4 layers (outer dark,
+   outer light, inset dark, inset light) so transitions interpolate smoothly. */
+.client-notif-card,
+.client-neu-item,
+.client-neu-btn {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    box-shadow 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 200ms ease,
+    color 200ms ease;
+  --rest:
+    0 0 0 rgb(var(--neu-dark) / 0), 0 0 0 rgb(var(--neu-light) / 0),
+    inset 0 0 0 rgb(var(--neu-dark) / 0), inset 0 0 0 rgb(var(--neu-light) / 0);
+  --raised:
+    2px 2px 5px rgb(var(--neu-dark) / 0.4), -2px -2px 5px rgb(var(--neu-light) / 0.7),
+    inset 0 0 0 rgb(var(--neu-dark) / 0), inset 0 0 0 rgb(var(--neu-light) / 0);
+  --lifted:
+    3px 3px 7px rgb(var(--neu-dark) / 0.45), -3px -3px 7px rgb(var(--neu-light) / 0.75),
+    inset 0 0 0 rgb(var(--neu-dark) / 0), inset 0 0 0 rgb(var(--neu-light) / 0);
+  --recessed-soft:
+    0 0 0 rgb(var(--neu-dark) / 0), 0 0 0 rgb(var(--neu-light) / 0),
+    inset 1.5px 1.5px 4px rgb(var(--neu-dark) / 0.22), inset -1.5px -1.5px 4px rgb(var(--neu-light) / 0.55);
+  --recessed:
+    0 0 0 rgb(var(--neu-dark) / 0), 0 0 0 rgb(var(--neu-light) / 0),
+    inset 2px 2px 6px rgb(var(--neu-dark) / 0.32), inset -2px -2px 6px rgb(var(--neu-light) / 0.65);
+  --recessed-deep:
+    0 0 0 rgb(var(--neu-dark) / 0), 0 0 0 rgb(var(--neu-light) / 0),
+    inset 3px 3px 7px rgb(var(--neu-dark) / 0.4), inset -3px -3px 7px rgb(var(--neu-light) / 0.72);
+  box-shadow: var(--rest);
+}
+.client-notif-card:focus-visible,
+.client-neu-item:focus-visible,
+.client-neu-btn:focus-visible {
+  outline: 2px solid rgb(197 139 60 / 0.55);
+  outline-offset: 2px;
+}
+
+/* Notification cards: read = faint recess, unread = a touch deeper and warmer. */
+.client-notif-card {
+  background: #e3d6c9;
+  box-shadow: var(--recessed-soft);
+}
+.client-notif-card[data-unread] {
+  background: #e0d2c4;
+  box-shadow: var(--recessed);
+}
+.client-notif-card:hover {
+  background: #dfd0c2;
+  box-shadow: var(--recessed-deep);
+}
+.client-notif-card:active {
+  box-shadow: var(--recessed-deep);
+  background: #dccdbe;
+  transition-duration: 120ms;
+}
+
+/* Profile menu rows: flat at rest, sink in on hover, deeper on press. */
+.client-neu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 14px;
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: rgb(52 21 18 / 0.82);
+}
+.client-neu-item:hover {
+  color: #341512;
+  background: #e1d3c5;
+  box-shadow: var(--recessed);
+}
+.client-neu-item:active {
+  box-shadow: var(--recessed-deep);
+  transition-duration: 120ms;
+}
+.client-neu-chip {
+  display: grid;
+  height: 2rem;
+  width: 2rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 999px;
+  color: #8c5a1e;
+  background: #e5d8cb;
+  box-shadow:
+    1.5px 1.5px 4px rgb(var(--neu-dark) / 0.42),
+    -1.5px -1.5px 4px rgb(var(--neu-light) / 0.75),
+    inset 0 0 0 rgb(var(--neu-dark) / 0),
+    inset 0 0 0 rgb(var(--neu-light) / 0);
+  transition:
+    box-shadow 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.client-neu-item:hover .client-neu-chip {
+  transform: scale(1.05);
+}
+.client-neu-item:active .client-neu-chip {
+  transform: scale(0.96);
+  box-shadow:
+    0 0 0 rgb(var(--neu-dark) / 0),
+    0 0 0 rgb(var(--neu-light) / 0),
+    inset 1.5px 1.5px 3px rgb(var(--neu-dark) / 0.4),
+    inset -1.5px -1.5px 3px rgb(var(--neu-light) / 0.7);
+}
+.client-neu-item-chevron {
+  opacity: 0;
+  transform: translateX(-4px);
+  color: rgb(52 21 18 / 0.5);
+  transition:
+    opacity 200ms ease,
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.client-neu-item:hover .client-neu-item-chevron,
+.client-neu-item:focus-visible .client-neu-item-chevron {
+  opacity: 1;
+  transform: translateX(0);
+}
+.client-neu-item[data-tone="danger"],
+.client-neu-item[data-tone="danger"] .client-neu-chip {
+  color: #9a3a22;
+}
+.client-neu-item[data-tone="danger"]:hover {
+  color: #82301b;
+}
+
+/* Small soft-raised pill button ("Mark all read") */
+.client-neu-btn {
+  color: #8c5a1e;
+  box-shadow: var(--raised);
+}
+.client-neu-btn:hover:not(:disabled) {
+  color: #6f4615;
+  box-shadow: var(--lifted);
+}
+.client-neu-btn:active:not(:disabled) {
+  box-shadow: var(--recessed-deep);
+  transition-duration: 120ms;
+}
+.client-neu-btn:disabled {
+  cursor: default;
+  color: rgb(52 21 18 / 0.35);
+  box-shadow: var(--recessed-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .client-side-hover,
+  .client-side-icon,
+  .client-side-label,
+  .client-neu-chip,
+  .client-neu-item-chevron {
+    transition: none;
+  }
+  .client-side-row:hover .client-side-icon,
+  .client-side-row:hover .client-side-label,
+  .client-neu-item:hover .client-neu-chip,
+  .client-neu-item:active .client-neu-chip {
+    transform: none;
+  }
+  .client-unread-dot {
+    animation: none;
+  }
 }

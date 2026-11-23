@@ -83,10 +83,11 @@ export default function RootLayout({
 }) {
   return (
     <html
+      suppressHydrationWarning
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${cinzel.variable} ${cormorant.variable} ${cormorantUnicase.variable} ${lora.variable} ${inter.variable} h-full antialiased scroll-smooth`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      <body suppressHydrationWarning className="min-h-full flex flex-col bg-background text-foreground">
         {/* TODO: <I18nProvider> */}
         {/* TODO: <ToastProvider> */}
         {children}

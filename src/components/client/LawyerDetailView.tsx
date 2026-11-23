@@ -43,11 +43,15 @@ import {
   uploadDocumentFileAction,
 } from '@/app/actions/consultationActions';
 import type {
-  ClientConsultation,
   DocumentFileItem,
   DocumentFolderItem,
 } from '@/app/actions/consultationActions';
-import { ConsultationSummaryModal, clientConsultationToSummary } from './ConsultationSummaryModal';
+import {
+  BookingConfirmModal,
+  type BookingConfirmDetails,
+  type BookingConfirmPhase,
+} from './BookingConfirmModal';
+import { NeuModal, NeuButton, NeuAlert, EmptyState, StarIcon as NeuStarIcon } from '@/components/shared/neu';
 
 /** A My Documents file attached to the booking (shared with the lawyer by document ID). */
 interface BookingAttachment {
@@ -955,7 +959,10 @@ export function LawyerDetailView({
   const [submittingBooking, setSubmittingBooking] = useState<boolean>(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [invalidField, setInvalidField] = useState<'subject' | 'terms' | null>(null);
-  const [submittedConsultation, setSubmittedConsultation] = useState<ClientConsultation | null>(null);
+  // Review → submit dialog. Details are snapshotted when it opens so the sheet can't drift.
+  const [confirmPhase, setConfirmPhase] = useState<BookingConfirmPhase | null>(null);
+  const [confirmDetails, setConfirmDetails] = useState<BookingConfirmDetails | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState<boolean>(false);
   const [isDraggingFiles, setIsDraggingFiles] = useState<boolean>(false);
   const draftRestoredRef = useRef<boolean>(false);
@@ -1408,34 +1415,73 @@ export function LawyerDetailView({
       return;
     }
 
+    // Valid: open the review sheet; the request is only sent from there.
+    setConfirmError(null);
+    setConfirmDetails({
+      dateStr: `${selectedMonthName} ${selectedDay}, ${currentYear}`.toUpperCase(),
+      timeSlot: selectedTimeSlot.split(' • ')[0],
+      communicationMode,
+      lawyerName: lawyer.fullName,
+      lawyerLines: [
+        [lawyer.rollNumber && `Roll No. ${lawyer.rollNumber}`, lawyer.ibpChapter && `IBP ${lawyer.ibpChapter}`]
+          .filter(Boolean)
+          .join('  |  '),
+        (lawyer.practiceAreas || []).join(' • '),
+      ],
+      rate: standardFee,
+      subject: subject.trim(),
+      description: description.trim(),
+      attachments: attachedFiles,
+    });
+    setConfirmPhase('review');
+  };
+
+  const handleConfirmBooking = async () => {
+    if (submittingBooking) return;
+    setConfirmError(null);
+    setConfirmPhase('submitting');
     setSubmittingBooking(true);
     try {
-      const res = await bookConsultationAction({
-        lawyerId: lawyer.userId,
-        dateStr: `${selectedMonthName} ${selectedDay}, ${currentYear}`,
-        timeSlot: selectedTimeSlot,
-        communicationMode,
-        subject,
-        description,
-        documentIds: attachedFiles.map((f) => f.id),
-      });
+      // Keep the loader on screen long enough to read, even when the server answers instantly.
+      const [res] = await Promise.all([
+        bookConsultationAction({
+          lawyerId: lawyer.userId,
+          dateStr: `${selectedMonthName} ${selectedDay}, ${currentYear}`,
+          timeSlot: selectedTimeSlot,
+          communicationMode,
+          subject,
+          description,
+          documentIds: attachedFiles.map((f) => f.id),
+        }),
+        new Promise((resolve) => setTimeout(resolve, 1300)),
+      ]);
 
       if (!('consultation' in res) || !res.consultation) {
-        setBookingError(('error' in res && res.error) || 'Error submitting booking');
+        const msg = ('error' in res && res.error) || 'Error submitting booking';
+        setConfirmError(msg);
+        setBookingError(msg);
+        setConfirmPhase('review');
         setSlotsRefreshKey((k) => k + 1);
         return;
       }
 
-      setSubmittedConsultation(res.consultation);
+      setConfirmPhase('success');
       resetBookingForm();
       setBookingStatus('idle');
       setSlotsRefreshKey((k) => k + 1);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error submitting booking';
+      setConfirmError(msg);
       setBookingError(msg);
+      setConfirmPhase('review');
     } finally {
       setSubmittingBooking(false);
     }
+  };
+
+  const closeConfirm = () => {
+    if (confirmPhase === 'submitting') return;
+    setConfirmPhase(null);
   };
 
   const toggleHelpful = (idx: string | number) => {
@@ -1980,7 +2026,7 @@ export function LawyerDetailView({
                 <AnimatePresence initial={false}>
                   {reviewsError && (
                     <Collapse key="reviews-error" gap={24}>
-                      <p role="alert" className="text-red-700">{reviewsError}</p>
+                      <NeuAlert tone="error">{reviewsError}</NeuAlert>
                     </Collapse>
                   )}
                 </AnimatePresence>
@@ -2161,12 +2207,25 @@ export function LawyerDetailView({
                         })}
 
                         {filteredReviews.length === 0 && !(reviewsLoading && reviewsList.length === 0) && (
-                          <motion.div variants={STAGGER_ITEM} className="py-10 text-center text-xs text-[#341512]/80 font-lora">
-                            {reviewsError
-                              ? 'Reviews are currently unavailable.'
-                              : reviewsList.length === 0
-                                ? 'No consultation reviews yet.'
-                                : 'No reviews match this rating.'}
+                          <motion.div variants={STAGGER_ITEM}>
+                            <EmptyState
+                              size="sm"
+                              icon={<NeuStarIcon />}
+                              title={
+                                reviewsError
+                                  ? 'Reviews are unavailable'
+                                  : reviewsList.length === 0
+                                    ? 'No reviews yet'
+                                    : 'No reviews match this rating'
+                              }
+                              description={
+                                reviewsError
+                                  ? 'Please try again in a moment.'
+                                  : reviewsList.length === 0
+                                    ? 'Reviews appear here after clients complete a consultation.'
+                                    : 'Try a different star filter to see more reviews.'
+                              }
+                            />
                           </motion.div>
                         )}
                       </motion.div>
@@ -2694,21 +2753,7 @@ export function LawyerDetailView({
                       <AnimatePresence initial={false}>
                         {bookingError && (
                           <Collapse key="booking-error" gap={20}>
-                            <div role="alert" className="p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 text-xs font-semibold">
-                              <span className="flex items-center gap-1.5">
-                                <motion.svg
-                                  initial={{ scale: 0, rotate: -30 }}
-                                  animate={{ scale: 1, rotate: 0 }}
-                                  transition={{ type: 'spring', stiffness: 500, damping: 14, delay: 0.1 }}
-                                  className="w-4 h-4 text-rose-600 shrink-0"
-                                  viewBox="0 0 20 20"
-                                  fill="currentColor"
-                                >
-                                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                </motion.svg>
-                                <span>{bookingError}</span>
-                              </span>
-                            </div>
+                            <NeuAlert tone="error">{bookingError}</NeuAlert>
                           </Collapse>
                         )}
                       </AnimatePresence>
@@ -2944,288 +2989,230 @@ export function LawyerDetailView({
 
         {/* ─── Share From My Documents Vault Modal ─────────────────────────────── */}
         <AnimatePresence>
-          {showDocPickerModal && (
-            <motion.div
-              key="doc-picker-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              onClick={() => setShowDocPickerModal(false)}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-            >
-              <motion.div
-                role="dialog"
-                aria-modal="true"
-                aria-label="My Documents Vault"
-                onClick={(e) => e.stopPropagation()}
-                initial={{ opacity: 0, y: 32, scale: 0.94 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 20, scale: 0.97 }}
-                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                className="w-full max-w-3xl rounded-[32px] p-6 sm:p-8 bg-[#E5D8CB] space-y-5 max-h-[90vh] flex flex-col"
-                style={{
-                  boxShadow: '16px 16px 40px rgba(0,0,0,0.35), -8px -8px 24px #FFFFFF',
-                }}
-              >
-                {/* Modal Header */}
-                <div className="flex items-center justify-between pb-3 border-b border-[#D1BEA8]/80">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-[#E5D8CB] flex items-center justify-center shadow-xs">
-                      <FolderIcon className="w-5 h-5 text-[#C58B3C]" />
-                    </div>
-                    <div>
-                      <h3 className="font-lora text-2xl font-bold text-[#23150F] leading-tight">My Documents Vault</h3>
-                      <p className="text-xs text-[#5C4535]">
-                        Select records or upload documents from your vault to attach to this consultation.
-                      </p>
-                    </div>
-                  </div>
-                  <Key
-                    aria-label="Close"
-                    onClick={() => setShowDocPickerModal(false)}
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#23150F] hover:bg-[#E5D8CB]/40 transition-colors cursor-pointer"
-                  >
-                    <CloseIcon className="w-3.5 h-3.5" />
-                  </Key>
+        {showDocPickerModal && (
+          <NeuModal
+            key="doc-picker-modal"
+            onClose={() => setShowDocPickerModal(false)}
+            size="xl"
+            icon={<FolderIcon className="w-5 h-5" />}
+            title="My Documents Vault"
+            subtitle="Select files from your vault, or upload new ones, to share with the attorney for this consultation."
+            bodyClassName="space-y-5"
+            footerStart={
+              <>
+                <RollNumber value={selectedDocPickerFiles.length} /> file{selectedDocPickerFiles.length === 1 ? '' : 's'} selected
+              </>
+            }
+            footer={
+              <>
+                <NeuButton variant="secondary" onClick={() => setShowDocPickerModal(false)}>
+                  Cancel
+                </NeuButton>
+                <NeuButton variant="dark" onClick={handleConfirmDocPicker} disabled={selectedDocPickerFiles.length === 0}>
+                  Attach Selected (<RollNumber value={selectedDocPickerFiles.length} />)
+                </NeuButton>
+              </>
+            }
+          >
+            {/* Notification Notice */}
+            <AnimatePresence initial={false}>
+              {pickerNotice && (
+                <Collapse key="picker-notice">
+                  <NeuAlert tone="info" onDismiss={() => setPickerNotice(null)}>
+                    {pickerNotice}
+                  </NeuAlert>
+                </Collapse>
+              )}
+            </AnimatePresence>
+
+            {/* Quick Upload & Create Folder Bar */}
+            <div className="neu-recessed rounded-[20px] p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <input type="file" ref={pickerFileInputRef} className="hidden" onChange={handlePickerFileUpload} />
+                <NeuButton
+                  size="sm"
+                  variant="dark"
+                  loading={isUploadingPickerFile}
+                  onClick={() => pickerFileInputRef.current?.click()}
+                >
+                  {isUploadingPickerFile ? 'Uploading…' : '+ Upload to Vault'}
+                </NeuButton>
+                <span className="font-inter text-[11px] text-[#7D6855] hidden md:inline">PDF, Word, images</span>
+              </div>
+
+              <form onSubmit={handleCreatePickerFolder} className="flex items-center gap-2.5">
+                <input
+                  type="text"
+                  value={pickerNewFolderName}
+                  onChange={(e) => setPickerNewFolderName(e.target.value)}
+                  placeholder="New folder name…"
+                  aria-label="New folder name"
+                  className="neu-input select-text h-9 px-3.5 rounded-xl font-inter text-xs text-[#23150F] flex-1 sm:flex-none sm:w-48"
+                />
+                <NeuButton
+                  size="sm"
+                  type="submit"
+                  variant="secondary"
+                  loading={isCreatingPickerFolder}
+                  disabled={!pickerNewFolderName.trim()}
+                >
+                  + Folder
+                </NeuButton>
+              </form>
+            </div>
+
+            {/* Folder & Files Browser Layout */}
+            <div className="min-h-[300px] flex flex-col sm:flex-row gap-4 sm:gap-5">
+              {/* Folders List (Left Sidebar): the dark pill glides to the active folder */}
+              <div className="neu-recessed rounded-[20px] w-full sm:w-56 shrink-0 p-2.5 space-y-1.5 overflow-y-auto max-h-[240px] sm:max-h-[360px] neu-scrollbar-discrete">
+                <div className="font-lora text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#946525] px-2.5 pt-1 pb-1.5">
+                  Folders ({docPickerFolders.length})
                 </div>
 
-                {/* Notification Notice */}
-                <AnimatePresence initial={false}>
-                  {pickerNotice && (
-                    <Collapse key="picker-notice" gap={20}>
-                      <div className="p-3 rounded-2xl bg-[#E2D4C1] border border-[#C5B099] text-xs font-medium text-[#23150F] flex items-center justify-between">
-                        <span>{pickerNotice}</span>
-                        <Key
-                          aria-label="Dismiss"
-                          onClick={() => setPickerNotice(null)}
-                          className="w-5 h-5 rounded-full flex items-center justify-center text-[#7D6855] hover:text-[#23150F] ml-2 cursor-pointer transition-colors"
-                        >
-                          <CloseIcon className="w-2.5 h-2.5" />
-                        </Key>
-                      </div>
-                    </Collapse>
-                  )}
-                </AnimatePresence>
-
-                {/* Quick Upload & Create Folder Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#E4D5C2]/80 border border-[#D5C2AB]">
-                  {/* Left: Quick Upload File */}
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="file"
-                      ref={pickerFileInputRef}
-                      className="hidden"
-                      onChange={handlePickerFileUpload}
-                    />
-                    <Key
-                      disabled={isUploadingPickerFile}
-                      onClick={() => pickerFileInputRef.current?.click()}
-                      className="px-4 py-2 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-bold hover:bg-[#34150F] transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-60 cursor-pointer"
-                    >
-                      {isUploadingPickerFile ? (
-                        <>
-                          <Spinner className="w-3.5 h-3.5 text-[#ded7cb]" />
-                          <span>Uploading...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>+</span>
-                          <span>Upload to Vault</span>
-                        </>
-                      )}
-                    </Key>
-                    <span className="text-[11px] text-[#7D6855] hidden sm:inline">(PDF, Word, Images, Evidence)</span>
+                {loadingDocPicker ? (
+                  <div className="space-y-1.5 px-0.5" aria-busy="true">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="h-9 rounded-xl neu-skeleton" />
+                    ))}
                   </div>
+                ) : docPickerFolders.length === 0 ? (
+                  <EmptyState size="sm" icon={<FolderIcon />} title="No folders yet" description="Create one with “+ Folder” above." />
+                ) : (
+                  docPickerFolders.map((folder) => {
+                    const isActive = activePickerFolderId === folder.id;
+                    return (
+                      <Key
+                        key={folder.id}
+                        onClick={() => setActivePickerFolderId(folder.id)}
+                        className={`w-full text-left px-3 py-2.5 rounded-xl font-inter text-xs flex items-center justify-between cursor-pointer transition-colors ${isActive ? 'text-[#F3E6D6] font-semibold' : 'text-[#3E2A1E] hover:bg-[#D39758]/12'
+                          }`}
+                      >
+                        {isActive && (
+                          <motion.span
+                            aria-hidden
+                            layoutId="picker-folder-pill"
+                            transition={SPRING_PILL}
+                            style={{ borderRadius: 12 }}
+                            className="absolute inset-0 z-0 neu-btn-espresso"
+                          />
+                        )}
+                        <span className="relative z-10 flex items-center gap-2 truncate">
+                          <FolderIcon className="w-3.5 h-3.5 shrink-0 text-current opacity-80" />
+                          <span className="truncate">{folder.name}</span>
+                        </span>
+                        <span className="relative z-10 text-[10px] opacity-75 shrink-0 ml-1">{folder.files?.length || 0}</span>
+                      </Key>
+                    );
+                  })
+                )}
+              </div>
 
-                  {/* Right: Quick Create Folder */}
-                  <form onSubmit={handleCreatePickerFolder} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={pickerNewFolderName}
-                      onChange={(e) => setPickerNewFolderName(e.target.value)}
-                      placeholder="New folder name..."
-                      className="select-text py-1.5 px-3 rounded-xl bg-[#EBE0D2] text-xs text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none focus:ring-2 focus:ring-[#C58B3C]/50 transition-shadow w-40 sm:w-48 shadow-inner"
-                    />
-                    <Key
-                      type="submit"
-                      disabled={isCreatingPickerFolder || !pickerNewFolderName.trim()}
-                      className="px-3 py-1.5 rounded-xl bg-[#E5D8CB] text-xs font-bold text-[#23150F] hover:bg-[#D4B892] disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+              {/* Files list (right): re-staggers per folder */}
+              <div className="flex-1 min-w-0 overflow-y-auto max-h-[320px] sm:max-h-[360px] neu-scrollbar-discrete px-1 pb-1">
+                <AnimatePresence mode="wait" initial={false}>
+                  {!currentPickerFolder ? (
+                    <motion.div key="no-folder" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex items-center justify-center">
+                      <EmptyState
+                        size="sm"
+                        icon={<FolderIcon />}
+                        title="No folder selected"
+                        description="Pick a folder on the left, or create one and upload a file."
+                      />
+                    </motion.div>
+                  ) : pickerFiles.length === 0 ? (
+                    <motion.div
+                      key={`empty-${currentPickerFolder.id}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="h-full flex items-center justify-center"
                     >
-                      {isCreatingPickerFolder ? 'Creating...' : '+ Folder'}
-                    </Key>
-                  </form>
-                </div>
-
-                {/* Folder & Files Browser Layout */}
-                <div className="flex-1 min-h-[260px] overflow-hidden flex flex-col sm:flex-row gap-4 border border-[#D1BEA8]/80 rounded-2xl p-3 bg-[#EAE0D2]/50">
-                  {/* Folders List (Left Sidebar) — the dark pill glides to the active folder */}
-                  <div className="w-full sm:w-56 shrink-0 space-y-1.5 overflow-y-auto max-h-[280px] sm:max-h-full pr-1">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-[#7D6855] px-2 py-1">
-                      Folders ({docPickerFolders.length})
-                    </div>
-
-                    {loadingDocPicker ? (
-                      <div className="p-4 text-center text-xs text-[#7D6855] animate-pulse motion-reduce:animate-none">
-                        Loading vault...
+                      <EmptyState
+                        size="sm"
+                        icon={<FileDocIcon />}
+                        title="This folder is empty"
+                        description="Use “+ Upload to Vault” above to add documents here."
+                      />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key={currentPickerFolder.id}
+                      variants={{
+                        hidden: {},
+                        show: { transition: { staggerChildren: 0.045 } },
+                        exit: { opacity: 0, transition: { duration: 0.12 } },
+                      }}
+                      initial="hidden"
+                      animate="show"
+                      exit="exit"
+                      className="space-y-3"
+                    >
+                      <div className="flex items-center justify-between px-1 font-lora text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#946525]">
+                        <span className="truncate">Files in {currentPickerFolder.name}</span>
+                        <span className="font-inter normal-case tracking-normal font-medium text-[#7D6855] shrink-0 ml-2">
+                          {pickerFiles.length} available
+                        </span>
                       </div>
-                    ) : docPickerFolders.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-[#7D6855]">No folders yet.</div>
-                    ) : (
-                      docPickerFolders.map((folder) => {
-                        const isActive = activePickerFolderId === folder.id;
+
+                      {pickerFiles.map((file) => {
+                        const isSelected = selectedDocPickerFiles.includes(file.id);
                         return (
-                          <Key
-                            key={folder.id}
-                            onClick={() => setActivePickerFolderId(folder.id)}
-                            className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between cursor-pointer transition-colors ${isActive ? 'text-[#ded7cb] font-bold' : 'bg-[#E5D8CB] text-[#23150F]'
+                          <motion.div
+                            key={file.id || file.name}
+                            role="checkbox"
+                            aria-checked={isSelected}
+                            tabIndex={0}
+                            variants={{
+                              hidden: { opacity: 0, x: 14 },
+                              show: { opacity: 1, x: 0, transition: { duration: 0.3, ease: EASE_OUT } },
+                            }}
+                            whileTap={{ scale: 0.985, transition: { duration: 0.06 } }}
+                            onClick={() => handleToggleSelectDoc(file.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === ' ' || e.key === 'Enter') {
+                                e.preventDefault();
+                                handleToggleSelectDoc(file.id);
+                              }
+                            }}
+                            // Raised when available; pressed in (with a caramel check) once selected.
+                            className={`flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-2xl cursor-pointer transition-shadow ${isSelected ? 'neu-recessed' : 'neu-raised-sm bg-[#E5D8CB]'
                               }`}
                           >
-                            {isActive && (
-                              <motion.span
-                                aria-hidden
-                                layoutId="picker-folder-pill"
-                                transition={SPRING_PILL}
-                                style={{ borderRadius: 12 }}
-                                className="absolute inset-0 z-0 bg-[#23150F] shadow-sm"
-                              />
-                            )}
-                            <span className="relative z-10 flex items-center gap-1.5 truncate">
-                              <FolderIcon className="w-3.5 h-3.5 shrink-0 text-current opacity-80" />
-                              <span className="truncate">{folder.name}</span>
-                            </span>
-                            <span className="relative z-10 text-[10px] opacity-75 shrink-0 ml-1">
-                              {folder.files?.length || 0}
-                            </span>
-                          </Key>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  {/* Files Grid / List (Right Content) — re-staggers per folder */}
-                  <div className="flex-1 overflow-y-auto max-h-[300px] sm:max-h-full pl-1">
-                    <AnimatePresence mode="wait" initial={false}>
-                      {!currentPickerFolder ? (
-                        <motion.div
-                          key="no-folder"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          className="h-full flex flex-col items-center justify-center p-8 text-center text-xs text-[#7D6855]"
-                        >
-                          <p>No folder selected. Use the buttons above to create a folder or upload a file.</p>
-                        </motion.div>
-                      ) : pickerFiles.length === 0 ? (
-                        <motion.div
-                          key={`empty-${currentPickerFolder.id}`}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0 }}
-                          className="h-full flex flex-col items-center justify-center p-8 text-center space-y-2"
-                        >
-                          <motion.div
-                            animate={{ y: [0, -4, 0] }}
-                            transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-                            className="text-[#7A6756]"
-                          >
-                            <FileDocIcon className="w-8 h-8" />
-                          </motion.div>
-                          <p className="text-xs font-semibold text-[#23150F]">No files in this folder</p>
-                          <p className="text-[11px] text-[#7D6855]">
-                            Use "Upload to Vault" above to add documents to this folder.
-                          </p>
-                        </motion.div>
-                      ) : (
-                        <motion.div
-                          key={currentPickerFolder.id}
-                          variants={{
-                            hidden: {},
-                            show: { transition: { staggerChildren: 0.045 } },
-                            exit: { opacity: 0, transition: { duration: 0.12 } },
-                          }}
-                          initial="hidden"
-                          animate="show"
-                          exit="exit"
-                          className="space-y-2"
-                        >
-                          <div className="flex items-center justify-between pb-1 text-[11px] font-bold text-[#7D6855]">
-                            <span>FILES IN {currentPickerFolder.name.toUpperCase()}</span>
-                            <span>{pickerFiles.length} available</span>
-                          </div>
-
-                          {pickerFiles.map((file) => {
-                            const isSelected = selectedDocPickerFiles.includes(file.id);
-                            return (
-                              <motion.div
-                                key={file.id || file.name}
-                                variants={{
-                                  hidden: { opacity: 0, x: 14 },
-                                  show: { opacity: 1, x: 0, transition: { duration: 0.3, ease: EASE_OUT } },
-                                }}
-                                whileHover={{ y: -1 }}
-                                whileTap={{ scale: 0.985, y: 1.5, transition: { duration: 0.06 } }}
-                                onClick={() => handleToggleSelectDoc(file.id)}
-                                className={`flex items-center justify-between p-3 rounded-xl border transition-colors cursor-pointer ${isSelected
-                                    ? 'bg-[#E5D8CB] border-[#C58B3C] shadow-sm text-[#23150F]'
-                                    : 'bg-[#E8DDD0] border-[#D8C7B5] hover:bg-[#E2D4C3] text-[#34150F]'
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span
+                                className={`size-5 shrink-0 rounded-md flex items-center justify-center transition-colors ${isSelected ? 'neu-btn-caramel text-[#341512]' : 'neu-recessed'
                                   }`}
+                                aria-hidden="true"
                               >
-                                <div className="flex items-center gap-2.5 truncate">
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => { }} // handled by parent onClick
-                                    className="w-4 h-4 rounded text-[#C58B3C] accent-[#C58B3C]"
-                                  />
-                                  <FileDocIcon className="w-4 h-4 text-[#7A6756]" />
-                                  <div className="truncate">
-                                    <div className="text-xs font-semibold truncate">{file.name}</div>
-                                    <div className="text-[10px] text-[#7D6855]">
-                                      {file.size} • {file.updatedAt || 'Recent'}
-                                    </div>
-                                  </div>
+                                {isSelected && (
+                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                                  </svg>
+                                )}
+                              </span>
+                              <FileDocIcon className="w-4 h-4 text-[#7A6756] shrink-0" />
+                              <div className="min-w-0">
+                                <div className="font-inter text-xs font-semibold text-[#23150F] truncate">{file.name}</div>
+                                <div className="font-inter text-[10.5px] text-[#7D6855]">
+                                  {file.size} • {file.updatedAt || 'Recent'}
                                 </div>
-                                <span
-                                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 transition-colors ${isSelected ? 'bg-[#23150F] text-[#ded7cb]' : 'bg-[#D5C2AB] text-[#5C4535]'
-                                    }`}
-                                >
-                                  {isSelected ? 'Selected' : 'Select'}
-                                </span>
-                              </motion.div>
-                            );
-                          })}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-
-                {/* Modal Footer */}
-                <div className="flex items-center justify-between pt-2 border-t border-[#D1BEA8]/80">
-                  <span className="text-xs font-medium text-[#5C4535]">
-                    <RollNumber value={selectedDocPickerFiles.length} /> file
-                    {selectedDocPickerFiles.length === 1 ? '' : 's'} selected
-                  </span>
-                  <div className="flex items-center gap-3">
-                    <Key
-                      onClick={() => setShowDocPickerModal(false)}
-                      className="px-5 py-2.5 rounded-xl border border-[#C8B59E] text-xs font-semibold text-[#5C4535] hover:bg-[#E5D8CB] transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </Key>
-                    <Key
-                      onClick={handleConfirmDocPicker}
-                      disabled={selectedDocPickerFiles.length === 0}
-                      className="px-6 py-2.5 rounded-xl bg-[#23150F] text-[#ded7cb] text-xs font-bold hover:bg-[#34150F] transition-colors shadow-md disabled:opacity-40 cursor-pointer"
-                    >
-                      Attach Selected (<RollNumber value={selectedDocPickerFiles.length} />)
-                    </Key>
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
+                              </div>
+                            </div>
+                            <span
+                              className={`font-inter text-[10px] font-bold uppercase tracking-wider shrink-0 ${isSelected ? 'text-[#A8742E]' : 'text-[#9E8E7D]'}`}
+                            >
+                              {isSelected ? 'Selected' : 'Select'}
+                            </span>
+                          </motion.div>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </NeuModal>
+        )}
         </AnimatePresence>
 
         {/* ─── Cases Handled: full case view (clients and owner) ─── */}
@@ -3258,13 +3245,19 @@ export function LawyerDetailView({
           </>
         )}
 
-        {/* ─── Booking Submitted: Pending Confirmation Summary (design1) ─────── */}
-        {submittedConsultation && (
-          <ConsultationSummaryModal
-            data={clientConsultationToSummary(submittedConsultation)}
-            onClose={() => setSubmittedConsultation(null)}
+        {/* ─── Booking: review → submitting → recorded ─────── */}
+        <AnimatePresence>
+        {confirmPhase && confirmDetails && (
+          <BookingConfirmModal
+            key="booking-confirm-modal"
+            phase={confirmPhase}
+            details={confirmDetails}
+            error={confirmError}
+            onConfirm={handleConfirmBooking}
+            onClose={closeConfirm}
           />
         )}
+        </AnimatePresence>
       </div>
     </MotionConfig>
   );

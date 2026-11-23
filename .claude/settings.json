@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "taste-skill@taste-skill": true,
+    "frontend-design@anthropic-plugin-directory": true
+  }
+}

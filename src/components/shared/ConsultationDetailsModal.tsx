@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { NeuModal, NeuButton, NeuAlert, EmptyState, QrIcon } from '@/components/shared/neu';
 
 /**
  * Consultation "View Details" modal shared by the client and lawyer portals.
@@ -64,31 +64,18 @@ export interface ConsultationDetailsModalProps {
 const peso = (n: number) =>
   `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const INSET_PILL_SHADOW =
-  'inset 2px 2px 4px rgba(165, 140, 115, 0.5), inset -2px -2px 4px rgba(255, 255, 255, 0.95)';
-const RAISED_SHADOW =
-  '6px 8px 18px rgba(165, 135, 105, 0.35), -6px -6px 14px rgba(255, 255, 255, 0.85)';
-const INSET_SHADOW =
-  'inset 4px 4px 10px rgba(165, 140, 115, 0.4), inset -4px -4px 10px rgba(255, 255, 255, 0.85)';
-
-const TONES: Record<DetailsStatusTone, { bg: string; shadow: string }> = {
-  caramel: { bg: 'bg-[#D49E56]', shadow: '4px 6px 14px rgba(212, 158, 86, 0.4)' },
-  red: { bg: 'bg-[#E60000]', shadow: '4px 6px 14px rgba(230, 0, 0, 0.35)' },
-  green: { bg: 'bg-[#1FAA00]', shadow: '4px 6px 14px rgba(31, 170, 0, 0.35)' },
-  amber: { bg: 'bg-[#C9822B]', shadow: '4px 6px 14px rgba(201, 130, 43, 0.4)' },
-  grey: { bg: 'bg-stone-500', shadow: '4px 6px 14px rgba(120, 113, 108, 0.35)' },
+const TONES: Record<DetailsStatusTone, { bg: string }> = {
+  caramel: { bg: 'bg-[#D49E56]' },
+  red: { bg: 'bg-[#E60000]' },
+  green: { bg: 'bg-[#1FAA00]' },
+  amber: { bg: 'bg-[#C9822B]' },
+  grey: { bg: 'bg-stone-500' },
 };
 
-const BUTTON_STYLES: Record<DetailsModalAction['variant'], { className: string }> = {
-  outline: {
-    className: 'neu-raised-sm bg-[#E5D8CB] border border-[#341512]/60 text-[#341512] hover:bg-[#DDCFC0]',
-  },
-  espresso: {
-    className: 'neu-btn-espresso bg-[#4A2E25] text-white hover:brightness-110',
-  },
-  caramel: {
-    className: 'neu-btn-caramel bg-[#D49E56] text-[#341512] hover:brightness-105 font-bold',
-  },
+const BUTTON_VARIANT: Record<DetailsModalAction['variant'], 'secondary' | 'dark' | 'primary'> = {
+  outline: 'secondary',
+  espresso: 'dark',
+  caramel: 'primary',
 };
 
 function VideoIcon({ className = 'w-4 h-4' }: { className?: string }) {
@@ -239,124 +226,242 @@ function PaymentDropzone({ payment }: { payment: DetailsPaymentInput }) {
   );
 }
 
-export function ConsultationDetailsModal(props: ConsultationDetailsModalProps) {
-  const { onClose } = props;
-  const [mounted, setMounted] = useState(false);
+/**
+ * Top section of the details view (status row, person banner, docket + description).
+ * Shared by the modal and the client's consultation booking card so both stay identical.
+ */
+type StatusRowProps = Pick<ConsultationDetailsModalProps, 'dateStr' | 'timeSlot' | 'statusLabel' | 'statusTone'> & {
+  /**
+   * Keep date, time and status on one row by scaling the pills with the width of their container
+   * (the client's booking card). Below 38.75rem there's no room at a readable size, so the row
+   * keeps the regular sizes and wraps.
+   */
+  fit?: boolean;
+};
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const tone = TONES[props.statusTone];
-
-  if (!mounted) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 sm:p-6 md:p-8 animate-in fade-in overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="consultation-details-title"
-      onClick={onClose}
-    >
+export function DetailsStatusRow({ fit = false, ...props }: StatusRowProps) {
+  if (fit) return <FitStatusRow {...props} />;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="neu-raised-pill bg-[#E5D8CB] px-4 sm:px-5 py-2 rounded-full font-lora text-[10.5px] sm:text-xs font-bold text-[#5C4535] uppercase tracking-wider select-none">
+          {props.dateStr}
+        </div>
+        <div className="neu-raised-pill bg-[#E5D8CB] px-4 sm:px-5 py-2 rounded-full font-lora text-[10.5px] sm:text-xs font-bold text-[#5C4535] select-none">
+          {props.timeSlot}
+        </div>
+      </div>
       <div
-        className="neu-modal outline-[#D39758] relative w-full max-w-[94vw] sm:max-w-2xl lg:max-w-3xl max-h-[88vh] flex flex-col rounded-[26px] sm:rounded-[30px] p-6 sm:p-8 lg:p-9 bg-[#E5D8CB] space-y-5 sm:space-y-6 animate-in zoom-in-95 duration-200 shadow-2xl my-auto overflow-y-auto neu-scrollbar-discrete"
-        onClick={(e) => e.stopPropagation()}
+        className={`neu-raised-pill px-5 sm:px-6 py-2 rounded-full font-lora text-[10px] sm:text-[10.5px] font-bold tracking-wider uppercase text-white select-none ${TONES[props.statusTone].bg}`}
       >
-        {/* Date / Time / Status */}
-        <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="neu-recessed px-4 sm:px-5 py-2 rounded-full font-lora text-[10.5px] sm:text-xs font-bold text-[#5C4535] uppercase tracking-wider select-none">
-              {props.dateStr}
-            </div>
-            <div className="neu-recessed px-4 sm:px-5 py-2 rounded-full font-lora text-[10.5px] sm:text-xs font-bold text-[#5C4535] select-none">
-              {props.timeSlot}
-            </div>
+        {props.statusLabel}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Fit mode. From 38.75rem of container width the row's font size is 1/60 of that width (10.25px
+ * to 12px), and every size inside is in em, so at 12px it is exactly the regular desktop row. That
+ * row measures 56-58em with the longest date, time and status, so the three always share one line
+ * and grow or shrink together; the status text never drops below 9px. Narrower containers get the
+ * regular row.
+ */
+function FitStatusRow(props: Omit<StatusRowProps, 'fit'>) {
+  return (
+    <div className="@container">
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 @min-[38.75rem]:gap-x-[1.333em] @min-[38.75rem]:text-[clamp(10.25px,1.667cqw,12px)]">
+        <div className="flex flex-wrap items-center gap-3 @min-[38.75rem]:gap-[1em]">
+          <div className="neu-raised-pill bg-[#E5D8CB] px-4 sm:px-5 py-2 rounded-full font-lora text-[10.5px] sm:text-xs font-bold text-[#5C4535] uppercase tracking-wider select-none @min-[38.75rem]:whitespace-nowrap @min-[38.75rem]:px-[1.667em] @min-[38.75rem]:py-[0.667em] @min-[38.75rem]:text-[1em]">
+            {props.dateStr}
           </div>
-          <div
-            className={`px-5 sm:px-6 py-2 rounded-full font-lora text-[10px] sm:text-[10.5px] font-bold tracking-wider uppercase text-white select-none ${tone.bg} shadow-sm`}
-          >
-            {props.statusLabel}
+          <div className="neu-raised-pill bg-[#E5D8CB] px-4 sm:px-5 py-2 rounded-full font-lora text-[10.5px] sm:text-xs font-bold text-[#5C4535] select-none @min-[38.75rem]:whitespace-nowrap @min-[38.75rem]:px-[1.667em] @min-[38.75rem]:py-[0.667em] @min-[38.75rem]:text-[1em]">
+            {props.timeSlot}
           </div>
         </div>
-
-        {/* Person banner */}
         <div
-          className="neu-raised-highlight rounded-[20px] sm:rounded-[22px] p-4.5 sm:p-5 lg:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-6"
-          style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
+          className={`neu-raised-pill px-5 sm:px-6 py-2 rounded-full font-lora text-[10px] sm:text-[10.5px] font-bold tracking-wider uppercase text-white select-none @min-[38.75rem]:whitespace-nowrap @min-[38.75rem]:px-[2.286em] @min-[38.75rem]:py-[0.762em] @min-[38.75rem]:text-[0.875em] ${TONES[props.statusTone].bg}`}
         >
-          <div className="flex items-center gap-3.5 sm:gap-4.5 min-w-0">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-[3px] sm:border-[3.5px] border-[#341512] flex items-center justify-center shrink-0 select-none">
-              <svg className="w-8 h-8 sm:w-10 sm:h-10 text-[#341512]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="8" r="3.8" />
-                <path d="M5 20c0-3.8 3.1-6.5 7-6.5s7 2.7 7 6.5" />
-              </svg>
-            </div>
-            <div className="space-y-1 min-w-0">
-              <h4 className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-tight">{props.person.name}</h4>
-              {props.person.lines.filter(Boolean).map((line, idx) => (
-                <p key={idx} className="font-lora text-[10.5px] sm:text-[11.5px] text-[#5C4535] font-medium whitespace-pre-wrap break-words leading-tight">
-                  {line}
-                </p>
-              ))}
-            </div>
-          </div>
-          {props.person.onMessage ? (
+          {props.statusLabel}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function DetailsPersonBanner({ person }: { person: ConsultationDetailsModalProps['person'] }) {
+  return (
+    <div
+      className="neu-raised-highlight rounded-[20px] sm:rounded-[22px] p-4.5 sm:p-5 lg:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-6"
+      style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
+    >
+      <div className="flex items-center gap-3.5 sm:gap-4.5 min-w-0">
+        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-[3px] sm:border-[3.5px] border-[#341512] flex items-center justify-center shrink-0 select-none">
+          <svg className="w-8 h-8 sm:w-10 sm:h-10 text-[#341512]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="8" r="3.8" />
+            <path d="M5 20c0-3.8 3.1-6.5 7-6.5s7 2.7 7 6.5" />
+          </svg>
+        </div>
+        <div className="space-y-1 min-w-0">
+          <h4 className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-tight">{person.name}</h4>
+          {person.lines.filter(Boolean).map((line, idx) => (
+            <p key={idx} className="font-inter font-light text-[10.5px] sm:text-[11.5px] text-[#5C4535] whitespace-pre-wrap break-words leading-tight">
+              {line}
+            </p>
+          ))}
+        </div>
+      </div>
+      {person.onMessage ? (
+        <button
+          type="button"
+          onClick={person.onMessage}
+          className="neu-btn-banner px-6 sm:px-7 py-2 sm:py-2.5 rounded-full font-lora text-xs sm:text-sm font-semibold text-[#341512] shrink-0 self-start sm:self-center cursor-pointer"
+        >
+          Message
+        </button>
+      ) : person.rate !== null && person.rate !== undefined ? (
+        <div className="sm:text-right shrink-0">
+          <span className="font-lora text-2xl sm:text-3xl lg:text-[34px] font-bold text-[#341512] leading-none">
+            ₱{person.rate.toLocaleString()}
+          </span>
+          <span className="font-lora text-xs sm:text-sm text-[#341512] ml-1">/per hour</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+type CaseBlockProps = Pick<ConsultationDetailsModalProps, 'docket' | 'caseTitle' | 'caseDescription'> & {
+  titleId?: string;
+  /**
+   * When set, the description fills only the space its parent leaves it and is cut off with a
+   * "See More" link if it doesn't fit (the parent must give this block a bounded height).
+   */
+  onSeeMore?: () => void;
+  /**
+   * With onSeeMore: always show exactly this many lines, at every breakpoint, in a card of natural
+   * height (the lawyer dashboard). Without it, lg+ fills the space the parent's fixed height leaves.
+   */
+  previewLines?: number;
+};
+
+/** Lines the truncated description shows below the lg breakpoint, where the card has no fixed height. */
+const COMPACT_PREVIEW_LINES = 6;
+
+export function DetailsCaseBlock({ titleId, onSeeMore, previewLines, ...props }: CaseBlockProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const descRef = useRef<HTMLDivElement>(null);
+  const [clamp, setClamp] = useState<{ height: number; lineHeight: number; overflowing: boolean } | null>(null);
+  const truncate = Boolean(onSeeMore);
+
+  // Cut the preview at a whole line so "… See More" can sit at the end of the last visible line.
+  // lg+: as many lines as fit in the space the card leaves (the text is absolutely positioned, so
+  // the wrapper's height comes from the layout, not the text). Smaller screens: a fixed line count.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const desc = descRef.current;
+    if (!truncate || !wrap || !desc) return;
+    const measure = () => {
+      const lineHeight = parseFloat(getComputedStyle(desc).lineHeight) || 20;
+      const bounded = !previewLines && window.matchMedia('(min-width: 1024px)').matches;
+      const lines = previewLines
+        ? previewLines
+        : bounded
+          ? Math.max(2, Math.floor(wrap.clientHeight / lineHeight))
+          : COMPACT_PREVIEW_LINES;
+      const height = lines * lineHeight;
+      setClamp({ height, lineHeight, overflowing: desc.scrollHeight > height + 1 });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(wrap);
+    return () => observer.disconnect();
+  }, [truncate, previewLines, props.caseDescription]);
+
+  const paragraphs = props.caseDescription.split(/\n\n+/).map((para, idx) => (
+    <p key={idx} className="indent-6 sm:indent-8 whitespace-pre-line">
+      {para.trim()}
+    </p>
+  ));
+  const textClass = 'font-inter font-light text-xs sm:text-[13px] text-[#3E2A1E] leading-relaxed text-justify';
+
+  if (!truncate) {
+    return (
+      <div className="space-y-2 pt-0.5">
+        <div className="font-lora font-bold text-[9.5px] sm:text-[10.5px] text-[#C58B3C] uppercase tracking-wider">{props.docket}</div>
+        <h3 id={titleId} className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-snug">
+          {props.caseTitle}
+        </h3>
+        <div className={`${textClass} space-y-3 pt-1`}>{paragraphs}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 min-h-0 flex flex-col gap-2 pt-0.5">
+      <div className="font-lora font-bold text-[9.5px] sm:text-[10.5px] text-[#C58B3C] uppercase tracking-wider">{props.docket}</div>
+      <h3 id={titleId} className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-snug">
+        {props.caseTitle}
+      </h3>
+      <div ref={wrapRef} className={`relative mt-1 ${previewLines ? '' : 'flex-1 min-h-0'}`}>
+        {/* No paragraph gaps in the preview, so every line sits on the line-height grid. */}
+        <div
+          ref={descRef}
+          className={`${textClass} relative overflow-hidden ${previewLines ? '' : 'lg:absolute lg:inset-x-0 lg:top-0'}`}
+          style={clamp ? { maxHeight: clamp.height } : undefined}
+        >
+          {paragraphs}
+          {clamp?.overflowing && (
             <button
               type="button"
-              onClick={props.person.onMessage}
-              className="neu-btn-caramel px-6 py-2 rounded-full font-lora text-xs sm:text-sm font-semibold text-[#341512] shrink-0 self-start sm:self-center hover:brightness-105 active:scale-95 transition-all cursor-pointer"
+              onClick={onSeeMore}
+              className="absolute right-0 bottom-0 pl-10 pr-0.5 font-inter text-xs sm:text-[13px] cursor-pointer group"
+              style={{
+                height: clamp.lineHeight,
+                lineHeight: `${clamp.lineHeight}px`,
+                background: 'linear-gradient(to right, rgba(229, 216, 203, 0), #E5D8CB 2.25rem)',
+              }}
             >
-              Message
+              <span className="font-light text-[#3E2A1E]">…</span>{' '}
+              <span className="font-semibold text-[#C58B3C] group-hover:text-[#A8742E] group-hover:underline">See More</span>
             </button>
-          ) : props.person.rate !== null && props.person.rate !== undefined ? (
-            <div className="sm:text-right shrink-0">
-              <span className="font-lora text-2xl sm:text-3xl lg:text-[34px] font-bold text-[#341512] leading-none">
-                ₱{props.person.rate.toLocaleString()}
-              </span>
-              <span className="font-lora text-xs sm:text-sm text-[#341512] ml-1">/per hour</span>
-            </div>
-          ) : null}
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
 
-        {/* Docket & Full Case Description */}
-        <div className="space-y-2 pt-0.5">
-          <div className="font-lora font-bold text-[9.5px] sm:text-[10.5px] text-[#C58B3C] uppercase tracking-wider">{props.docket}</div>
-          <h3 id="consultation-details-title" className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-snug">
-            {props.caseTitle}
-          </h3>
-          <div className="font-inter font-light text-xs sm:text-[13px] text-[#3E2A1E] leading-relaxed text-justify space-y-3 pt-1">
-            {props.caseDescription.split(/\n\n+/).map((para, idx) => (
-              <p key={idx} className="indent-6 sm:indent-8 whitespace-pre-line">
-                {para.trim()}
-              </p>
-            ))}
-          </div>
-        </div>
+export function ConsultationDetailsModal(props: ConsultationDetailsModalProps) {
+  return (
+    <NeuModal
+      onClose={props.onClose}
+      size="xl"
+      labelledBy="consultation-details-title"
+      footer={props.actions.map((action) => (
+        <NeuButton
+          key={action.label}
+          variant={BUTTON_VARIANT[action.variant]}
+          onClick={action.onClick}
+          disabled={action.disabled}
+          icon={action.icon === 'video' ? <VideoIcon className="w-4 h-4" /> : undefined}
+        >
+          {action.label}
+        </NeuButton>
+      ))}
+    >
+        <DetailsStatusRow {...props} />
+        <DetailsPersonBanner person={props.person} />
+        <DetailsCaseBlock {...props} titleId="consultation-details-title" />
 
         {props.notice && (
-          <div
-            className={`rounded-2xl px-4 py-3 text-xs sm:text-[13px] border ${props.notice.tone === 'red'
-              ? 'bg-red-100/70 border-red-200 text-red-900'
-              : 'bg-amber-100/70 border-amber-200 text-amber-900'
-              }`}
-          >
-            <p className="font-bold">{props.notice.title}</p>
-            <p className="mt-0.5 whitespace-pre-line">{props.notice.text}</p>
-          </div>
+          <NeuAlert tone={props.notice.tone === 'red' ? 'error' : 'warning'} title={props.notice.title}>
+            {props.notice.text}
+          </NeuAlert>
         )}
 
         {/* Booking / Payment summary */}
         {props.summary && (
-          <div className="space-y-4 sm:space-y-5 pt-1">
+          <div className="space-y-5 pt-2">
             <div className="w-2/3 mx-auto border-t border-[#CDBCA8]" />
             <h4 className="font-lora text-base sm:text-lg font-bold text-[#4A3525] text-center">{props.summary.title}</h4>
             {props.payment ? (
@@ -373,9 +478,12 @@ export function ConsultationDetailsModal(props: ConsultationDetailsModalProps) {
                       className="w-full max-w-[160px] sm:max-w-[180px] aspect-square object-contain bg-white p-2.5 rounded-xl shadow-sm"
                     />
                   ) : (
-                    <div className="w-full max-w-[180px] aspect-square bg-[#EFE5D8] flex items-center justify-center p-4 text-[11px] text-[#7D6855] rounded-xl">
-                      The payment QR code has not been set up yet. Please message your attorney for payment instructions.
-                    </div>
+                    <EmptyState
+                      size="sm"
+                      icon={<QrIcon />}
+                      title="QR code not set up yet"
+                      description="Message your attorney for payment instructions."
+                    />
                   )}
                   {props.payment.qrCaption && (
                     <p className="text-[11px] text-[#4A3525] font-medium whitespace-pre-line leading-tight">{props.payment.qrCaption}</p>
@@ -405,33 +513,8 @@ export function ConsultationDetailsModal(props: ConsultationDetailsModalProps) {
           </div>
         )}
 
-        {props.error && (
-          <p className="text-xs font-semibold text-red-800 bg-red-100 border border-red-300 rounded-xl px-3.5 py-2">
-            {props.error}
-          </p>
-        )}
-
-        {/* Actions */}
-        <div className="flex flex-wrap justify-end gap-3 pt-2 sm:pt-3">
-          {props.actions.map((action) => {
-            const style = BUTTON_STYLES[action.variant];
-            return (
-              <button
-                key={action.label}
-                type="button"
-                onClick={action.onClick}
-                disabled={action.disabled}
-                className={`min-w-[96px] px-6 sm:px-7 py-2.5 rounded-xl text-xs sm:text-sm font-lora font-bold flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 cursor-pointer ${style.className}`}
-              >
-                {action.icon === 'video' && <VideoIcon className="w-4 h-4" />}
-                {action.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>,
-    document.body
+        {props.error && <NeuAlert tone="error">{props.error}</NeuAlert>}
+    </NeuModal>
   );
 }
 
