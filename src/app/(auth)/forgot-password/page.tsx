@@ -16,7 +16,7 @@ export default function ForgotPasswordPage() {
         {/* Logo header */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center justify-center gap-2 mb-4 group">
-            <JusticiaLogo className="h-11 w-auto text-[#C59341]" />
+            <JusticiaLogo className="w-44 h-auto text-[#C59341]" />
           </Link>
 
           <h1 className="font-cinzel text-2xl font-bold text-[#ded7cb] tracking-wide">

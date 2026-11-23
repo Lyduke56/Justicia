@@ -95,7 +95,7 @@ export function AuthModal({
           {/* Header */}
           <div className="text-center mb-6">
             <div className="flex items-center justify-center gap-2 mb-3">
-              <JusticiaLogo className="h-11 w-auto text-[#C59341]" />
+              <JusticiaLogo className="w-44 h-auto text-[#C59341]" />
             </div>
             <h2 className="font-cinzel text-xl font-bold text-[#ded7cb] tracking-wide">
               {mode === 'signin' && 'Welcome Back'}

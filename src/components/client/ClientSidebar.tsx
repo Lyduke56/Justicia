@@ -194,7 +194,7 @@ export function ClientSidebar(props: ClientSidebarProps) {
               exit={{ x: '-100%', transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } }}
             >
               <div className="flex h-16 shrink-0 items-center justify-between bg-[#341512] px-5">
-                <JusticiaLogo className="h-8 w-auto text-[#E5D8CB]" />
+                <JusticiaLogo className="w-28 h-auto text-[#E5D8CB]" />
                 <motion.button
                   type="button"
                   onClick={onCloseMobile}

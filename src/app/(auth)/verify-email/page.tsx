@@ -10,7 +10,7 @@ export default function VerifyEmailPage() {
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 py-12 bg-[#0c0805]">
       <div className="w-full max-w-md text-center">
         <Link href="/" className="inline-flex items-center justify-center gap-2 mb-6 group">
-          <JusticiaLogo className="h-11 w-auto text-[#C59341]" />
+          <JusticiaLogo className="w-44 h-auto text-[#C59341]" />
         </Link>
         <div className="rounded-2xl border border-[#3c2a1c] bg-[#140d07] p-8 shadow-2xl space-y-4 text-center">
           <h2 className="font-cinzel text-xl font-bold text-[#ded7cb]">Check your inbox</h2>

@@ -321,7 +321,7 @@ export function ClientTopbar({
             className="rounded-md text-[#E5D8CB] transition-colors hover:text-[#C58B3C]"
             aria-label="Go to dashboard"
           >
-            <JusticiaLogo className="h-9 w-auto" />
+            <JusticiaLogo />
           </motion.button>
         </div>
 

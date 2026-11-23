@@ -61,7 +61,7 @@ export function Navbar({ onOpenSignIn }: NavbarProps) {
             href="/"
             className="group flex items-center gap-2.5 font-lora text-sm sm:text-base tracking-[0.2em] text-[#ded7cb] hover:text-[#f3ece0] transition-colors duration-250"
           >
-            <JusticiaLogo className="h-9 w-auto text-[#C59341]" />
+            <JusticiaLogo className="w-32 sm:w-36 h-auto text-[#C59341]" />
           </Link>
         </div>
 

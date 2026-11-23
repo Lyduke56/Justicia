@@ -17,6 +17,7 @@ import { fetchLive } from '@/lib/live/fetchLive';
 import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
 import { addLawyerReviewAction } from '@/app/actions/reviewActions';
 import { ReportAccountModal } from '@/components/shared/ReportAccountModal';
+import { ConsultationRatingDialog } from '@/components/client/ConsultationRatingDialog';
 import {
   NeuButton,
   NeuAlert,
@@ -1739,7 +1740,6 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                   </p>
                 </div>
               </div>
-              {!ratingOpen && (
                 <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
                   <button
                     type="button"
@@ -1758,10 +1758,17 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                     Rate Lawyer
                   </motion.button>
                 </div>
-              )}
             </div>
 
             {ratingOpen && (
+              <ConsultationRatingDialog
+                lawyerName={ratePrompt.lawyerName}
+                busy={ratingBusy}
+                onClose={() => {
+                  setRatingOpen(false);
+                  setRatingError(null);
+                }}
+              >
               <form onSubmit={submitRating} className="space-y-4 pt-1">
                 <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Star rating">
                   {[1, 2, 3, 4, 5].map((s) => (
@@ -1822,6 +1829,7 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                   </NeuButton>
                 </div>
               </form>
+              </ConsultationRatingDialog>
             )}
           </motion.div>
         ) : null}

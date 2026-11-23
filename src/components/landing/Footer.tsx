@@ -20,7 +20,7 @@ export function Footer() {
         <div className="flex items-center gap-3">
 
           <div className="flex flex-col">
-            <JusticiaLogo className="h-9 w-auto text-[#C59341]" />
+            <JusticiaLogo className="w-36 h-auto text-[#C59341] mb-2" />
             <span className="font-cinzel text-[10px] tracking-widest text-[#8c8072]">
               NEMO EST SUPRA LEGES
             </span>
