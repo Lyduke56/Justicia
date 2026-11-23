@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { AnimatePresence, motion, useReducedMotion, type Variants } from 'motion/react';
+import { AnimatePresence, MotionConfig, motion, useReducedMotion, type Variants } from 'motion/react';
 import { createClient } from '@/lib/supabase/client';
 import { LawyerGrid } from '@/components/client/LawyerGrid';
 import { LawyerSearchFilters } from '@/components/client/LawyerSearchFilters';
@@ -378,43 +378,35 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 
 /**
  * Page choreography (list view):
- *   search & filters drop in (blur → sharp) → results section rises in → the grid's own cards cascade.
- * The grid section deliberately has no initial/animate of its own, so LawyerGrid's inner variants
- * keep inheriting the "hidden" → "show" labels from this root exactly as before.
+ *   the search well opens and the Search button pops out → the four filters rise in one by one
+ *   → the divider draws itself → the lawyer cards deal in as a diagonal wave and fill in
+ *   → pagination arrives. (The steps inside the search area live in LawyerSearchFilters and
+ *   inherit the "hidden" → "show" labels from here; the grid times itself with `introDelay`.)
+ * It plays when the page opens and again when you come back from a lawyer's profile.
  */
 const pageVariants: Variants = {
   hidden: {},
-  show: {
-    transition: {
-      staggerChildren: 0.14,
-      delayChildren: 0.05,
-    },
-  },
-  exit: {
+  show: { transition: { delayChildren: 0.05 } },
+};
+
+/** Seconds the first card waits on the page entrance, so the search area lands first. */
+const GRID_INTRO_DELAY = 0.62;
+/** Shorter wait when only the results change (new filter or page). */
+const GRID_REFRESH_DELAY = 0.08;
+
+/**
+ * Result sets swap direction-aware: "next page" slides the old grid out to the left and the
+ * new one in from the right (and the reverse for "previous"); a new filter fades up instead.
+ */
+const resultsVariants: Variants = {
+  enter: (dir: number) => ({ opacity: 0, x: dir * 56, y: dir === 0 ? 14 : 0 }),
+  center: { opacity: 1, x: 0, y: 0, transition: { duration: 0.45, ease: EASE } },
+  leave: (dir: number) => ({
     opacity: 0,
-    y: -10,
-    transition: { duration: 0.22, ease: 'easeIn' },
-  },
-};
-
-const topSectionVariants: Variants = {
-  hidden: { opacity: 0, y: -20, scale: 0.985, filter: 'blur(6px)' },
-  show: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    filter: 'blur(0px)',
-    transition: { duration: 0.7, ease: EASE },
-  },
-};
-
-const gridSectionVariants: Variants = {
-  hidden: { opacity: 0, y: 28 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.75, ease: EASE },
-  },
+    x: dir * -56,
+    y: dir === 0 ? -10 : 0,
+    transition: { duration: 0.2, ease: 'easeIn' },
+  }),
 };
 
 /** Thin sweeping line above the results while a new filter/page is loading. */
@@ -469,13 +461,34 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
     DEFAULT_LAWYERS.slice(0, PAGE_SIZE)
   );
   const [totalCount, setTotalCount] = useState(DEFAULT_LAWYERS.length);
-  const [loading, setLoading] = useState(false);
+  // The grid waits for the first real result set. Rendering the placeholder list first and then
+  // swapping in fetched cards mid-entrance made the new cards skip the wave and pop in at once.
+  const [hasResults, setHasResults] = useState(false);
+  const [introDelay, setIntroDelay] = useState(GRID_INTRO_DELAY);
+  const entranceStartRef = useRef(0);
+  useEffect(() => {
+    entranceStartRef.current = performance.now();
+  }, []);
 
   // Results transitions: `refreshing` dims the grid while a new filter/page loads;
   // `resultsVersion` bumps when a *different* result set lands so the grid fades out and re-cascades in.
   const [refreshing, setRefreshing] = useState(false);
   const [resultsVersion, setResultsVersion] = useState(0);
   const lastSignatureRef = useRef<string | null>(null);
+
+  // The result set shown when the page entrance plays (first load, or back from a profile):
+  // it waits for the search area to land and does not slide. Later result sets swap quickly.
+  const [introResultsVersion, setIntroResultsVersion] = useState(0);
+
+  // Which way the results should slide: by page number, or not at all for new filters.
+  const filterKey = [queryParam, specParam, chapterParam, feeParam, langKey].join('|');
+  const [seenQuery, setSeenQuery] = useState({ page: pageParam, filterKey });
+  const [pageDir, setPageDir] = useState(0);
+  if (seenQuery.page !== pageParam || seenQuery.filterKey !== filterKey) {
+    setPageDir(seenQuery.filterKey === filterKey ? Math.sign(pageParam - seenQuery.page) : 0);
+    setSeenQuery({ page: pageParam, filterKey });
+  }
+  const isIntroResults = resultsVersion === introResultsVersion;
 
   const [specializationOptions, setSpecializationOptions] = useState<string[]>(DEFAULT_SPECIALIZATIONS);
   const [chapterOptions, setChapterOptions] = useState<string[]>(DEFAULT_CHAPTERS);
@@ -527,11 +540,16 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
    * (not the first load, not a favorites refresh) triggers the fade-out → re-cascade.
    */
   const finishFetch = useCallback((signature: string) => {
-    if (lastSignatureRef.current !== null && lastSignatureRef.current !== signature) {
+    if (lastSignatureRef.current === null) {
+      // First results: deal the cards in once the search area has landed (or right away if
+      // the fetch took longer than the search area's entrance).
+      const elapsed = (performance.now() - entranceStartRef.current) / 1000;
+      setIntroDelay(Math.max(GRID_REFRESH_DELAY, GRID_INTRO_DELAY - elapsed));
+      setHasResults(true);
+    } else if (lastSignatureRef.current !== signature) {
       setResultsVersion((v) => v + 1);
     }
     lastSignatureRef.current = signature;
-    setLoading(false);
     setRefreshing(false);
   }, []);
 
@@ -713,6 +731,9 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
           <LawyerDetailView
             lawyer={selectedLawyer}
             onBack={() => {
+              // The list remounts, so give it the full page entrance again
+              setIntroResultsVersion(resultsVersion);
+              setIntroDelay(GRID_INTRO_DELAY);
               setSelectedLawyer(null);
               scrollMainToTop('smooth');
             }}
@@ -722,66 +743,83 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
       ) : (
         <motion.div
           key="list"
-          variants={pageVariants}
-          initial={reduceMotion ? false : 'hidden'}
-          animate="show"
-          exit="exit"
-          className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-10 max-w-[1300px] mx-auto space-y-6 sm:space-y-7 bg-[#E5D8CB] min-h-[calc(100vh-4rem)]"
+          exit={{ opacity: 0, y: -10, transition: { duration: 0.22, ease: 'easeIn' } }}
+          className="bg-[#E5D8CB] min-h-[calc(100vh-4rem)]"
         >
-          <h1 className="sr-only">Find a Lawyer — Justicia Philippine Legal Intelligence</h1>
+          <MotionConfig reducedMotion="user">
+            <motion.div
+              variants={pageVariants}
+              initial={reduceMotion ? false : 'hidden'}
+              animate="show"
+              className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-10 max-w-[1300px] mx-auto space-y-6 sm:space-y-7"
+            >
+              <h1 className="sr-only">Find a Lawyer — Justicia Philippine Legal Intelligence</h1>
 
-          {/* Top Search & 4-Column Filters matching Reference Image */}
-          <motion.div variants={topSectionVariants} className="relative z-30">
-            <LawyerSearchFilters
-              filters={filters}
-              isLoggedIn={isLoggedIn}
-              totalCount={totalCount}
-              page={pageParam}
-              pageSize={PAGE_SIZE}
-              specializationOptions={specializationOptions}
-              chapterOptions={chapterOptions}
-              languageOptions={languageOptions}
-            />
-          </motion.div>
+              {/* Top Search & 4-Column Filters matching Reference Image */}
+              <div className="relative z-30">
+                <LawyerSearchFilters
+                  filters={filters}
+                  isLoggedIn={isLoggedIn}
+                  totalCount={totalCount}
+                  page={pageParam}
+                  pageSize={PAGE_SIZE}
+                  specializationOptions={specializationOptions}
+                  chapterOptions={chapterOptions}
+                  languageOptions={languageOptions}
+                />
+              </div>
 
-          {/* Lawyer Cards 3x3 Grid & Pagination */}
-          <motion.div variants={gridSectionVariants} className="relative z-10">
-            <RefreshBar active={refreshing} />
-            <span role="status" aria-live="polite" className="sr-only">
-              {refreshing ? 'Updating results…' : ''}
-            </span>
+              {/* Lawyer Cards 3x3 Grid & Pagination */}
+              <div className="relative z-10">
+                <RefreshBar active={refreshing} />
+                <span role="status" aria-live="polite" className="sr-only">
+                  {refreshing ? 'Updating results…' : ''}
+                </span>
 
-            {/* Dims while a new filter/page loads */}
-            <div className={`transition-opacity duration-300 ${refreshing ? 'opacity-60' : 'opacity-100'}`}>
-              {/* New result set: old grid fades up and out, new one fades in and its cards cascade again */}
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={resultsVersion}
-                  initial={resultsVersion === 0 || reduceMotion ? undefined : { opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10, transition: { duration: 0.18, ease: 'easeIn' } }}
-                  transition={{ duration: 0.45, ease: EASE }}
-                >
-                  {loading ? (
-                    <LawyerGridSkeleton count={PAGE_SIZE} />
-                  ) : (
-                    <LawyerGrid
-                      lawyers={lawyers}
-                      totalCount={totalCount}
-                      page={pageParam}
-                      pageSize={PAGE_SIZE}
-                      specializationOptions={specializationOptions}
-                      chapterOptions={chapterOptions}
-                      languageOptions={languageOptions}
-                      filters={filters}
-                      isLoggedIn={isLoggedIn}
-                      onSelectLawyer={handleSelectLawyer}
-                    />
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          </motion.div>
+                {/* Dims while a new filter/page loads */}
+                <div className={`transition-opacity duration-300 ${refreshing ? 'opacity-60' : 'opacity-100'}`}>
+                  {/* New result set: old grid fades up and out, new one fades in and its cards cascade again */}
+                  <AnimatePresence mode="wait" custom={pageDir}>
+                    {!hasResults ? (
+                      // Only shows if the first fetch is slow
+                      <motion.div
+                        key="waiting"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1, transition: { delay: 0.9, duration: 0.3 } }}
+                        exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                      >
+                        <LawyerGridSkeleton count={PAGE_SIZE} />
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key={resultsVersion}
+                        custom={pageDir}
+                        variants={resultsVariants}
+                        initial={isIntroResults || reduceMotion ? false : 'enter'}
+                        animate="center"
+                        exit="leave"
+                      >
+                        <LawyerGrid
+                          lawyers={lawyers}
+                          totalCount={totalCount}
+                          page={pageParam}
+                          pageSize={PAGE_SIZE}
+                          specializationOptions={specializationOptions}
+                          chapterOptions={chapterOptions}
+                          languageOptions={languageOptions}
+                          filters={filters}
+                          isLoggedIn={isLoggedIn}
+                          onSelectLawyer={handleSelectLawyer}
+                          direction={isIntroResults ? 0 : pageDir}
+                          introDelay={isIntroResults ? introDelay : GRID_REFRESH_DELAY}
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </motion.div>
+          </MotionConfig>
         </motion.div>
       )}
     </AnimatePresence>

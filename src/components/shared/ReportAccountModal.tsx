@@ -4,8 +4,12 @@
  * "Report" dialog opened from a Messages conversation (clients report lawyers, lawyers report
  * clients). The report — reason, details, evidence files and optionally the conversation — goes
  * to the admin Reports tab. The reported person is not told who reported them.
+ *
+ * Styled like the My Documents modals (ParchmentModal): recessed parchment sheet with a caramel
+ * rim, Lora labels, .neu-input fields and the .neu-btn-create action.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { submitAccountReportAction } from '@/app/actions/reportActions';
 import {
   REPORT_DETAILS_MAX,
@@ -16,8 +20,10 @@ import {
   REPORT_MAX_TOTAL_BYTES,
   REPORT_REASONS,
 } from '@/lib/moderation/constants';
+import { CloseIcon, FileIcon, NeuAlert, ParchmentModal } from '@/components/shared/neu';
 
 interface ReportAccountModalProps {
+  open: boolean;
   threadId: string;
   /** Name of the person being reported. */
   targetName: string;
@@ -30,8 +36,29 @@ const ACCEPT = REPORT_FILE_EXTENSIONS.map((e) => `.${e}`).join(',');
 const formatSize = (bytes: number) =>
   bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
-export function ReportAccountModal({ threadId, targetName, targetRole, onClose }: ReportAccountModalProps) {
-  const [reasonKey, setReasonKey] = useState<string | null>(null);
+const labelClass = 'block font-lora text-[13px] sm:text-sm font-medium text-[#5A4537] pl-0.5 select-none';
+
+const FlagIcon = ({ className = 'w-6 h-6' }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M5 21V4.5m0 0h11.5l-2 4.25 2 4.25H5" />
+  </svg>
+);
+
+const UploadIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 16V8m0 0l-3.25 3.25M12 8l3.25 3.25M6.75 19.5a4.5 4.5 0 01-1.41-8.78 5.25 5.25 0 0110.23-2.33 3 3 0 013.76 3.85A3.75 3.75 0 0118 19.5H6.75z" />
+  </svg>
+);
+
+/** The form itself; mounted fresh each time the modal opens, so it always starts empty. */
+function ReportForm({
+  threadId,
+  targetName,
+  targetRole,
+  onClose,
+  onBusyChange,
+}: Omit<ReportAccountModalProps, 'open'> & { onBusyChange: (busy: boolean) => void }) {
+  const [reasonKey, setReasonKey] = useState<string>('');
   const [details, setDetails] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [includeConversation, setIncludeConversation] = useState(true);
@@ -41,13 +68,16 @@ export function ReportAccountModal({ threadId, targetName, targetRole, onClose }
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !submitting) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, submitting]);
+  const roleWord = targetRole === 'lawyer' ? 'attorney' : 'client';
+  const reason = REPORT_REASONS.find((r) => r.key === reasonKey);
+  const trimmed = details.trim();
+  const detailsOk = trimmed.length >= REPORT_DETAILS_MIN && trimmed.length <= REPORT_DETAILS_MAX;
+  const valid = !!reason && detailsOk;
+
+  const setBusy = (busy: boolean) => {
+    setSubmitting(busy);
+    onBusyChange(busy);
+  };
 
   const addFiles = (list: FileList | File[] | null) => {
     if (!list) return;
@@ -76,18 +106,15 @@ export function ReportAccountModal({ threadId, targetName, targetRole, onClose }
     setFiles(next);
   };
 
-  const trimmed = details.trim();
-  const valid = !!reasonKey && trimmed.length >= REPORT_DETAILS_MIN && trimmed.length <= REPORT_DETAILS_MAX;
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!valid || submitting) return;
-    setSubmitting(true);
+    setBusy(true);
     setError(null);
     try {
       const fd = new FormData();
       fd.append('threadId', threadId);
-      fd.append('reasonKey', reasonKey!);
+      fd.append('reasonKey', reasonKey);
       fd.append('details', trimmed);
       fd.append('includeConversation', includeConversation ? 'true' : 'false');
       files.forEach((f) => fd.append('files', f));
@@ -100,219 +127,276 @@ export function ReportAccountModal({ threadId, targetName, targetRole, onClose }
     } catch {
       setError('We could not send your report. Please check your connection and try again.');
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   };
 
-  return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="report-account-title"
-      onClick={() => !submitting && onClose()}
-    >
-      <div
-        className="neu-raised bg-[#E5D8CB] w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-[24px] p-5 sm:p-7 space-y-5 neu-scrollbar-discrete"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-inter text-[10.5px] font-bold uppercase tracking-[0.16em] text-[#B9833C]">Report {targetRole === 'lawyer' ? 'attorney' : 'client'}</p>
-            <h2 id="report-account-title" className="font-lora text-lg sm:text-xl font-bold text-[#34150F] leading-tight mt-1 truncate">
-              {done ? 'Report sent' : `Report ${targetName}`}
-            </h2>
+  if (done) {
+    return (
+      <>
+        <div className="text-center pt-2">
+          <div className="pm-pop mx-auto size-16 rounded-full neu-raised-sm flex items-center justify-center text-[#1F7A3A] mb-4">
+            <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <motion.path
+                d="M5 12.5l4.5 4.5L19 7.5"
+                initial={{ pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={{ duration: 0.5, delay: 0.35, ease: 'easeOut' }}
+              />
+            </svg>
           </div>
+          <h2 id="report-account-title" className="font-lora text-2xl sm:text-[26px] font-normal text-[#34150F] leading-tight">
+            Report sent
+          </h2>
+          <p className="font-inter text-xs sm:text-[13px] text-[#7A604D] leading-relaxed mt-3 max-w-sm mx-auto">
+            Thank you. Your report about <strong className="text-[#34150F]">{targetName}</strong> is with the Justicia team. We
+            review every report and will notify you of the decision. {targetName} won&apos;t be told who reported them.
+          </p>
+        </div>
+        <div className="pt-6 flex flex-col items-center">
+          <button
+            type="button"
+            onClick={onClose}
+            className="neu-btn-create w-[220px] text-xs sm:text-sm font-semibold tracking-[0.16em] uppercase py-3 px-6 rounded-[14px] active:translate-y-0.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B9833C]/60"
+          >
+            Done
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {/* Header */}
+      <div className="text-center mb-5">
+        <div className="pm-pop mx-auto size-14 rounded-full neu-raised-sm flex items-center justify-center text-[#B42318] mb-3">
+          <FlagIcon />
+        </div>
+        <h2 id="report-account-title" className="font-lora text-2xl sm:text-[26px] font-normal text-[#34150F] leading-tight px-6">
+          Report {roleWord}
+        </h2>
+        <p className="font-inter text-xs text-[#7A604D] mt-2">
+          About <span className="font-semibold text-[#34150F]">{targetName}</span> · they won&apos;t see who reported them.
+        </p>
+      </div>
+
+      <form onSubmit={submit} className="space-y-4">
+        {/* Reason */}
+        <div>
+          <label htmlFor="report-reason" className={`${labelClass} mb-2`}>
+            Reason:
+          </label>
+          <select
+            id="report-reason"
+            value={reasonKey}
+            disabled={submitting}
+            onChange={(e) => setReasonKey(e.target.value)}
+            className={`neu-input font-lora w-full h-11 rounded-[11px] px-4 text-sm focus:outline-none cursor-pointer ${reasonKey ? 'text-[#34150F]' : 'text-[#9A8270]'}`}
+          >
+            <option value="" disabled>
+              Choose what happened…
+            </option>
+            {REPORT_REASONS.map((r) => (
+              <option key={r.key} value={r.key} className="text-[#34150F]">
+                {r.label}
+              </option>
+            ))}
+          </select>
+          <AnimatePresence mode="wait" initial={false}>
+            {reason && (
+              <motion.p
+                key={reason.key}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.18 }}
+                className="font-inter text-[11px] text-[#7D6855] mt-1.5 pl-1 leading-snug"
+              >
+                {reason.description}
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Details */}
+        <div>
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <label htmlFor="report-details" className={labelClass}>
+              What happened:
+            </label>
+            <span
+              className={`font-inter text-[10.5px] tabular-nums transition-colors ${
+                detailsOk ? 'text-[#1F7A3A]' : trimmed.length > 0 ? 'text-[#B42318]' : 'text-[#9A8270]'
+              }`}
+            >
+              {trimmed.length < REPORT_DETAILS_MIN
+                ? `${trimmed.length}/${REPORT_DETAILS_MIN} min`
+                : `${trimmed.length}/${REPORT_DETAILS_MAX}`}
+            </span>
+          </div>
+          <textarea
+            id="report-details"
+            rows={3}
+            value={details}
+            maxLength={REPORT_DETAILS_MAX}
+            disabled={submitting}
+            onChange={(e) => setDetails(e.target.value)}
+            placeholder="When it happened, what was said or done, and anything else we should know."
+            className="neu-input font-lora w-full rounded-[11px] px-4 py-3 text-sm text-[#34150F] placeholder-[#9A8270]/70 focus:outline-none resize-none leading-relaxed"
+          />
+        </div>
+
+        {/* Proof */}
+        <div>
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <span className={labelClass}>Proof (optional):</span>
+            <span className="font-inter text-[10.5px] text-[#9A8270]">
+              {files.length}/{REPORT_MAX_FILES} · 5 MB each
+            </span>
+          </div>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => !submitting && fileInput.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileInput.current?.click();
+              }
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              addFiles(e.dataTransfer.files);
+            }}
+            className={`group neu-input h-12 rounded-[11px] px-4 flex items-center gap-3 cursor-pointer transition-[transform,box-shadow] duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B9833C]/45 ${
+              dragOver ? 'scale-[1.015] ring-2 ring-[#C58B3C]/60' : ''
+            }`}
+          >
+            <UploadIcon className="w-5 h-5 text-[#5C4535] shrink-0 transition-transform duration-500 group-hover:-translate-y-0.5" />
+            <span className="min-w-0 flex-1 font-lora text-[13px] text-[#34150F] truncate">
+              {dragOver ? 'Drop to attach' : 'Drop screenshots here, or click to browse'}
+            </span>
+            <span className="font-inter text-[10.5px] text-[#9A8270] shrink-0 hidden sm:inline">PNG · JPG · PDF</span>
+            <input
+              ref={fileInput}
+              type="file"
+              multiple
+              accept={ACCEPT}
+              className="hidden"
+              onChange={(e) => {
+                addFiles(e.target.files);
+                e.target.value = '';
+              }}
+            />
+          </div>
+          {files.length > 0 && (
+            <ul className="flex flex-wrap gap-2 mt-3">
+              <AnimatePresence initial={false}>
+                {files.map((f, i) => (
+                  <motion.li
+                    key={`${f.name}-${f.size}`}
+                    layout
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                    className="neu-raised-sm rounded-full pl-2.5 pr-1 py-1 flex items-center gap-2 max-w-full"
+                  >
+                    <FileIcon className="w-3.5 h-3.5 text-[#C58B3C] shrink-0" />
+                    <span className="min-w-0 font-inter text-[11px] text-[#34150F] truncate max-w-[160px]" title={f.name}>
+                      {f.name}
+                    </span>
+                    <span className="font-inter text-[10px] text-[#8C7A6B] shrink-0">{formatSize(f.size)}</span>
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                      aria-label={`Remove ${f.name}`}
+                      className="size-6 rounded-full flex items-center justify-center text-[#7D6855] hover:text-[#B42318] hover:bg-[#B42318]/10 transition-colors cursor-pointer"
+                    >
+                      <CloseIcon className="w-2.5 h-2.5" />
+                    </button>
+                  </motion.li>
+                ))}
+              </AnimatePresence>
+            </ul>
+          )}
+        </div>
+
+        {/* Include the conversation */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={includeConversation}
+          disabled={submitting}
+          onClick={() => setIncludeConversation((v) => !v)}
+          className="w-full flex items-center gap-3.5 text-left cursor-pointer group"
+        >
+          <span
+            className={`relative h-6 w-11 shrink-0 rounded-full neu-input transition-colors duration-300 ${
+              includeConversation ? '!bg-[#D39758]/45' : ''
+            }`}
+          >
+            <motion.span
+              initial={false}
+              animate={{ x: includeConversation ? 20 : 0 }}
+              transition={{ type: 'spring', stiffness: 600, damping: 32 }}
+              className="absolute top-[3px] left-[3px] size-[18px] rounded-full neu-raised-sm"
+            />
+          </span>
+          <span className="min-w-0">
+            <span className="block font-lora text-[13px] font-medium text-[#34150F]">Include this conversation</span>
+            <span className="block font-inter text-[11px] text-[#7D6855] mt-0.5">So our team can review the messages.</span>
+          </span>
+        </button>
+
+        <AnimatePresence>{error && <NeuAlert key="report-error" tone="error">{error}</NeuAlert>}</AnimatePresence>
+
+        {/* Actions (same as the Documents modals) */}
+        <div className="pt-2 flex flex-col items-center">
+          <button
+            type="submit"
+            disabled={!valid || submitting}
+            className="neu-btn-create w-[240px] sm:w-[260px] text-xs sm:text-sm font-semibold tracking-[0.16em] uppercase py-3 sm:py-3.5 px-6 rounded-[14px] active:translate-y-0.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B9833C]/60"
+          >
+            {submitting ? 'Sending…' : 'Send Report'}
+          </button>
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            aria-label="Close"
-            className="neu-raised-sm size-8 shrink-0 rounded-full bg-[#E5D8CB] text-[#5C4535] hover:text-[#34150F] disabled:opacity-50"
+            className="mt-3.5 text-xs font-inter text-[#7A604D] hover:text-[#99431E] hover:underline transition-colors duration-200 cursor-pointer select-none disabled:opacity-50"
           >
-            ×
+            Cancel
           </button>
+          <p className="font-inter text-[10.5px] text-[#9A8270] text-center mt-3 leading-snug max-w-[300px]">
+            False or abusive reports may lead to action on your own account.
+          </p>
         </div>
+      </form>
+    </>
+  );
+}
 
-        {done ? (
-          <div className="space-y-4 text-center py-4">
-            <div className="neu-raised-sm size-14 rounded-full bg-[#E5D8CB] mx-auto flex items-center justify-center text-2xl text-emerald-700">✓</div>
-            <p className="font-inter text-xs sm:text-[13px] text-[#5C4535] leading-relaxed max-w-sm mx-auto">
-              Thank you. Your report about <strong>{targetName}</strong> was sent to the Justicia team. We review every report and
-              will notify you once a decision is made. {targetName} will not be told who reported them.
-            </p>
-            <button
-              type="button"
-              onClick={onClose}
-              className="neu-btn-caramel px-6 py-2 rounded-[12px] text-white text-xs font-inter font-semibold shadow-md active:scale-95"
-            >
-              Done
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={submit} className="space-y-5">
-            <fieldset className="space-y-2">
-              <legend className="font-inter text-[11px] font-bold uppercase tracking-wider text-[#5C4535] pb-1.5">What is the problem?</legend>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {REPORT_REASONS.map((r) => {
-                  const selected = reasonKey === r.key;
-                  return (
-                    <label
-                      key={r.key}
-                      className={`cursor-pointer rounded-[14px] p-3 transition-all ${
-                        selected ? 'neu-recessed ring-1 ring-[#C58B3C]/60 bg-[#E5D8CB]' : 'neu-raised-sm bg-[#E5D8CB] hover:brightness-[1.015]'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="report-reason"
-                        value={r.key}
-                        checked={selected}
-                        onChange={() => setReasonKey(r.key)}
-                        className="sr-only"
-                      />
-                      <span className="flex items-start gap-2">
-                        <span
-                          aria-hidden="true"
-                          className={`mt-0.5 size-3.5 shrink-0 rounded-full border-2 ${selected ? 'border-[#C58B3C] bg-[#C58B3C]' : 'border-[#A89685]'}`}
-                        />
-                        <span className="min-w-0">
-                          <span className="block font-lora text-xs sm:text-[13px] font-bold text-[#34150F] leading-snug">{r.label}</span>
-                          <span className="block font-inter text-[10.5px] text-[#7D6855] mt-0.5 leading-snug">{r.description}</span>
-                        </span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-
-            <div className="space-y-1.5">
-              <label htmlFor="report-details" className="font-inter text-[11px] font-bold uppercase tracking-wider text-[#5C4535]">
-                What happened?
-              </label>
-              <textarea
-                id="report-details"
-                rows={4}
-                value={details}
-                maxLength={REPORT_DETAILS_MAX}
-                disabled={submitting}
-                onChange={(e) => setDetails(e.target.value)}
-                placeholder="Describe what happened, when it happened and anything else our team should know."
-                className="w-full neu-recessed bg-[#E5D8CB] rounded-[14px] px-3.5 py-2.5 text-xs sm:text-[13px] font-lora text-[#34150F] placeholder-[#9A8270]/70 focus:outline-none focus:ring-2 focus:ring-[#B9833C]/40 resize-y"
-              />
-              <p className={`font-inter text-[10.5px] ${trimmed.length > 0 && trimmed.length < REPORT_DETAILS_MIN ? 'text-rose-800' : 'text-[#8C7A6B]'}`}>
-                {trimmed.length < REPORT_DETAILS_MIN
-                  ? `At least ${REPORT_DETAILS_MIN} characters (${trimmed.length}/${REPORT_DETAILS_MIN}).`
-                  : `${trimmed.length}/${REPORT_DETAILS_MAX}`}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <p className="font-inter text-[11px] font-bold uppercase tracking-wider text-[#5C4535]">Proof (optional)</p>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => fileInput.current?.click()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    fileInput.current?.click();
-                  }
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOver(false);
-                  addFiles(e.dataTransfer.files);
-                }}
-                className={`neu-recessed bg-[#E5D8CB] rounded-[14px] px-4 py-4 text-center cursor-pointer transition ${dragOver ? 'ring-2 ring-[#C58B3C]/60' : ''}`}
-              >
-                <p className="font-inter text-xs font-semibold text-[#34150F]">Drop screenshots or receipts here, or click to browse</p>
-                <p className="font-inter text-[10.5px] text-[#7D6855] mt-1">
-                  PNG, JPG, WEBP or PDF · up to {REPORT_MAX_FILES} files, 5 MB each
-                </p>
-                <input
-                  ref={fileInput}
-                  type="file"
-                  multiple
-                  accept={ACCEPT}
-                  className="hidden"
-                  onChange={(e) => {
-                    addFiles(e.target.files);
-                    e.target.value = '';
-                  }}
-                />
-              </div>
-              {files.length > 0 && (
-                <ul className="space-y-1.5">
-                  {files.map((f, i) => (
-                    <li key={`${f.name}-${f.size}`} className="neu-raised-sm bg-[#E5D8CB] rounded-[12px] px-3 py-2 flex items-center justify-between gap-2">
-                      <span className="min-w-0 font-inter text-[11px] text-[#34150F] truncate">
-                        {f.name} <span className="text-[#8C7A6B]">· {formatSize(f.size)}</span>
-                      </span>
-                      <button
-                        type="button"
-                        disabled={submitting}
-                        onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="font-inter text-[11px] font-semibold text-rose-800 hover:underline shrink-0"
-                      >
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <label className="flex items-start gap-2.5 cursor-pointer pt-1">
-                <input
-                  type="checkbox"
-                  checked={includeConversation}
-                  disabled={submitting}
-                  onChange={(e) => setIncludeConversation(e.target.checked)}
-                  className="mt-0.5 size-4 accent-[#C58B3C]"
-                />
-                <span className="font-inter text-[11.5px] text-[#5C4535] leading-snug">
-                  Attach this conversation so the Justicia team can review the messages.
-                </span>
-              </label>
-            </div>
-
-            <p className="font-inter text-[10.5px] text-[#7D6855] leading-relaxed">
-              Reports are confidential. {targetName} will not see who reported them. False or abusive reports may lead to action on
-              your own account.
-            </p>
-
-            {error && (
-              <p role="alert" className="rounded-[12px] border border-rose-300 bg-rose-50 px-3 py-2 font-inter text-[11.5px] text-rose-800">
-                {error}
-              </p>
-            )}
-
-            <div className="flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={submitting}
-                className="px-4 py-2 rounded-[12px] font-inter text-xs font-semibold text-[#5C4535] hover:text-[#34150F] disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={!valid || submitting}
-                className="neu-btn-caramel px-5 py-2 rounded-[12px] text-white text-xs font-inter font-semibold shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {submitting ? 'Sending…' : 'Send Report'}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
+export function ReportAccountModal({ open, threadId, targetName, targetRole, onClose }: ReportAccountModalProps) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <ParchmentModal
+      isOpen={open}
+      onClose={onClose}
+      dismissible={!busy}
+      ariaLabelledBy="report-account-title"
+      maxWidth="max-w-[460px] sm:max-w-[480px]"
+    >
+      <ReportForm threadId={threadId} targetName={targetName} targetRole={targetRole} onClose={onClose} onBusyChange={setBusy} />
+    </ParchmentModal>
   );
 }
 

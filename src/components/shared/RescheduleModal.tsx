@@ -1,14 +1,13 @@
 'use client';
 
 /**
- * Reschedule dialogs for confirmed appointments (client and lawyer portals), in the same
- * design2 style as ConsultationDecisionModal.
+ * Reschedule dialogs for confirmed appointments (client and lawyer portals), built on the shared
+ * neumorphic modal frame (NeuModal) so they match the rest of the consultation booking flow.
  *  - request:  pick a new date + time slot (both calendars are checked server-side) and a reason
  *  - respond:  accept or decline the other party's proposal (optional reason when declining)
  *  - withdraw: cancel your own open request
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   getRescheduleOptionsAction,
   requestRescheduleAction,
@@ -17,6 +16,20 @@ import {
   type RescheduleInfo,
   type RescheduleOptions,
 } from '@/app/actions/consultationActions';
+import { AnimatePresence, motion, type Variants } from 'motion/react';
+import {
+  NeuModal,
+  NeuButton,
+  NeuAlert,
+  EmptyState,
+  CalendarClockIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ArrowDownIcon,
+  SendIcon,
+  ClockIcon,
+  CheckCircleIcon,
+} from '@/components/shared/neu';
 
 export type RescheduleModalMode = 'request' | 'respond' | 'withdraw';
 
@@ -36,14 +49,31 @@ interface RescheduleModalProps {
   onDone: (message: string) => void;
 }
 
-const CARD_SHADOW = '16px 16px 40px rgba(0,0,0,0.22), -8px -8px 24px rgba(255,255,255,0.55)';
-const TITLE_PLATE_SHADOW = '6px 8px 16px rgba(165, 135, 105, 0.35), -4px -4px 10px rgba(255, 255, 255, 0.8)';
-const PRIMARY_SHADOW = '0 6px 16px rgba(212, 158, 86, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4)';
-const INSET_SHADOW = 'inset 3px 3px 6px rgba(165, 140, 115, 0.45), inset -3px -3px 6px rgba(255, 255, 255, 0.85)';
-const RAISED_SM = '3px 3px 7px rgba(165, 140, 115, 0.35), -3px -3px 7px rgba(255, 255, 255, 0.85)';
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const WEEKDAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const REASON_MIN = 5;
+const REASON_MAX = 500;
 const pad = (n: number) => String(n).padStart(2, '0');
+
+const EASE_OUT = [0.2, 0.8, 0.2, 1] as const;
+const GRID_SLIDE: Variants = {
+  enter: (d: number) => ({ opacity: 0, x: d * 30 }),
+  center: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 340, damping: 32 } },
+  exit: (d: number) => ({ opacity: 0, x: -d * 30, transition: { duration: 0.14 } }),
+};
+const TITLE_SWAP: Variants = {
+  enter: (d: number) => ({ opacity: 0, y: d * 10 }),
+  center: { opacity: 1, y: 0, transition: { duration: 0.22, ease: EASE_OUT } },
+  exit: (d: number) => ({ opacity: 0, y: -d * 10, transition: { duration: 0.14 } }),
+};
+const SLOT_LIST: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.045, delayChildren: 0.02 } },
+};
+const SLOT_ITEM: Variants = {
+  hidden: { opacity: 0, x: 14 },
+  show: { opacity: 1, x: 0, transition: { duration: 0.28, ease: EASE_OUT } },
+};
 
 /** Today's date in Asia/Manila as YYYY-MM-DD. */
 function manilaToday(): string {
@@ -65,154 +95,25 @@ function longDate(iso: string): string {
 }
 
 export function RescheduleModal(props: RescheduleModalProps) {
-  const { mode, consultationId, counterpartName, currentLabel, currentStart, pending, remaining, onClose, onDone } = props;
+  const { mode, pending } = props;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const shared = { ...props, submitting, setSubmitting, error, setError };
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !submitting) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, submitting]);
-
-  const title = mode === 'request' ? 'Reschedule Consultation' : mode === 'respond' ? 'Reschedule Request' : 'Withdraw Request?';
-
-  if (!mounted) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-5 md:p-6 animate-in fade-in overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="reschedule-modal-title"
-      onClick={() => !submitting && onClose()}
-    >
-      <div
-        className="neu-modal outline-[#D39758] relative w-full max-w-[94vw] sm:max-w-2xl lg:max-w-3xl max-h-[88vh] flex flex-col rounded-[26px] sm:rounded-[30px] p-6 sm:p-8 lg:p-9 bg-[#E5D8CB] space-y-5 sm:space-y-6 animate-in zoom-in-95 duration-200 shadow-2xl my-auto overflow-y-auto neu-scrollbar-discrete"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex justify-center">
-          <h3
-            id="reschedule-modal-title"
-            className="neu-raised-highlight px-6 sm:px-10 py-2 sm:py-2.5 rounded-2xl font-lora text-lg sm:text-xl font-bold text-[#341512] text-center"
-            style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
-          >
-            {title}
-          </h3>
-        </div>
-
-        {mode === 'request' && (
-          <RequestStep
-            consultationId={consultationId}
-            counterpartName={counterpartName}
-            currentLabel={currentLabel}
-            currentStart={currentStart}
-            remaining={remaining}
-            submitting={submitting}
-            setSubmitting={setSubmitting}
-            error={error}
-            setError={setError}
-            onClose={onClose}
-            onDone={onDone}
-          />
-        )}
-        {mode === 'respond' && pending && (
-          <RespondStep
-            consultationId={consultationId}
-            counterpartName={counterpartName}
-            currentLabel={currentLabel}
-            pending={pending}
-            submitting={submitting}
-            setSubmitting={setSubmitting}
-            error={error}
-            setError={setError}
-            onClose={onClose}
-            onDone={onDone}
-          />
-        )}
-        {mode === 'withdraw' && pending && (
-          <WithdrawStep
-            consultationId={consultationId}
-            counterpartName={counterpartName}
-            pending={pending}
-            submitting={submitting}
-            setSubmitting={setSubmitting}
-            error={error}
-            setError={setError}
-            onClose={onClose}
-            onDone={onDone}
-          />
-        )}
-      </div>
-    </div>,
-    document.body
-  );
+  if (mode === 'request') return <RequestStep {...shared} />;
+  if (mode === 'respond' && pending) return <RespondStep {...shared} pending={pending} />;
+  if (mode === 'withdraw' && pending) return <WithdrawStep {...shared} pending={pending} />;
+  return null;
 }
 
-interface StepProps {
-  consultationId: string;
-  counterpartName: string;
+type StepProps = RescheduleModalProps & {
   submitting: boolean;
   setSubmitting: (v: boolean) => void;
   error: string | null;
   setError: (v: string | null) => void;
-  onClose: () => void;
-  onDone: (message: string) => void;
-}
+};
 
-function ErrorLine({ error }: { error: string | null }) {
-  if (!error) return null;
-  return (
-    <p role="alert" className="text-xs font-semibold text-red-800 bg-red-100 border border-red-300 rounded-xl px-3 py-2">
-      {error}
-    </p>
-  );
-}
-
-function Buttons({
-  cancelLabel = 'Cancel',
-  primaryLabel,
-  onCancel,
-  onPrimary,
-  disabled,
-  submitting,
-}: {
-  cancelLabel?: string;
-  primaryLabel: string;
-  onCancel: () => void;
-  onPrimary: () => void;
-  disabled?: boolean;
-  submitting: boolean;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 pt-1">
-      <button
-        type="button"
-        onClick={onCancel}
-        disabled={submitting}
-        className="min-w-[130px] px-8 py-2.5 rounded-xl border border-[#341512]/60 bg-[#ECE1D2] text-xs sm:text-sm font-lora font-semibold text-[#341512] hover:bg-[#E2D4C3] active:scale-95 transition-all disabled:opacity-50 shadow-[2px_2px_5px_rgba(182,155,130,0.3),-2px_-2px_5px_#ffffff]"
-      >
-        {cancelLabel}
-      </button>
-      <button
-        type="button"
-        onClick={onPrimary}
-        disabled={submitting || disabled}
-        className="neu-btn-caramel min-w-[130px] px-8 py-2.5 rounded-xl bg-[#D49E56] text-xs sm:text-sm font-lora font-bold text-[#341512] transition-all hover:brightness-105 active:scale-95 disabled:opacity-50"
-        style={{ boxShadow: PRIMARY_SHADOW }}
-      >
-        {primaryLabel}
-      </button>
-    </div>
-  );
-}
+const labelClass = 'block font-lora text-[11px] font-bold uppercase tracking-[0.14em] text-[#946525]';
 
 // ─── Request: choose a new date & time ─────────────────────────────────────
 
@@ -228,7 +129,7 @@ function RequestStep({
   setError,
   onClose,
   onDone,
-}: StepProps & { currentLabel: string; currentStart: string | null; remaining: number }) {
+}: StepProps) {
   const today = manilaToday();
   // Open on the current appointment's month (or today, if that month has already begun).
   const [initialIso] = useState(() => {
@@ -237,6 +138,7 @@ function RequestStep({
     return firstOfMonth > today ? firstOfMonth : today;
   });
   const [view, setView] = useState(() => monthOf(initialIso));
+  const [monthDir, setMonthDir] = useState(1);
   const [selectedDate, setSelectedDate] = useState<string | null>(initialIso);
   const [options, setOptions] = useState<RescheduleOptions | null>(null);
   const [bounds, setBounds] = useState<{ min: string; max: string } | null>(null);
@@ -304,6 +206,7 @@ function RequestStep({
   const minMonth = (bounds?.min ?? today).slice(0, 7);
   const maxMonth = bounds?.max.slice(0, 7) ?? '9999-12';
   const changeMonth = (delta: number) => {
+    setMonthDir(delta > 0 ? 1 : -1);
     const d = new Date(Date.UTC(view.year, view.month + delta, 1));
     const next = { year: d.getUTCFullYear(), month: d.getUTCMonth() };
     setView(next);
@@ -312,7 +215,9 @@ function RequestStep({
   };
 
   const chosen = options?.slots.find((s) => s.startMinutes === slot) ?? null;
-  const valid = !!selectedDate && !!chosen && chosen.state === 'available' && reason.trim().length >= 5;
+  const reasonLength = reason.trim().length;
+  const valid = !!selectedDate && !!chosen && chosen.state === 'available' && reasonLength >= REASON_MIN;
+  const noOpenSlots = !!options && !loadingSlots && options.slots.every((s) => s.state !== 'available');
 
   const submit = async () => {
     if (!valid || !selectedDate || slot === null) return;
@@ -333,168 +238,290 @@ function RequestStep({
     }
   };
 
-  return (
-    <div className="space-y-5">
-      <p className="text-xs sm:text-[13px] text-[#4A3525] leading-relaxed text-center">
-        Current schedule: <strong>{currentLabel}</strong>. Choose a new date and time below — <strong>{counterpartName}</strong> will
-        be asked to accept it. Your payment and Google Meet link stay the same.
-        {remaining < 2 && <> This booking can be rescheduled {remaining} more time{remaining === 1 ? '' : 's'}.</>}
-      </p>
+  const newLabel = selectedDate && chosen ? `${longDate(selectedDate)} · ${chosen.label.replace(' • PST, GMT+8', '')}` : null;
 
-      <div className="grid gap-5 md:grid-cols-[1.1fr_1fr]">
+  return (
+    <NeuModal
+      onClose={onClose}
+      dismissible={!submitting}
+      size="2xl"
+      bodyClassName="space-y-8 sm:space-y-9"
+      icon={<CalendarClockIcon className="w-5 h-5" />}
+      title="Reschedule Consultation"
+      subtitle={
+        <>
+          Pick a new date and time. <strong className="font-semibold text-[#341512]">{counterpartName}</strong> will be asked to
+          accept it. Your payment and Google Meet link stay the same.
+        </>
+      }
+      footerStart={
+        remaining < 2 ? (
+          <>
+            {remaining} reschedule{remaining === 1 ? '' : 's'} left for this booking
+          </>
+        ) : undefined
+      }
+      footer={
+        <>
+          <NeuButton variant="secondary" onClick={onClose} disabled={submitting}>
+            Cancel
+          </NeuButton>
+          <NeuButton variant="primary" onClick={submit} disabled={!valid} loading={submitting} icon={<SendIcon className="w-4 h-4" />}>
+            {submitting ? 'Sending…' : 'Send Request'}
+          </NeuButton>
+        </>
+      }
+    >
+      {/* Current → new schedule, updated live as the user picks */}
+      <ScheduleChange from={currentLabel} to={newLabel} toPlaceholder="Choose a date and time below" />
+
+      <div className="grid gap-8 lg:gap-10 lg:grid-cols-[1.1fr_1fr] items-start">
         {/* Calendar */}
-        <div className="rounded-2xl bg-[#ECE1D2] p-4" style={{ boxShadow: RAISED_SM }}>
-          <div className="flex items-center justify-between pb-3">
-            <button
-              type="button"
-              onClick={() => changeMonth(-1)}
-              disabled={monthKey <= minMonth || submitting}
-              aria-label="Previous month"
-              className="h-8 w-8 rounded-full text-[#5C4535] hover:bg-[#E0D2C0] disabled:opacity-30"
-            >
-              ‹
-            </button>
-            <span className="font-lora text-xs font-bold uppercase tracking-widest text-[#C58B3C]">
-              {MONTHS[view.month]} {view.year}
-            </span>
-            <button
-              type="button"
-              onClick={() => changeMonth(1)}
-              disabled={monthKey >= maxMonth || submitting}
-              aria-label="Next month"
-              className="h-8 w-8 rounded-full text-[#5C4535] hover:bg-[#E0D2C0] disabled:opacity-30"
-            >
-              ›
-            </button>
+        <section aria-label="Choose a date" className="neu-raised bg-[#E5D8CB] rounded-[26px] p-5 sm:p-7">
+          <div className="flex items-center justify-between gap-3 mb-5 sm:mb-6">
+            <div className="leading-none overflow-hidden">
+              <AnimatePresence mode="popLayout" initial={false} custom={monthDir}>
+                <motion.div key={monthKey} custom={monthDir} variants={TITLE_SWAP} initial="enter" animate="center" exit="exit">
+                  <p className="font-lora text-lg font-bold text-[#341512]">{MONTHS[view.month]}</p>
+                  <p className="font-lora text-[11px] font-bold tracking-[0.2em] text-[#C58B3C] mt-1">{view.year}</p>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => changeMonth(-1)}
+                disabled={monthKey <= minMonth || submitting}
+                aria-label="Previous month"
+                className="neu-raised-sm size-9 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] active:scale-95 transition-all disabled:opacity-35 disabled:pointer-events-none cursor-pointer"
+              >
+                <ChevronLeftIcon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => changeMonth(1)}
+                disabled={monthKey >= maxMonth || submitting}
+                aria-label="Next month"
+                className="neu-raised-sm size-9 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] active:scale-95 transition-all disabled:opacity-35 disabled:pointer-events-none cursor-pointer"
+              >
+                <ChevronRightIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-7 gap-1 text-center font-lora text-[11px] font-bold text-[#341512] pb-1">
-            {WEEKDAYS.map((d) => (
-              <span key={d}>{d}</span>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-1 text-center font-lora text-xs">
-            {cells.map((day, idx) => {
-              if (!day) return <span key={`e-${idx}`} className="h-8" />;
-              const iso = dayIso(view.year, view.month, day);
-              const outOfRange = iso < (bounds?.min ?? today) || (!!bounds && iso > bounds.max);
-              const blocked = blockedDays.key === monthKey && blockedDays.days.includes(day);
-              const disabled = outOfRange || blocked || submitting;
-              const selected = iso === selectedDate;
-              return (
-                <button
-                  key={iso}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => loadDate(iso)}
-                  aria-pressed={selected}
-                  aria-label={`${longDate(iso)}${blocked ? ' (attorney unavailable)' : ''}`}
-                  title={blocked ? 'Attorney unavailable' : undefined}
-                  className={`h-8 w-8 mx-auto rounded-full font-lora transition-all flex items-center justify-center ${
-                    selected
-                      ? 'bg-[#ECE1D2] text-[#C58B3C] font-bold shadow-[3px_3px_7px_rgba(182,155,130,0.45),-3px_-3px_7px_#ffffff]'
+
+          <div className="neu-recessed rounded-[20px] px-3 sm:px-4 py-4 sm:py-5 overflow-hidden">
+            <div className="grid grid-cols-7 text-center font-inter text-[10.5px] font-semibold uppercase text-[#9E8E7D] pb-3">
+              {WEEKDAY_INITIALS.map((d, i) => (
+                <span key={i}>{d}</span>
+              ))}
+            </div>
+            <AnimatePresence mode="popLayout" initial={false} custom={monthDir}>
+            <motion.div
+              key={monthKey}
+              custom={monthDir}
+              variants={GRID_SLIDE}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              className="grid grid-cols-7 gap-y-2.5 text-center"
+            >
+              {cells.map((day, idx) => {
+                if (!day) return <span key={`e-${idx}`} className="h-9" />;
+                const iso = dayIso(view.year, view.month, day);
+                const outOfRange = iso < (bounds?.min ?? today) || (!!bounds && iso > bounds.max);
+                const blocked = blockedDays.key === monthKey && blockedDays.days.includes(day);
+                const disabled = outOfRange || blocked || submitting;
+                const selected = iso === selectedDate;
+                const isToday = iso === today;
+                return (
+                  <motion.button
+                    key={iso}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => loadDate(iso)}
+                    whileHover={disabled || selected ? undefined : { scale: 1.12 }}
+                    whileTap={disabled ? undefined : { scale: 0.88 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+                    aria-pressed={selected}
+                    aria-current={isToday ? 'date' : undefined}
+                    aria-label={`${longDate(iso)}${blocked ? ' (attorney unavailable)' : ''}`}
+                    title={blocked ? 'Attorney unavailable' : undefined}
+                    className={`relative mx-auto size-9 rounded-full flex items-center justify-center font-inter text-[12.5px] transition-colors select-none ${selected
+                      ? 'font-bold text-[#341512]'
                       : disabled
-                        ? 'text-[#B5A391] line-through decoration-[#C8B59E]'
-                        : 'text-[#341512] hover:text-[#C58B3C] hover:bg-[#DECEB8]'
-                  }`}
-                >
-                  {pad(day)}
-                </button>
-              );
-            })}
+                        ? 'text-[#B5A391] line-through decoration-[#C8B59E] cursor-not-allowed'
+                        : 'text-[#341512] hover:bg-[#D39758]/18 cursor-pointer'
+                      } ${isToday ? 'outline-[1.5px] outline-solid outline-[#C58B3C] outline-offset-2' : ''}`}
+                  >
+                    {selected && (
+                      <motion.span
+                        layoutId="reschedule-selected-day"
+                        transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                        className="absolute inset-0 rounded-full neu-btn-caramel"
+                      />
+                    )}
+                    <span className="relative">{day}</span>
+                  </motion.button>
+                );
+              })}
+            </motion.div>
+            </AnimatePresence>
           </div>
-        </div>
+          <p className="pt-4 font-inter text-[11px] text-[#7D6855] text-center">Crossed-out days are unavailable.</p>
+        </section>
 
         {/* Time slots */}
-        <div className="space-y-2">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-[#946525]">
-            {selectedDate ? longDate(selectedDate) : 'Choose a date'}
-          </p>
-          <div className="space-y-2" aria-busy={loadingSlots}>
-            {loadingSlots || !options
-              ? Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-9 rounded-xl neu-skeleton-inset" />)
-              : options.slots.map((s) => {
-                  const selectable = s.state === 'available';
-                  const tag =
-                    s.state === 'current' ? 'Current' : s.state === 'booked' ? 'Booked' : s.state === 'unavailable' ? 'Unavailable' : s.state === 'past' ? 'Too soon' : null;
-                  return (
-                    <button
-                      key={s.startMinutes}
-                      type="button"
-                      disabled={!selectable || submitting}
-                      onClick={() => setSlot(s.startMinutes)}
-                      aria-pressed={slot === s.startMinutes}
-                      className={`w-full rounded-xl px-3 py-2 text-left text-xs font-semibold transition-all flex items-center justify-between gap-2 ${
-                        slot === s.startMinutes
-                          ? 'bg-[#D9A86C] text-[#34150F]'
-                          : selectable
-                            ? 'bg-[#ECE1D2] text-[#3E2A1E] hover:brightness-[1.03]'
-                            : 'bg-[#E4D5C2] text-[#A08E7C] cursor-not-allowed'
-                      }`}
-                      style={{ boxShadow: slot === s.startMinutes ? PRIMARY_SHADOW : selectable ? RAISED_SM : INSET_SHADOW }}
-                    >
-                      <span className={selectable ? '' : 'line-through'}>{s.label.replace(' • PST, GMT+8', '')}</span>
-                      {tag && <span className="text-[10px] font-bold uppercase tracking-wide">{tag}</span>}
-                    </button>
-                  );
-                })}
+        <section aria-label="Choose a time" className="flex flex-col gap-4 sm:gap-5 lg:pt-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className={labelClass}>{selectedDate ? longDate(selectedDate) : 'Choose a date'}</p>
+            <span className="font-inter text-[10.5px] text-[#7D6855] shrink-0">PST (GMT+8)</span>
           </div>
-          <p className="text-[10.5px] text-[#7D6855]">Times are in PST (GMT+8).</p>
-        </div>
+          <div className="flex flex-col gap-3.5" aria-busy={loadingSlots}>
+            {loadingSlots || !options ? (
+              Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-12 rounded-2xl neu-skeleton-inset" />)
+            ) : noOpenSlots ? (
+              <div className="neu-recessed rounded-[20px]">
+                <EmptyState
+                  size="sm"
+                  icon={<ClockIcon />}
+                  title="No open times this day"
+                  description="Every slot is booked or unavailable. Try another date on the calendar."
+                />
+              </div>
+            ) : (
+              <motion.div key={selectedDate ?? 'none'} variants={SLOT_LIST} initial="hidden" animate="show" className="flex flex-col gap-3.5">
+              {options.slots.map((s) => {
+                const selectable = s.state === 'available';
+                const isChosen = slot === s.startMinutes;
+                const tag =
+                  s.state === 'current' ? 'Current' : s.state === 'booked' ? 'Booked' : s.state === 'unavailable' ? 'Unavailable' : s.state === 'past' ? 'Too soon' : null;
+                return (
+                  <motion.button
+                    key={s.startMinutes}
+                    type="button"
+                    variants={SLOT_ITEM}
+                    whileHover={selectable && !isChosen ? { x: 3 } : undefined}
+                    whileTap={selectable ? { scale: 0.98 } : undefined}
+                    disabled={!selectable || submitting}
+                    onClick={() => setSlot(s.startMinutes)}
+                    aria-pressed={isChosen}
+                    className={`h-12 w-full rounded-2xl px-5 flex items-center justify-between gap-3 font-inter text-xs sm:text-[13px] transition-all select-none ${isChosen
+                      ? 'neu-btn-caramel font-bold text-[#341512]'
+                      : selectable
+                        ? 'neu-raised-sm bg-[#E5D8CB] font-semibold text-[#3E2A1E] hover:text-[#A8742E] active:scale-[0.99] cursor-pointer'
+                        : 'neu-recessed text-[#A08E7C] cursor-not-allowed'
+                      }`}
+                  >
+                    <span className={`flex items-center gap-2.5 ${selectable ? '' : 'line-through decoration-[#C8B59E]'}`}>
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.span
+                          key={isChosen ? 'check' : 'clock'}
+                          initial={{ scale: 0.4, opacity: 0, rotate: isChosen ? -30 : 0 }}
+                          animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                          exit={{ scale: 0.4, opacity: 0 }}
+                          transition={{ type: 'spring', stiffness: 520, damping: 20 }}
+                          className="flex"
+                        >
+                          {isChosen ? <CheckCircleIcon className="w-4 h-4" /> : <ClockIcon className="w-4 h-4 opacity-70" />}
+                        </motion.span>
+                      </AnimatePresence>
+                      {s.label.replace(' • PST, GMT+8', '')}
+                    </span>
+                    {tag && <span className="text-[10px] font-bold uppercase tracking-wider">{tag}</span>}
+                  </motion.button>
+                );
+              })}
+              </motion.div>
+            )}
+          </div>
+        </section>
       </div>
 
-      <div className="space-y-1.5">
-        <label htmlFor="reschedule-reason" className="text-[11px] font-bold uppercase tracking-wider text-[#946525]">
-          Reason for rescheduling
-        </label>
+      {/* Reason */}
+      <div className="space-y-3.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <label htmlFor="reschedule-reason" className={labelClass}>
+            Reason for rescheduling
+          </label>
+          <span className={`font-inter text-[10.5px] ${reasonLength > 0 && reasonLength < REASON_MIN ? 'text-[#B42318]' : 'text-[#7D6855]'}`}>
+            {reasonLength > 0 && reasonLength < REASON_MIN ? `At least ${REASON_MIN} characters · ` : ''}
+            {reason.length}/{REASON_MAX}
+          </span>
+        </div>
         <textarea
           id="reschedule-reason"
-          rows={3}
-          maxLength={500}
+          rows={4}
+          maxLength={REASON_MAX}
           value={reason}
           disabled={submitting}
           onChange={(e) => setReason(e.target.value)}
           placeholder={`Let ${counterpartName} know why you need to move this consultation.`}
-          className="w-full rounded-2xl py-3 px-4 bg-[#E4D5C2] text-xs sm:text-sm text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none resize-y"
-          style={{ boxShadow: INSET_SHADOW }}
+          className="neu-input w-full rounded-[20px] py-4 px-5 font-inter text-xs sm:text-sm text-[#23150F] leading-relaxed resize-y"
         />
       </div>
 
-      <ErrorLine error={error} />
-      <Buttons
-        primaryLabel={submitting ? 'Sending...' : 'Send Request'}
-        onCancel={onClose}
-        onPrimary={submit}
-        disabled={!valid}
-        submitting={submitting}
-      />
+      {error && <NeuAlert tone="error">{error}</NeuAlert>}
+    </NeuModal>
+  );
+}
+
+// ─── Shared: "from → to" schedule card ──────────────────────────────────────
+
+function ScheduleChange({ from, to, toPlaceholder }: { from?: string; to: string | null; toPlaceholder?: string }) {
+  return (
+    <div className="neu-raised bg-[#E5D8CB] rounded-[24px] px-5 py-5 sm:px-7 sm:py-6">
+      {from && (
+        <>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-4">
+            <span className="w-28 shrink-0 font-lora text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#7D6855]">Current</span>
+            <span className={`font-inter text-xs sm:text-[13px] text-[#5C4535] ${to ? 'line-through decoration-[#B5A391]' : ''}`}>{from}</span>
+          </div>
+          <div className="flex sm:pl-28 py-3 text-[#C58B3C]" aria-hidden="true">
+            <motion.span
+              className="sm:ml-4 flex"
+              key={to ?? 'idle'}
+              initial={{ y: -4, opacity: 0.4 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 14 }}
+            >
+              <ArrowDownIcon className="w-4 h-4" />
+            </motion.span>
+          </div>
+        </>
+      )}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-4">
+        <span className="w-28 shrink-0 font-lora text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#946525]">
+          {from ? 'New' : 'Proposed'}
+        </span>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={to ?? 'placeholder'}
+            initial={{ opacity: 0, y: 6, filter: 'blur(2px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, y: -6, filter: 'blur(2px)' }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
+            className={`font-inter text-xs sm:text-[13px] ${to ? 'font-semibold text-[#341512]' : 'italic text-[#9E8E7D]'}`}
+          >
+            {to ?? toPlaceholder}
+          </motion.span>
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function ReasonQuote({ label, text }: { label: string; text: string }) {
+  return (
+    <div className="space-y-3.5">
+      <p className={labelClass}>{label}</p>
+      <blockquote className="neu-recessed rounded-[20px] px-5 py-4 sm:px-6 sm:py-5 font-inter text-xs sm:text-[13px] leading-relaxed text-[#3E2A1E] whitespace-pre-line">
+        {text}
+      </blockquote>
     </div>
   );
 }
 
 // ─── Respond: accept / decline the other party's proposal ─────────────────
-
-function ProposalCard({ currentLabel, pending }: { currentLabel?: string; pending: NonNullable<RescheduleInfo['pending']> }) {
-  return (
-    <div className="rounded-2xl bg-[#ECE1D2] p-4 sm:p-5 space-y-3 text-xs sm:text-[13px] text-[#3E2A1E]" style={{ boxShadow: RAISED_SM }}>
-      {currentLabel && (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-          <span className="w-24 shrink-0 text-[10.5px] font-bold uppercase tracking-wider text-[#7D6855]">From</span>
-          <span className="line-through decoration-[#B5A391]">{currentLabel}</span>
-        </div>
-      )}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-        <span className="w-24 shrink-0 text-[10.5px] font-bold uppercase tracking-wider text-[#946525]">{currentLabel ? 'To' : 'Proposed'}</span>
-        <strong>
-          {pending.proposedDateLong} · {pending.proposedTimeRange}
-        </strong>
-      </div>
-      <div className="flex flex-col sm:flex-row gap-1 sm:gap-3">
-        <span className="w-24 shrink-0 text-[10.5px] font-bold uppercase tracking-wider text-[#7D6855]">Reason</span>
-        <span className="whitespace-pre-line">{pending.reason}</span>
-      </div>
-    </div>
-  );
-}
 
 function RespondStep({
   consultationId,
@@ -505,8 +532,9 @@ function RespondStep({
   setSubmitting,
   error,
   setError,
+  onClose,
   onDone,
-}: StepProps & { currentLabel: string; pending: NonNullable<RescheduleInfo['pending']> }) {
+}: StepProps & { pending: NonNullable<RescheduleInfo['pending']> }) {
   const [declining, setDeclining] = useState(false);
   const [note, setNote] = useState('');
 
@@ -532,53 +560,77 @@ function RespondStep({
   };
 
   return (
-    <div className="space-y-5">
-      <p className="text-xs sm:text-[13px] text-[#4A3525] leading-relaxed text-center">
-        <strong>{counterpartName}</strong> asked to move your confirmed consultation. If you accept, the new time replaces the
-        current one for both of you; the payment and Google Meet link stay the same.
-      </p>
-      <ProposalCard currentLabel={currentLabel} pending={pending} />
+    <NeuModal
+      onClose={onClose}
+      dismissible={!submitting}
+      size="lg"
+      bodyClassName="space-y-7 sm:space-y-8"
+      icon={<CalendarClockIcon className="w-5 h-5" />}
+      title="Reschedule Request"
+      subtitle={
+        <>
+          <strong className="font-semibold text-[#341512]">{counterpartName}</strong> asked to move your confirmed consultation. If you
+          accept, the new time replaces the current one for both of you. The payment and Google Meet link stay the same.
+        </>
+      }
+      footer={
+        declining ? (
+          <>
+            <NeuButton variant="secondary" onClick={() => setDeclining(false)} disabled={submitting}>
+              Back
+            </NeuButton>
+            <NeuButton variant="danger" onClick={() => answer('decline')} loading={submitting}>
+              {submitting ? 'Declining…' : 'Decline Request'}
+            </NeuButton>
+          </>
+        ) : (
+          <>
+            <NeuButton
+              variant="secondary"
+              onClick={() => {
+                setError(null);
+                setDeclining(true);
+              }}
+              disabled={submitting}
+            >
+              Decline
+            </NeuButton>
+            <NeuButton variant="primary" onClick={() => answer('accept')} loading={submitting} icon={<CheckCircleIcon className="w-4 h-4" />}>
+              {submitting ? 'Accepting…' : 'Accept New Time'}
+            </NeuButton>
+          </>
+        )
+      }
+    >
+      <ScheduleChange from={currentLabel} to={`${pending.proposedDateLong} · ${pending.proposedTimeRange}`} />
+      <ReasonQuote label={`Reason from ${counterpartName}`} text={pending.reason} />
+
       {declining && (
-        <div className="space-y-1.5">
-          <label htmlFor="reschedule-decline-note" className="text-[11px] font-bold uppercase tracking-wider text-[#946525]">
-            Reason for declining (optional)
-          </label>
+        <div className="space-y-3.5">
+          <div className="flex items-baseline justify-between gap-3">
+            <label htmlFor="reschedule-decline-note" className={labelClass}>
+              Reason for declining <span className="normal-case tracking-normal font-normal text-[#7D6855]">(optional)</span>
+            </label>
+            <span className="font-inter text-[10.5px] text-[#7D6855]">
+              {note.length}/{REASON_MAX}
+            </span>
+          </div>
           <textarea
             id="reschedule-decline-note"
             rows={3}
-            maxLength={500}
+            maxLength={REASON_MAX}
             autoFocus
             value={note}
             disabled={submitting}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="e.g. I am not available then — could we try another day?"
-            className="w-full rounded-2xl py-3 px-4 bg-[#E4D5C2] text-xs sm:text-sm text-[#23150F] placeholder:text-[#9E8E7D] focus:outline-none resize-y"
-            style={{ boxShadow: INSET_SHADOW }}
+            placeholder="e.g. I am not available then. Could we try another day?"
+            className="neu-input w-full rounded-[20px] py-4 px-5 font-inter text-xs sm:text-sm text-[#23150F] leading-relaxed resize-y"
           />
         </div>
       )}
-      <ErrorLine error={error} />
-      {declining ? (
-        <Buttons
-          cancelLabel="Back"
-          primaryLabel={submitting ? 'Submitting...' : 'Decline Request'}
-          onCancel={() => setDeclining(false)}
-          onPrimary={() => answer('decline')}
-          submitting={submitting}
-        />
-      ) : (
-        <Buttons
-          cancelLabel="Decline"
-          primaryLabel={submitting ? 'Accepting...' : 'Accept New Time'}
-          onCancel={() => {
-            setError(null);
-            setDeclining(true);
-          }}
-          onPrimary={() => answer('accept')}
-          submitting={submitting}
-        />
-      )}
-    </div>
+
+      {error && <NeuAlert tone="error">{error}</NeuAlert>}
+    </NeuModal>
   );
 }
 
@@ -611,21 +663,37 @@ function WithdrawStep({
       setSubmitting(false);
     }
   };
+
   return (
-    <div className="space-y-5">
-      <p className="text-xs sm:text-[13px] text-[#4A3525] leading-relaxed text-center">
-        You asked <strong>{counterpartName}</strong> to move this consultation. Withdrawing keeps the original schedule.
-      </p>
-      <ProposalCard pending={pending} />
-      <ErrorLine error={error} />
-      <Buttons
-        cancelLabel="Keep Request"
-        primaryLabel={submitting ? 'Withdrawing...' : 'Withdraw Request'}
-        onCancel={onClose}
-        onPrimary={withdraw}
-        submitting={submitting}
-      />
-    </div>
+    <NeuModal
+      onClose={onClose}
+      dismissible={!submitting}
+      size="md"
+      bodyClassName="space-y-7 sm:space-y-8"
+      icon={<CalendarClockIcon className="w-5 h-5" />}
+      iconTone="danger"
+      title="Withdraw Request?"
+      subtitle={
+        <>
+          You asked <strong className="font-semibold text-[#341512]">{counterpartName}</strong> to move this consultation.
+          Withdrawing keeps the original schedule.
+        </>
+      }
+      footer={
+        <>
+          <NeuButton variant="secondary" onClick={onClose} disabled={submitting}>
+            Keep Request
+          </NeuButton>
+          <NeuButton variant="danger" onClick={withdraw} loading={submitting}>
+            {submitting ? 'Withdrawing…' : 'Withdraw Request'}
+          </NeuButton>
+        </>
+      }
+    >
+      <ScheduleChange to={`${pending.proposedDateLong} · ${pending.proposedTimeRange}`} />
+      <ReasonQuote label="Your reason" text={pending.reason} />
+      {error && <NeuAlert tone="error">{error}</NeuAlert>}
+    </NeuModal>
   );
 }
 

@@ -1,8 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
+import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react';
+import { EASE_OUT } from '@/components/shared/neu/motion';
+import {
+  ChevronRightIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  PencilIcon,
+  TrashIcon,
+} from '@/components/shared/neu/NeuIcons';
 import {
   createDocumentFolderAction,
   uploadDocumentFileAction,
@@ -161,37 +170,75 @@ function getDocIconPath(type: DocumentItem['type']) {
   }
 }
 
-// Helper: staggered entrance delay (capped so long lists never feel slow)
-const stagger = (index: number, step = 55, max = 12): React.CSSProperties => ({
-  animationDelay: `${Math.min(index, max) * step}ms`,
-});
+// Helper: staggered entrance delay (capped so long lists never feel slow).
+// Also exposes the index as --i so nested parts (folder flap, papers) can time
+// their own entrance relative to the card.
+const stagger = (index: number, step = 50, max = 12): React.CSSProperties =>
+  ({
+    '--i': Math.min(index, max),
+    animationDelay: `${Math.min(index, max) * step}ms`,
+  }) as React.CSSProperties;
 
 // Helper: navigation depth, used to pick the slide direction
 const depthOf = (section: 'shared' | 'owned' | null, folderId: string | null) =>
   (section ? 1 : 0) + (folderId ? 1 : 0);
 
+// Pointer tilt: writes --tx / --ty on the hovered card so its artwork leans toward
+// the cursor. Mouse only; touch and pen keep the plain hover state.
+const onTiltMove = (e: React.PointerEvent<HTMLElement>) => {
+  if (e.pointerType !== 'mouse') return;
+  const el = e.currentTarget;
+  const r = el.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width - 0.5;
+  const y = (e.clientY - r.top) / r.height - 0.5;
+  el.style.setProperty('--tx', `${(-x * 18).toFixed(2)}deg`);
+  el.style.setProperty('--ty', `${(y * 14).toFixed(2)}deg`);
+};
+const onTiltLeave = (e: React.PointerEvent<HTMLElement>) => {
+  e.currentTarget.style.setProperty('--tx', '0deg');
+  e.currentTarget.style.setProperty('--ty', '0deg');
+};
+
 // ─── Animation System ─────────────────────────────────────────────────────────
-// Motion only: transforms, opacity and transitions. No box-shadow, background or
-// surface values are touched, so every .neu-* class keeps its existing look.
-// Entrance animations use `backwards` fill so they never override hover transforms.
+// Screen-level motion is CSS on purpose: ClientShell keeps this tab mounted and
+// toggles it with `hidden`, and CSS keyframes replay every time the tab is shown
+// again. Entrance animations use `backwards` fill so they never override hover
+// transforms once they finish. Modals use motion/react (see ViewportModal).
 
 const DOCS_MOTION_CSS = `
 .docs-root, .docs-modal-layer {
   --docs-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --docs-ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --docs-spring: cubic-bezier(0.34, 1.45, 0.64, 1);
 }
 
+/* ── Keyframes ─────────────────────────────────────────────────────────── */
 @keyframes docs-rise {
-  from { opacity: 0; transform: translateY(18px) scale(0.96); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  0%   { opacity: 0; transform: perspective(900px) translateY(30px) rotateX(24deg) scale(0.94); filter: blur(5px); }
+  60%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: perspective(900px) translateY(0) rotateX(0) scale(1); filter: blur(0); }
+}
+@keyframes docs-deal {
+  0%   { opacity: 0; transform: translateY(-26px) scale(0.72) rotate(var(--deal-r, -7deg)); filter: blur(4px); }
+  65%  { opacity: 1; transform: translateY(4px) scale(1.02) rotate(0deg); filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
 }
 @keyframes docs-fade-up {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(12px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
-@keyframes docs-slide-down {
-  from { opacity: 0; transform: translateY(-10px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes docs-tool-pop {
+  0%   { opacity: 0; transform: scale(0.6) rotate(-6deg); }
+  60%  { opacity: 1; transform: scale(1.05) rotate(1deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes docs-crumb-reveal {
+  from { opacity: 0; clip-path: inset(0 100% 0 0 round 13px); }
+  to   { opacity: 1; clip-path: inset(0 0 0 0 round 13px); }
+}
+@keyframes docs-tool-slide {
+  from { opacity: 0; transform: translateX(26px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 @keyframes docs-view-forward {
   from { opacity: 0; transform: translateX(28px); }
@@ -209,79 +256,152 @@ const DOCS_MOTION_CSS = `
   from { opacity: 0; transform: translateX(-8px); }
   to   { opacity: 1; transform: translateX(0); }
 }
-@keyframes docs-menu-in {
-  from { opacity: 0; transform: translateY(-4px) scale(0.95); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+@keyframes docs-wiggle {
+  0%, 100% { rotate: 0deg; }
+  25% { rotate: -12deg; }
+  50% { rotate: 9deg; }
+  75% { rotate: -4deg; }
 }
 @keyframes docs-pop {
   0%   { opacity: 0; transform: scale(0.6) rotate(-8deg); }
   60%  { opacity: 1; transform: scale(1.06) rotate(2deg); }
   100% { opacity: 1; transform: scale(1) rotate(0); }
 }
-@keyframes docs-backdrop-in  { from { opacity: 0; } to { opacity: 1; } }
-@keyframes docs-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
-@keyframes docs-modal-in {
-  from { opacity: 0; transform: translateY(18px) scale(0.95); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+/* Folder entrance: papers drop in, then the flap swings shut with a small bounce */
+@keyframes docs-paper-file {
+  from { opacity: 0; transform: translateY(-70%); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes docs-modal-out {
-  from { opacity: 1; transform: translateY(0) scale(1); }
-  to   { opacity: 0; transform: translateY(10px) scale(0.97); }
+@keyframes docs-flap-shut {
+  0%   { transform: perspective(var(--fp)) rotateX(-58deg); }
+  65%  { transform: perspective(var(--fp)) rotateX(7deg); }
+  85%  { transform: perspective(var(--fp)) rotateX(-2deg); }
+  100% { transform: perspective(var(--fp)) rotateX(0deg); }
 }
 
-/* Screen-level entrances */
-.docs-toolbar      { animation: docs-slide-down 0.55s var(--docs-ease) backwards; }
+/* ── Screen entrance ───────────────────────────────────────────────────── */
+.docs-toolbar > * { animation: docs-tool-slide 0.6s var(--docs-ease) backwards; }
+.docs-toolbar > *:nth-child(1) { animation: docs-tool-pop 0.6s var(--docs-ease) 0.04s backwards; }
+.docs-toolbar > *:nth-child(2) { animation: docs-crumb-reveal 0.75s var(--docs-ease) 0.12s backwards; }
+.docs-toolbar > *:nth-child(3) { animation-delay: 0.2s; }
+
 .docs-view--forward { animation: docs-view-forward 0.5s var(--docs-ease) backwards; }
 .docs-view--back    { animation: docs-view-back 0.5s var(--docs-ease) backwards; }
 .docs-view--fade    { animation: docs-view-fade 0.4s var(--docs-ease) backwards; }
-.docs-rise          { animation: docs-rise 0.6s var(--docs-ease) backwards; }
+.docs-rise          { transform-origin: 50% 100%; animation: docs-rise 0.7s var(--docs-ease) backwards; }
+.docs-deal          { transform-origin: 50% 0%; animation: docs-deal 0.65s var(--docs-ease) backwards; }
+.docs-deal:nth-child(even) { --deal-r: 7deg; }
 .docs-crumb-in      { animation: docs-crumb-in 0.4s var(--docs-ease) backwards; }
-.docs-menu-in       { transform-origin: top right; animation: docs-menu-in 0.2s var(--docs-ease) backwards; }
-.docs-pop           { animation: docs-pop 0.6s var(--docs-ease) 0.1s backwards; }
+.docs-pop           { animation: docs-pop 0.6s var(--docs-ease) 0.15s backwards; }
 
-/* Folder: closed -> open is a layered cross-fade with a gentle lift */
-.docs-folder-art {
-  transform-origin: 50% 85%;
-  transition: transform 0.55s var(--docs-ease);
+/* ── Folder (layered so each part can move on its own) ─────────────────── */
+.docs-folder {
+  --fp: 420px;       /* flap perspective */
+  --persp: 700px;    /* whole-folder tilt perspective */
+  --lift: 0px;
+  --sc: 1;
+  --flap: 0deg;
+  position: relative;
+}
+.docs-folder--sm { --fp: 110px; --persp: 160px; }
+
+.docs-folder-shadow {
+  position: absolute; left: 12%; right: 12%; bottom: -5%; height: 12%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(52, 21, 18, 0.32) 0%, rgba(52, 21, 18, 0) 70%);
+  transition: transform 0.6s var(--docs-ease), opacity 0.6s var(--docs-ease);
+}
+.docs-folder-body {
+  position: absolute; inset: 0;
+  transform: perspective(var(--persp)) translateY(var(--lift)) rotateX(var(--ty, 0deg)) rotateY(var(--tx, 0deg)) scale(var(--sc));
+  transition: transform 0.6s var(--docs-ease);
   will-change: transform;
 }
-.docs-folder-closed {
-  opacity: 1;
-  transition: opacity 0.4s var(--docs-ease-soft);
-}
-.docs-folder-open {
-  opacity: 0;
-  transform: translateY(3px) scale(0.985);
-  transition: opacity 0.4s var(--docs-ease-soft) 0.08s, transform 0.55s var(--docs-ease) 0.08s;
-}
-.docs-card:hover .docs-folder-art,
-.docs-card:focus-visible .docs-folder-art {
-  transform: translateY(-6px) scale(1.05);
-}
-.docs-card:hover .docs-folder-closed,
-.docs-card:focus-visible .docs-folder-closed {
-  opacity: 0;
-  transition: opacity 0.4s var(--docs-ease-soft) 0.14s;
-}
-.docs-card:hover .docs-folder-open,
-.docs-card:focus-visible .docs-folder-open {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  transition: opacity 0.35s var(--docs-ease-soft), transform 0.55s var(--docs-ease);
-}
-.docs-card:active .docs-folder-art { transform: translateY(-2px) scale(0.99); transition-duration: 0.15s; }
+.docs-folder-back { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-/* Document icons: same easing family as folders */
+.docs-paper {
+  position: absolute; left: 10%; right: 10%; top: 25%; bottom: 14%;
+  border-radius: 4% / 3%;
+  background:
+    repeating-linear-gradient(to bottom, rgba(105, 80, 74, 0.22) 0 2.5%, transparent 2.5% 11%) 50% 22% / 68% 60% no-repeat,
+    var(--paper, #F5EDE3);
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.6) inset, 0 2px 6px rgba(52, 21, 18, 0.18);
+  transform-origin: 50% 100%;
+  transition: transform 0.32s var(--docs-ease-soft);
+}
+.docs-paper--a { --paper: #E9DCCB; }
+.docs-paper--b { --paper: #EFE4D6; }
+.docs-paper--c { --paper: #F7F0E7; }
+/* Paperclip on the front sheet */
+.docs-paper--c::before {
+  content: ''; position: absolute; top: -6%; left: 16%; width: 7%; height: 24%;
+  border: 1.5px solid #C58B3C; border-radius: 999px;
+}
+.docs-folder--sm .docs-paper--c::before { border-width: 1px; }
+
+.docs-folder-front {
+  position: absolute; left: 2.5%; right: 2.9%; top: 19.6%; bottom: 10.7%;
+  border-radius: 4.8% / 8%;
+  background: #69504A;
+  transform-origin: 50% 100%;
+  transform: perspective(var(--fp)) rotateX(var(--flap));
+  transition: transform 0.45s var(--docs-ease-soft);
+}
+/* Hover / focus (and while its options menu is open): lift, flap opens, papers fan out */
+.docs-card:hover .docs-folder,
+.docs-card:focus-visible .docs-folder,
+.docs-card--active .docs-folder { --lift: -7px; --sc: 1.04; --flap: -40deg; }
+.docs-card:hover .docs-folder--sm,
+.docs-card:focus-visible .docs-folder--sm { --lift: -2px; --sc: 1.06; }
+.docs-card:hover .docs-folder-front,
+.docs-card:focus-visible .docs-folder-front,
+.docs-card--active .docs-folder-front {
+  transition: transform 0.7s var(--docs-spring);
+}
+.docs-card:hover .docs-folder-shadow,
+.docs-card:focus-visible .docs-folder-shadow,
+.docs-card--active .docs-folder-shadow { transform: scale(0.84); opacity: 0.6; }
+
+.docs-card:hover .docs-paper,
+.docs-card:focus-visible .docs-paper,
+.docs-card--active .docs-paper { transition: transform 0.6s var(--docs-spring); }
+.docs-card:hover .docs-paper--a,
+.docs-card:focus-visible .docs-paper--a,
+.docs-card--active .docs-paper--a { transform: translate(-8%, -36%) rotate(-9deg); transition-delay: 0.06s; }
+.docs-card:hover .docs-paper--b,
+.docs-card:focus-visible .docs-paper--b,
+.docs-card--active .docs-paper--b { transform: translate(8%, -42%) rotate(7deg); transition-delay: 0.12s; }
+.docs-card:hover .docs-paper--c,
+.docs-card:focus-visible .docs-paper--c,
+.docs-card--active .docs-paper--c { transform: translate(0, -30%) rotate(-2deg); transition-delay: 0.18s; }
+
+/* Press: the flap snaps half shut and the folder settles (not when pressing the menu) */
+.docs-card:active:not(:has(.docs-menu-btn:active)) .docs-folder { --lift: -2px; --sc: 0.98; --flap: -16deg; }
+.docs-card:active:not(:has(.docs-menu-btn:active)) .docs-folder-body,
+.docs-card:active:not(:has(.docs-menu-btn:active)) .docs-folder-front { transition-duration: 0.15s; }
+
+/* Grid entrance: papers file in, flap closes on them as the card lands */
+.docs-folder--enter .docs-paper {
+  animation: docs-paper-file 0.5s var(--docs-ease) backwards;
+  animation-delay: calc(var(--i, 0) * 50ms + 200ms);
+}
+.docs-folder--enter .docs-folder-front {
+  animation: docs-flap-shut 0.8s var(--docs-ease) backwards;
+  animation-delay: calc(var(--i, 0) * 50ms + 300ms);
+}
+
+/* ── Document icons: lean toward the cursor like the folders ───────────── */
 .docs-doc-art {
   transform-origin: 50% 100%;
-  transition: transform 0.5s var(--docs-ease);
+  transform: perspective(600px) translateY(0) rotateX(0deg) rotateY(0deg) scale(1);
+  transition: transform 0.55s var(--docs-ease);
   will-change: transform;
 }
 .docs-card:hover .docs-doc-art,
 .docs-card:focus-visible .docs-doc-art {
-  transform: translateY(-6px) scale(1.06) rotate(-1.5deg);
+  transform: perspective(600px) translateY(-6px) rotateX(var(--ty, 0deg)) rotateY(var(--tx, 0deg)) scale(1.06);
 }
-.docs-card:active .docs-doc-art { transform: translateY(-2px) scale(0.98); transition-duration: 0.15s; }
+.docs-card:active .docs-doc-art { transform: perspective(600px) translateY(-2px) scale(0.98); transition-duration: 0.15s; }
 
 /* Labels drift up slightly with their icon */
 .docs-label { transition: color 0.3s var(--docs-ease-soft), transform 0.5s var(--docs-ease); }
@@ -296,6 +416,35 @@ const DOCS_MOTION_CSS = `
 .docs-row-icon  { transition: transform 0.45s var(--docs-ease); }
 .docs-card:hover .docs-row-icon { transform: scale(1.1) rotate(-2deg); }
 
+/* ── Folder options menu ───────────────────────────────────────────────── */
+.docs-menu {
+  background: #ECE2D7;
+  box-shadow:
+    0 22px 44px -16px rgba(52, 21, 18, 0.38),
+    0 6px 14px -6px rgba(52, 21, 18, 0.2),
+    -4px -4px 12px rgba(252, 238, 223, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 0 0 1px rgba(211, 192, 170, 0.55);
+}
+/* Little pointer aimed at the trigger */
+.docs-menu::before {
+  content: ''; position: absolute; top: -6px; right: 9px; width: 11px; height: 11px;
+  background: #ECE2D7; rotate: 45deg; border-radius: 2px 0 0 0;
+  box-shadow: inset 1px 1px 0 rgba(211, 192, 170, 0.55);
+}
+.docs-mi-glyph { transition: transform 0.45s var(--docs-spring); }
+.docs-menu-item:hover .docs-mi-glyph--open,
+.docs-menu-item:focus-visible .docs-mi-glyph--open { transform: translate(1px, -1px) scale(1.1); }
+.docs-menu-item:hover .docs-mi-glyph--rename,
+.docs-menu-item:focus-visible .docs-mi-glyph--rename { transform: rotate(-16deg) translate(-1px, -1px); }
+.docs-menu-item:hover .docs-mi-glyph--delete,
+.docs-menu-item:focus-visible .docs-mi-glyph--delete { animation: docs-wiggle 0.5s ease-in-out; }
+.docs-mi-arrow { opacity: 0; transform: translateX(-5px); transition: opacity 0.25s ease, transform 0.4s var(--docs-ease); }
+.docs-menu-item:hover .docs-mi-arrow,
+.docs-menu-item:focus-visible .docs-mi-arrow { opacity: 1; transform: translateX(0); }
+.docs-menu-dots { transition: transform 0.5s var(--docs-spring); }
+.docs-menu-trigger[aria-expanded='true'] .docs-menu-dots { transform: rotate(90deg); }
+
 /* Folder kebab menu: stays visible on touch devices where hover is unavailable */
 @media (hover: none) {
   .docs-menu-btn { opacity: 1 !important; transform: none !important; }
@@ -305,20 +454,15 @@ const DOCS_MOTION_CSS = `
 .docs-back-arrow { display: inline-block; transition: transform 0.35s var(--docs-ease); }
 .docs-back:hover .docs-back-arrow { transform: translateX(-4px); }
 
-/* Modals */
-.docs-backdrop--in  { animation: docs-backdrop-in 0.25s ease backwards; }
-.docs-backdrop--out { animation: docs-backdrop-out 0.2s ease forwards; }
-.docs-modal-card--in  { animation: docs-modal-in 0.34s var(--docs-ease) backwards; }
-.docs-modal-card--out { animation: docs-modal-out 0.2s var(--docs-ease-soft) forwards; }
-
-.docs-modal-card--in > *,
-.docs-modal-card--in form > * { animation: docs-fade-up 0.45s var(--docs-ease) backwards; }
-.docs-modal-card--in > form { animation: none; }
-.docs-modal-card--in > *:nth-child(2), .docs-modal-card--in form > *:nth-child(1) { animation-delay: 0.08s; }
-.docs-modal-card--in > *:nth-child(3), .docs-modal-card--in form > *:nth-child(2) { animation-delay: 0.12s; }
-.docs-modal-card--in > *:nth-child(4), .docs-modal-card--in form > *:nth-child(3) { animation-delay: 0.16s; }
-.docs-modal-card--in > *:nth-child(5), .docs-modal-card--in form > *:nth-child(4) { animation-delay: 0.20s; }
-.docs-modal-card--in > *:nth-child(n+6), .docs-modal-card--in form > *:nth-child(n+5) { animation-delay: 0.24s; }
+/* ── Modal content cascade (panel motion lives in ViewportModal) ───────── */
+.docs-modal-card > *,
+.docs-modal-card form > * { animation: docs-fade-up 0.5s var(--docs-ease) backwards; animation-delay: 0.1s; }
+.docs-modal-card > form { animation: none; }
+.docs-modal-card > *:nth-child(2), .docs-modal-card form > *:nth-child(1) { animation-delay: 0.15s; }
+.docs-modal-card > *:nth-child(3), .docs-modal-card form > *:nth-child(2) { animation-delay: 0.2s; }
+.docs-modal-card > *:nth-child(4), .docs-modal-card form > *:nth-child(3) { animation-delay: 0.25s; }
+.docs-modal-card > *:nth-child(5), .docs-modal-card form > *:nth-child(4) { animation-delay: 0.3s; }
+.docs-modal-card > *:nth-child(n+6), .docs-modal-card form > *:nth-child(n+5) { animation-delay: 0.35s; }
 
 /* Reduced motion: keep every state change, remove the movement */
 @media (prefers-reduced-motion: reduce) {
@@ -330,8 +474,7 @@ const DOCS_MOTION_CSS = `
     transition-duration: 0.001ms !important;
     transition-delay: 0ms !important;
   }
-  .docs-card:hover .docs-folder-art,
-  .docs-card:focus-visible .docs-folder-art,
+  .docs-folder-body,
   .docs-card:hover .docs-doc-art,
   .docs-card:focus-visible .docs-doc-art,
   .docs-card:hover .docs-label,
@@ -340,46 +483,253 @@ const DOCS_MOTION_CSS = `
 }
 `;
 
-// ─── Folder Art (closed by default, opens only on hover/focus) ───────────────
-// Both illustrations are stacked and cross-faded by CSS, so the open/close
-// transition is gradual in both directions. The trigger is the nearest `.docs-card`.
+// ─── Folder Art ───────────────────────────────────────────────────────────────
+// Built from layers instead of two stacked images so each part can move on its
+// own: back panel + tab (SVG), one paper per document (max 3), and the front
+// flap that swings toward the viewer on hover. The trigger is the nearest
+// `.docs-card`. Geometry matches /assets/folder_icon.svg (160 x 130).
+
+const FOLDER_BACK_PATH =
+  'M11.2083 11H58.0625L72.4792 25.5H148.167C150.078 25.5 151.912 26.2638 153.264 27.6235C154.616 28.9831 155.375 30.8272 155.375 32.75V112.5C155.375 114.423 154.616 116.267 153.264 117.627C151.912 118.986 150.078 119.75 148.167 119.75H11.2083C9.29656 119.75 7.4631 118.986 6.11127 117.627C4.75945 116.267 4 114.423 4 112.5V18.25C4 16.3272 4.75945 14.4831 6.11127 13.1235C7.4631 11.7638 9.29656 11 11.2083 11Z';
 
 function FolderArt({
-  name,
+  count,
+  size = 'lg',
+  enter = false,
   className = '',
-  priority = false,
 }: {
-  name: string;
+  count: number;
+  size?: 'lg' | 'sm';
+  /** Play the "papers file in, flap shuts" entrance (grid view). */
+  enter?: boolean;
   className?: string;
-  priority?: boolean;
 }) {
+  const sheets = count >= 3 ? ['a', 'b', 'c'] : count === 2 ? ['a', 'c'] : count === 1 ? ['c'] : [];
+
   return (
-    <div className={`docs-folder-art relative ${className}`}>
-      <Image
-        src="/assets/folder_icon.svg"
-        alt={name}
-        width={150}
-        height={120}
-        priority={priority}
-        className="docs-folder-closed absolute inset-0 w-full h-full object-contain drop-shadow-sm"
-      />
-      <Image
-        src="/assets/folder_hover.svg"
-        alt=""
-        aria-hidden="true"
-        width={150}
-        height={120}
-        priority={priority}
-        className="docs-folder-open absolute inset-0 w-full h-full object-contain drop-shadow-sm"
-      />
+    <div
+      aria-hidden="true"
+      className={`docs-folder aspect-[16/13] ${size === 'sm' ? 'docs-folder--sm' : ''} ${enter ? 'docs-folder--enter' : ''} ${className}`}
+    >
+      {size === 'lg' && <div className="docs-folder-shadow" />}
+      <div className="docs-folder-body">
+        <svg className="docs-folder-back" viewBox="0 0 160 130" fill="none">
+          <path d={FOLDER_BACK_PATH} fill="#341512" />
+        </svg>
+        {sheets.map((s) => (
+          <div key={s} className={`docs-paper docs-paper--${s}`} />
+        ))}
+        <div className="docs-folder-front" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Folder Options Menu ──────────────────────────────────────────────────────
+// Kebab trigger + popover. Springs out of the trigger, sharpens from a blur and
+// cascades its items in; keyboard: ArrowUp/Down, Home/End, Esc (returns focus).
+
+const folderMenuVariants: Variants = {
+  hidden: { opacity: 0, scale: 0.88, y: -10, filter: 'blur(6px)' },
+  show: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: {
+      type: 'spring',
+      stiffness: 480,
+      damping: 32,
+      mass: 0.7,
+      opacity: { duration: 0.18 },
+      filter: { duration: 0.22 },
+      staggerChildren: 0.035,
+      delayChildren: 0.05,
+    },
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.94,
+    y: -6,
+    filter: 'blur(4px)',
+    transition: { duration: 0.15, ease: [0.4, 0, 1, 1] },
+  },
+};
+
+const folderMenuItemVariants: Variants = {
+  hidden: { opacity: 0, x: 10 },
+  show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 520, damping: 34 } },
+};
+
+interface FolderMenuProps {
+  open: boolean;
+  folderName: string;
+  count: number;
+  onToggle: () => void;
+  onClose: () => void;
+  onOpenFolder: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+}
+
+function FolderMenu({ open, folderName, count, onToggle, onClose, onOpenFolder, onRename, onDelete }: FolderMenuProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Move focus into the menu when it opens (no visible ring after a mouse click).
+  useEffect(() => {
+    if (!open) return;
+    const id = requestAnimationFrame(() =>
+      menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true })
+    );
+    return () => cancelAnimationFrame(id);
+  }, [open]);
+
+  const onMenuKeyDown = (e: React.KeyboardEvent) => {
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    if (!items.length) return;
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    const focusAt = (n: number) => items[(n + items.length) % items.length]?.focus();
+    if (e.key === 'ArrowDown') { e.preventDefault(); focusAt(i + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); focusAt(i - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); focusAt(0); }
+    else if (e.key === 'End') { e.preventDefault(); focusAt(items.length - 1); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); triggerRef.current?.focus(); }
+    else if (e.key === 'Tab') onClose();
+  };
+
+  const select = (action: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onClose();
+    action();
+  };
+
+  const itemBase =
+    'docs-menu-item group/mi w-full flex items-center gap-3 px-2 py-1.5 rounded-xl font-inter text-[13px] font-medium text-left transition-colors duration-200 focus:outline-none cursor-pointer';
+  const tileBase = 'size-7 shrink-0 rounded-lg flex items-center justify-center transition-colors duration-200';
+
+  return (
+    <div
+      className={`docs-menu-btn absolute top-2 right-2 z-20 transition-[opacity,scale] duration-200 ${open
+          ? 'opacity-100 scale-100'
+          : 'opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100'
+        }`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' && !open) {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Options for ${folderName}`}
+        title="Folder options"
+        className={`docs-menu-trigger size-7 rounded-full bg-[#E5D8CB] flex items-center justify-center cursor-pointer transition-[color,box-shadow] duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B9833C]/50 ${open ? 'neu-recessed text-[#C58B3C]' : 'neu-raised-sm text-[#5A4537] hover:text-[#34150F]'
+          }`}
+      >
+        <svg className="docs-menu-dots w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="12" r="2" />
+          <circle cx="12" cy="12" r="2" />
+          <circle cx="19" cy="12" r="2" />
+        </svg>
+      </button>
+
+      <MotionConfig reducedMotion="user">
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              ref={menuRef}
+              role="menu"
+              aria-label={`${folderName} options`}
+              variants={folderMenuVariants}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+              style={{ transformOrigin: 'calc(100% - 14px) -6px' }}
+              onKeyDown={onMenuKeyDown}
+              className="docs-menu absolute right-0 top-full mt-3 w-56 rounded-2xl p-1.5 cursor-default"
+            >
+              {/* Header: which folder this acts on */}
+              <motion.div variants={folderMenuItemVariants} className="flex items-center gap-2.5 px-2.5 pt-2 pb-2.5">
+                <FolderIcon className="w-4 h-4 shrink-0 text-[#C58B3C]" />
+                <div className="min-w-0">
+                  <p className="font-lora text-[13px] font-semibold text-[#34150F] leading-tight truncate" title={folderName}>
+                    {folderName}
+                  </p>
+                  <p className="font-inter text-[11px] text-[#8C7A6A] mt-0.5">
+                    {count} {count === 1 ? 'document' : 'documents'}
+                  </p>
+                </div>
+              </motion.div>
+              <div className="mx-2 mb-1 h-px bg-[#D6C3AD]/70" />
+
+              <motion.button
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                variants={folderMenuItemVariants}
+                onClick={select(onOpenFolder)}
+                className={`${itemBase} text-[#34150F] hover:bg-[#DCCBB7]/60 focus-visible:bg-[#DCCBB7]/60`}
+              >
+                <span className={`${tileBase} bg-[#DCCBB7]/55 text-[#7A604D] group-hover/mi:bg-[#C58B3C]/15 group-hover/mi:text-[#A8742E] group-focus-visible/mi:bg-[#C58B3C]/15 group-focus-visible/mi:text-[#A8742E]`}>
+                  <FolderOpenIcon className="docs-mi-glyph docs-mi-glyph--open w-4 h-4" />
+                </span>
+                <span className="flex-1">Open folder</span>
+                <ChevronRightIcon className="docs-mi-arrow w-3.5 h-3.5 text-[#C58B3C]" />
+              </motion.button>
+
+              <motion.button
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                variants={folderMenuItemVariants}
+                onClick={select(onRename)}
+                className={`${itemBase} text-[#34150F] hover:bg-[#DCCBB7]/60 focus-visible:bg-[#DCCBB7]/60`}
+              >
+                <span className={`${tileBase} bg-[#DCCBB7]/55 text-[#7A604D] group-hover/mi:bg-[#C58B3C]/15 group-hover/mi:text-[#A8742E] group-focus-visible/mi:bg-[#C58B3C]/15 group-focus-visible/mi:text-[#A8742E]`}>
+                  <PencilIcon className="docs-mi-glyph docs-mi-glyph--rename w-4 h-4" />
+                </span>
+                <span className="flex-1">Rename</span>
+              </motion.button>
+
+              <div className="mx-2 my-1 h-px bg-[#D6C3AD]/70" />
+
+              <motion.button
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                variants={folderMenuItemVariants}
+                onClick={select(onDelete)}
+                className={`${itemBase} text-[#B42318] hover:bg-[#B42318]/[0.08] focus-visible:bg-[#B42318]/[0.08]`}
+              >
+                <span className={`${tileBase} bg-[#B42318]/10 text-[#B42318] group-hover/mi:bg-[#B42318]/15 group-focus-visible/mi:bg-[#B42318]/15`}>
+                  <TrashIcon className="docs-mi-glyph docs-mi-glyph--delete w-4 h-4" />
+                </span>
+                <span className="flex-1">Delete folder</span>
+              </motion.button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </MotionConfig>
     </div>
   );
 }
 
 // ─── Viewport Portal Modal Component ──────────────────────────────────────────
-// Ensures the modal is rendered into document.body at the root of the viewport,
-// completely unconstrained by parent scroll boundaries or CSS transforms.
-// Stays mounted briefly after closing so the exit animation can play.
+// Rendered into document.body so it is never clipped by scroll containers or
+// transforms. AnimatePresence keeps the last content on screen while the exit
+// plays, so callers can clear their state (e.g. previewDocument) right away.
+//
+// Motion: the backdrop warms and blurs in; the sheet tips up from below and
+// comes into focus while the caramel rim closes in around it; sections cascade
+// in (CSS, .docs-modal-card). On close the sheet tips back, the rim lets go
+// and everything blurs out.
 
 interface ViewportModalProps {
   isOpen: boolean;
@@ -393,6 +743,58 @@ interface ViewportModalProps {
 // while another is still open.
 let openModalCount = 0;
 
+const noopSubscribe = () => () => {};
+
+const RIM = 'rgba(211, 151, 88, 1)';
+const RIM_CLEAR = 'rgba(211, 151, 88, 0)';
+
+const modalBackdropVariants: Variants = {
+  hidden: { opacity: 0, backdropFilter: 'blur(0px)' },
+  show: { opacity: 1, backdropFilter: 'blur(7px)', transition: { duration: 0.3, ease: 'easeOut' } },
+  exit: { opacity: 0, backdropFilter: 'blur(0px)', transition: { duration: 0.24, ease: 'easeIn', delay: 0.06 } },
+};
+
+const modalPanelVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 64,
+    scale: 0.9,
+    rotateX: 18,
+    filter: 'blur(10px)',
+    outlineOffset: '16px',
+    outlineColor: RIM_CLEAR,
+  },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    rotateX: 0,
+    filter: 'blur(0px)',
+    outlineOffset: '0px',
+    outlineColor: RIM,
+    transition: {
+      type: 'spring',
+      stiffness: 230,
+      damping: 23,
+      mass: 0.9,
+      opacity: { duration: 0.25 },
+      filter: { duration: 0.4, ease: 'easeOut' },
+      outlineOffset: { duration: 0.55, ease: EASE_OUT, delay: 0.12 },
+      outlineColor: { duration: 0.4, ease: 'easeOut', delay: 0.12 },
+    },
+  },
+  exit: {
+    opacity: 0,
+    y: 40,
+    scale: 0.94,
+    rotateX: -12,
+    filter: 'blur(8px)',
+    outlineOffset: '12px',
+    outlineColor: RIM_CLEAR,
+    transition: { duration: 0.26, ease: [0.4, 0, 1, 1] },
+  },
+};
+
 function ViewportModal({
   isOpen,
   onClose,
@@ -400,26 +802,8 @@ function ViewportModal({
   maxWidth = 'max-w-[480px] sm:max-w-[520px]',
   ariaLabel = 'Modal dialog',
 }: ViewportModalProps) {
-  const [mounted, setMounted] = useState(false);
-  const [visible, setVisible] = useState(false);
-
-  // Keep the last open content so it stays on screen while the exit animation runs
-  const lastChildrenRef = useRef<React.ReactNode>(children);
-  if (isOpen) lastChildrenRef.current = children;
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Keep mounted for the length of the exit animation
-  useEffect(() => {
-    if (isOpen) {
-      setVisible(true);
-      return;
-    }
-    const t = setTimeout(() => setVisible(false), 220);
-    return () => clearTimeout(t);
-  }, [isOpen]);
+  // true on the client, false during SSR, so the portal only renders in the browser.
+  const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
 
   // Lock body scroll while any modal is active
   useEffect(() => {
@@ -441,34 +825,44 @@ function ViewportModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!mounted || (!isOpen && !visible)) return null;
-
-  const closing = !isOpen;
+  if (!mounted) return null;
 
   return createPortal(
-    <div
-      className="docs-modal-layer fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label={ariaLabel}
-    >
-      {/* Full Viewport Backdrop matching SignInModal */}
-      <div
-        className={`fixed inset-0 bg-black/75 backdrop-blur-sm ${closing ? 'docs-backdrop--out' : 'docs-backdrop--in'
-          }`}
-        onClick={onClose}
-        aria-hidden="true"
-      />
+    <MotionConfig reducedMotion="user">
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            key="docs-modal"
+            className="docs-modal-layer fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6"
+            style={{ perspective: 1400 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={ariaLabel}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+          >
+            {/* Warm vignette backdrop */}
+            <motion.div
+              variants={modalBackdropVariants}
+              className="fixed inset-0 bg-[radial-gradient(ellipse_at_center,rgba(26,15,10,0.55)_0%,rgba(26,15,10,0.82)_100%)]"
+              onClick={onClose}
+              aria-hidden="true"
+            />
 
-      {/* Modal Container: exact .neu-modal outline-[#D39758] from Sign In Modal */}
-      <div
-        className={`neu-modal outline-[#D39758] relative w-full ${maxWidth} px-7 sm:px-11 pt-10 pb-9 sm:pt-11 sm:pb-10 z-10 max-h-[92vh] overflow-y-auto ${closing ? 'docs-modal-card--out pointer-events-none' : 'docs-modal-card--in'
-          }`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {isOpen ? children : lastChildrenRef.current}
-      </div>
-    </div>,
+            {/* Sheet: .neu-modal with the caramel rim (rim colour/offset animated inline) */}
+            <motion.div
+              variants={modalPanelVariants}
+              style={{ transformOrigin: '50% 100%' }}
+              className={`docs-modal-card neu-modal relative w-full ${maxWidth} px-7 sm:px-10 pt-9 pb-8 sm:pt-10 sm:pb-9 z-10 max-h-[92vh] overflow-y-auto`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {children}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </MotionConfig>,
     document.body
   );
 }
@@ -777,14 +1171,14 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const cardFocus =
     'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B9833C]/40';
   const gridClasses =
-    'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-8 sm:gap-x-8 sm:gap-y-10 items-start pt-2';
+    'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-4 gap-y-4 sm:gap-x-6 sm:gap-y-5 items-start';
   const addButtonClasses =
-    'group neu-raised-sm size-24 sm:size-28 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#9A8270] hover:text-[#34150F] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer focus:outline-none select-none';
+    'group neu-raised-sm size-20 sm:size-[5.5rem] rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#9A8270] hover:text-[#34150F] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer focus:outline-none select-none';
 
   // ─── Render View ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="docs-root px-5 sm:px-10 lg:px-14 xl:px-20 py-6 sm:py-10 max-w-[1300px] mx-auto bg-[#E5D8CB] min-h-[calc(100vh-4rem)] space-y-8 sm:space-y-10 select-none">
+    <div className="docs-root px-5 sm:px-8 lg:px-10 xl:px-14 py-5 sm:py-7 max-w-[1440px] mx-auto bg-[#E5D8CB] min-h-[calc(100vh-4rem)] space-y-6 sm:space-y-7 select-none">
       <style>{DOCS_MOTION_CSS}</style>
 
       {/* ─── Top Toolbar (Reusing Design System Classes .neu-raised-sm & .neu-recessed) ── */}
@@ -803,7 +1197,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
               setShowNewFolderModal(true);
             }
           }}
-          className="group neu-raised-sm shrink-0 h-12 px-7 rounded-[14px] bg-[#E5D8CB] text-[#34150F] font-lora font-semibold text-sm flex items-center gap-2.5 select-none cursor-pointer transition-all duration-300 hover:text-[#C58B3C] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus:outline-none"
+          className="group neu-raised-sm shrink-0 h-11 px-6 rounded-[13px] bg-[#E5D8CB] text-[#34150F] font-lora font-semibold text-sm flex items-center gap-2.5 select-none cursor-pointer transition-all duration-300 hover:text-[#C58B3C] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus:outline-none"
           title={currentFolder ? 'Upload new document' : 'Create new case folder'}
         >
           <span className="text-xl font-normal leading-none -mt-0.5 transition-transform duration-500 group-hover:rotate-90">
@@ -815,7 +1209,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
         {/* Navigator / Breadcrumb (Neumorphic Recessed Container) — Inter, Regular 400 */}
         <nav
           aria-label="Breadcrumb"
-          className="neu-recessed bg-[#E5D8CB] h-12 px-6 rounded-[14px] flex items-center gap-3 font-inter font-normal text-sm flex-1 min-w-[200px] max-w-xl overflow-hidden transition-all"
+          className="neu-recessed bg-[#E5D8CB] h-11 px-5 rounded-[13px] flex items-center gap-3 font-inter font-normal text-sm flex-1 min-w-[200px] max-w-xl overflow-hidden transition-all"
         >
           <button
             type="button"
@@ -856,7 +1250,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
         {/* Right Section: View Switcher & Search Bar */}
         <div className="flex items-center gap-3 sm:gap-4 w-full lg:w-auto lg:ml-auto">
           {/* View Mode Switcher (.neu-recessed container with .neu-raised-sm active toggle) */}
-          <div className="neu-recessed bg-[#E5D8CB] h-12 px-1.5 rounded-[14px] flex items-center gap-1.5 shrink-0">
+          <div className="neu-recessed bg-[#E5D8CB] h-11 px-1.5 rounded-[13px] flex items-center gap-1.5 shrink-0">
             {/* List View Icon */}
             <button
               type="button"
@@ -905,7 +1299,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
           </div>
 
           {/* Search Input (.neu-recessed container matching DashboardSearchInput) */}
-          <div className="neu-recessed bg-[#E5D8CB] h-12 px-4.5 rounded-[14px] flex-1 lg:flex-none lg:w-72 flex items-center relative transition-all focus-within:ring-2 focus-within:ring-[#B9833C]/40">
+          <div className="neu-recessed bg-[#E5D8CB] h-11 px-4.5 rounded-[13px] flex-1 lg:flex-none lg:w-64 flex items-center relative transition-all focus-within:ring-2 focus-within:ring-[#B9833C]/40">
             <input
               type="text"
               value={searchQuery}
@@ -930,14 +1324,14 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       {/* ─── Initial load skeleton, then directional content transitions ─── */}
       {loadingDocs && !currentFolder ? (
         <div className={gridClasses} aria-busy="true">
-          {Array.from({ length: 8 }).map((_, i) => (
+          {Array.from({ length: 10 }).map((_, i) => (
             <div
               key={i}
-              className="docs-rise flex flex-col items-center justify-center p-3 sm:p-4 space-y-3"
-              style={stagger(i, 60, 8)}
+              className="docs-rise flex flex-col items-center justify-center p-3 space-y-3"
+              style={stagger(i, 60, 10)}
             >
               <div
-                className="w-full max-w-[14rem] aspect-[5/4] rounded-2xl neu-skeleton"
+                className="w-full max-w-[8.5rem] sm:max-w-[9.5rem] aspect-[16/13] rounded-2xl neu-skeleton"
                 style={{
                   boxShadow: '4px 4px 10px rgba(182, 155, 130, 0.25), -4px -4px 10px #FFFFFF',
                 }}
@@ -960,8 +1354,8 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                     return (
                       <div
                         key={folder.id}
-                        className="docs-rise relative hover:z-10 focus-within:z-10"
-                        style={{ ...stagger(index), zIndex: menuOpen ? 30 : undefined }}
+                        className="docs-rise relative hover:z-10 focus-within:z-10 has-[.docs-menu]:z-30"
+                        style={stagger(index)}
                       >
                         <div
                           role="button"
@@ -969,82 +1363,38 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                           aria-label={`Open ${folder.name}`}
                           onClick={() => handleEnterFolder(folder)}
                           onKeyDown={onActivateKey(() => handleEnterFolder(folder))}
-                          className={`docs-card group relative flex flex-col items-center justify-start cursor-pointer p-3 sm:p-4 rounded-3xl hover:bg-[#DECEB8]/30 transition-colors duration-300 select-none ${cardFocus}`}
+                          onPointerMove={onTiltMove}
+                          onPointerLeave={onTiltLeave}
+                          className={`docs-card group relative flex flex-col items-center justify-start cursor-pointer px-3 pt-4 pb-3 rounded-3xl hover:bg-[#DECEB8]/30 transition-colors duration-300 select-none ${menuOpen ? 'docs-card--active bg-[#DECEB8]/30' : ''} ${cardFocus}`}
                         >
-                          {/* 3-Dots Context Menu Button */}
-                          <div
-                            className={`docs-menu-btn absolute top-2 right-3 z-20 transition-all duration-200 ${menuOpen
-                                ? 'opacity-100 scale-100'
-                                : 'opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100'
-                              }`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveMenuFolderId(menuOpen ? null : folder.id);
+                          {/* Folder options (kebab trigger + popover menu) */}
+                          <FolderMenu
+                            open={menuOpen}
+                            folderName={folder.name}
+                            count={count}
+                            onToggle={() => setActiveMenuFolderId(menuOpen ? null : folder.id)}
+                            onClose={() => setActiveMenuFolderId(null)}
+                            onOpenFolder={() => handleEnterFolder(folder)}
+                            onRename={() => {
+                              setModalError(null);
+                              setRenameFolderName(folder.name);
+                              setShowRenameFolderModal(folder);
                             }}
-                          >
-                            <button
-                              type="button"
-                              className="neu-raised-sm size-7 rounded-full bg-[#E5D8CB] flex items-center justify-center text-[#5A4537] hover:text-[#34150F] text-xs transition-colors duration-200"
-                              title="Folder options"
-                              aria-label={`Options for ${folder.name}`}
-                            >
-                              •••
-                            </button>
+                            onDelete={() => setDeleteTarget({ type: 'folder', id: folder.id, name: folder.name })}
+                          />
 
-                            {/* Dropdown Menu */}
-                            {menuOpen && (
-                              <div className="docs-menu-in neu-raised-sm absolute right-0 mt-1.5 w-48 rounded-xl bg-[#E5D8CB] border border-[#D8C6B0]/60 p-1.5 z-30 text-[13px] font-inter space-y-0.5">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEnterFolder(folder);
-                                    setActiveMenuFolderId(null);
-                                  }}
-                                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#D4C1AB]/60 text-[#34150F] font-medium transition-colors duration-200"
-                                >
-                                  📂 Open Folder
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setModalError(null);
-                                    setRenameFolderName(folder.name);
-                                    setShowRenameFolderModal(folder);
-                                    setActiveMenuFolderId(null);
-                                  }}
-                                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#D4C1AB]/60 text-[#34150F] font-medium transition-colors duration-200"
-                                >
-                                  ✏️ Rename Folder
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDeleteTarget({ type: 'folder', id: folder.id, name: folder.name });
-                                    setActiveMenuFolderId(null);
-                                  }}
-                                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-red-100 text-red-700 font-medium transition-colors duration-200"
-                                >
-                                  🗑️ Delete Folder
-                                </button>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Larger folder artwork: closed by default, opens gradually on hover */}
+                          {/* Layered folder: flap swings open and papers fan out on hover */}
                           <FolderArt
-                            name={folder.name}
-                            priority
-                            className="w-full max-w-[14rem] aspect-[5/4]"
+                            count={count}
+                            enter
+                            className="w-full max-w-[8.5rem] sm:max-w-[9.5rem]"
                           />
 
                           {/* Folder name + document count */}
-                          <span className="docs-label font-lora text-[15px] sm:text-base text-[#34150F] text-center mt-3 font-medium leading-snug max-w-[200px] group-hover:text-[#C58B3C]">
+                          <span className="docs-label font-lora text-sm sm:text-[15px] text-[#34150F] text-center mt-3 font-medium leading-snug max-w-[190px] line-clamp-2 group-hover:text-[#C58B3C]">
                             {folder.name}
                           </span>
-                          <span className="font-inter text-xs text-[#7D6855] mt-1">
+                          <span className="font-inter text-[11px] sm:text-xs text-[#7D6855] mt-0.5">
                             {count} {count === 1 ? 'document' : 'documents'}
                           </span>
                         </div>
@@ -1065,7 +1415,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
 
                   {/* Circular Neumorphic + Button (Uses Established .neu-raised-sm) */}
                   <div
-                    className="docs-rise flex flex-col items-center justify-start p-3 sm:p-4 pt-8 sm:pt-10"
+                    className="docs-rise flex flex-col items-center justify-start px-3 pt-8 pb-3"
                     style={stagger(filteredFolders.length)}
                   >
                     <button
@@ -1083,7 +1433,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                         +
                       </span>
                     </button>
-                    <span className="font-lora text-[15px] sm:text-base text-[#9A8270] text-center mt-3 font-medium">
+                    <span className="font-lora text-sm sm:text-[15px] text-[#9A8270] text-center mt-3 font-medium">
                       New Folder
                     </span>
                   </div>
@@ -1104,7 +1454,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                         className={`docs-card docs-rise flex items-center justify-between p-4 rounded-xl hover:bg-[#DECEB8]/50 cursor-pointer transition-colors duration-300 ${cardFocus}`}
                       >
                         <div className="docs-row-body flex items-center gap-4">
-                          <FolderArt name={folder.name} className="w-11 h-9 shrink-0" />
+                          <FolderArt count={count} size="sm" className="w-11 shrink-0" />
                           <span className="font-lora text-[15px] font-medium text-[#34150F]">
                             {folder.name}
                           </span>
@@ -1164,17 +1514,19 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
               {viewMode === 'grid' ? (
                 <div className={gridClasses}>
                   {filteredFiles.map((file, index) => (
-                    <div key={file.id} className="docs-rise relative" style={stagger(index)}>
+                    <div key={file.id} className="docs-deal relative" style={stagger(index, 60)}>
                       <div
                         role="button"
                         tabIndex={0}
                         aria-label={`View details for ${file.name}`}
                         onClick={() => setPreviewDocument(file)}
                         onKeyDown={onActivateKey(() => setPreviewDocument(file))}
-                        className={`docs-card group flex flex-col items-center justify-start cursor-pointer p-3 sm:p-4 rounded-3xl hover:bg-[#DECEB8]/30 transition-colors duration-300 select-none ${cardFocus}`}
+                        onPointerMove={onTiltMove}
+                        onPointerLeave={onTiltLeave}
+                        className={`docs-card group flex flex-col items-center justify-start cursor-pointer px-3 pt-4 pb-3 rounded-3xl hover:bg-[#DECEB8]/30 transition-colors duration-300 select-none ${cardFocus}`}
                       >
                         {/* Document Type Icon Graphic */}
-                        <div className="docs-doc-art relative w-full max-w-[9.5rem] sm:max-w-[10.5rem] aspect-[6/7]">
+                        <div className="docs-doc-art relative w-full max-w-[5.75rem] sm:max-w-[6.5rem] aspect-[10/13]">
                           <Image
                             src={getDocIconPath(file.type)}
                             alt={file.name}
@@ -1188,7 +1540,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                         {/* Document Filename */}
                         <span
                           title={file.name}
-                          className="docs-label font-lora text-sm text-[#34150F] text-center mt-3 font-medium leading-snug max-w-[180px] line-clamp-2 break-words group-hover:text-[#C58B3C]"
+                          className="docs-label font-lora text-[13px] sm:text-sm text-[#34150F] text-center mt-3 font-medium leading-snug max-w-[180px] line-clamp-2 break-words group-hover:text-[#C58B3C]"
                         >
                           {file.name}
                         </span>
@@ -1211,7 +1563,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
 
                   {/* Circular Neumorphic + Button to Upload Document */}
                   <div
-                    className="docs-rise flex flex-col items-center justify-start p-3 sm:p-4 pt-8 sm:pt-10"
+                    className="docs-rise flex flex-col items-center justify-start px-3 pt-8 pb-3"
                     style={stagger(filteredFiles.length)}
                   >
                     <button
@@ -1230,7 +1582,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                         +
                       </span>
                     </button>
-                    <span className="font-lora text-[15px] sm:text-base text-[#9A8270] text-center mt-3 font-medium">
+                    <span className="font-lora text-sm sm:text-[15px] text-[#9A8270] text-center mt-3 font-medium">
                       Upload Document
                     </span>
                   </div>
@@ -1318,7 +1670,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
         <button
           type="button"
           onClick={() => setShowNewFolderModal(false)}
-          className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center text-[#5A4537] hover:text-[#34150F] hover:bg-[#D4C1AB]/40 transition-colors duration-200 focus:outline-none cursor-pointer"
+          className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center text-[#5A4537] hover:text-[#34150F] hover:bg-[#D4C1AB]/40 hover:rotate-90 transition-[color,background-color,rotate] duration-300 focus:outline-none cursor-pointer"
           aria-label="Close dialog"
         >
           ✕
@@ -1412,7 +1764,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
         <button
           type="button"
           onClick={() => setShowUploadFileModal(false)}
-          className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center text-[#5A4537] hover:text-[#34150F] hover:bg-[#D4C1AB]/40 transition-colors duration-200 focus:outline-none cursor-pointer"
+          className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center text-[#5A4537] hover:text-[#34150F] hover:bg-[#D4C1AB]/40 hover:rotate-90 transition-[color,background-color,rotate] duration-300 focus:outline-none cursor-pointer"
           aria-label="Close dialog"
         >
           ✕
@@ -1535,7 +1887,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
             <button
               type="button"
               onClick={() => setPreviewDocument(null)}
-              className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center text-[#5A4537] hover:text-[#34150F] hover:bg-[#D4C1AB]/40 transition-colors duration-200 focus:outline-none cursor-pointer"
+              className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center text-[#5A4537] hover:text-[#34150F] hover:bg-[#D4C1AB]/40 hover:rotate-90 transition-[color,background-color,rotate] duration-300 focus:outline-none cursor-pointer"
               aria-label="Close dialog"
             >
               ✕
@@ -1628,7 +1980,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
         <button
           type="button"
           onClick={() => setShowRenameFolderModal(null)}
-          className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center text-[#5A4537] hover:text-[#34150F] hover:bg-[#D4C1AB]/40 transition-colors duration-200 focus:outline-none cursor-pointer"
+          className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center text-[#5A4537] hover:text-[#34150F] hover:bg-[#D4C1AB]/40 hover:rotate-90 transition-[color,background-color,rotate] duration-300 focus:outline-none cursor-pointer"
           aria-label="Close dialog"
         >
           ✕
