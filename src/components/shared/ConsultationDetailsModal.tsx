@@ -338,12 +338,17 @@ type CaseBlockProps = Pick<ConsultationDetailsModalProps, 'docket' | 'caseTitle'
    * "See More" link if it doesn't fit (the parent must give this block a bounded height).
    */
   onSeeMore?: () => void;
+  /**
+   * With onSeeMore: always show exactly this many lines, at every breakpoint, in a card of natural
+   * height (the lawyer dashboard). Without it, lg+ fills the space the parent's fixed height leaves.
+   */
+  previewLines?: number;
 };
 
 /** Lines the truncated description shows below the lg breakpoint, where the card has no fixed height. */
 const COMPACT_PREVIEW_LINES = 6;
 
-export function DetailsCaseBlock({ titleId, onSeeMore, ...props }: CaseBlockProps) {
+export function DetailsCaseBlock({ titleId, onSeeMore, previewLines, ...props }: CaseBlockProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const descRef = useRef<HTMLDivElement>(null);
   const [clamp, setClamp] = useState<{ height: number; lineHeight: number; overflowing: boolean } | null>(null);
@@ -358,17 +363,19 @@ export function DetailsCaseBlock({ titleId, onSeeMore, ...props }: CaseBlockProp
     if (!truncate || !wrap || !desc) return;
     const measure = () => {
       const lineHeight = parseFloat(getComputedStyle(desc).lineHeight) || 20;
-      const bounded = window.matchMedia('(min-width: 1024px)').matches;
-      const lines = bounded
-        ? Math.max(2, Math.floor(wrap.clientHeight / lineHeight))
-        : COMPACT_PREVIEW_LINES;
+      const bounded = !previewLines && window.matchMedia('(min-width: 1024px)').matches;
+      const lines = previewLines
+        ? previewLines
+        : bounded
+          ? Math.max(2, Math.floor(wrap.clientHeight / lineHeight))
+          : COMPACT_PREVIEW_LINES;
       const height = lines * lineHeight;
       setClamp({ height, lineHeight, overflowing: desc.scrollHeight > height + 1 });
     };
     const observer = new ResizeObserver(measure);
     observer.observe(wrap);
     return () => observer.disconnect();
-  }, [truncate, props.caseDescription]);
+  }, [truncate, previewLines, props.caseDescription]);
 
   const paragraphs = props.caseDescription.split(/\n\n+/).map((para, idx) => (
     <p key={idx} className="indent-6 sm:indent-8 whitespace-pre-line">
@@ -395,11 +402,11 @@ export function DetailsCaseBlock({ titleId, onSeeMore, ...props }: CaseBlockProp
       <h3 id={titleId} className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-snug">
         {props.caseTitle}
       </h3>
-      <div ref={wrapRef} className="relative flex-1 min-h-0 mt-1">
+      <div ref={wrapRef} className={`relative mt-1 ${previewLines ? '' : 'flex-1 min-h-0'}`}>
         {/* No paragraph gaps in the preview, so every line sits on the line-height grid. */}
         <div
           ref={descRef}
-          className={`${textClass} relative overflow-hidden lg:absolute lg:inset-x-0 lg:top-0`}
+          className={`${textClass} relative overflow-hidden ${previewLines ? '' : 'lg:absolute lg:inset-x-0 lg:top-0'}`}
           style={clamp ? { maxHeight: clamp.height } : undefined}
         >
           {paragraphs}
