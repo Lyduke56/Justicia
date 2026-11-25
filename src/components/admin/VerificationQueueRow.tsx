@@ -40,7 +40,7 @@ export function VerificationQueueRow({
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
           <a
-            href={`/admin/lawyers/${lawyerId}`}
+            href={`/admin/lawyers/${lawyerId}?from=queue`}
             className="text-xs rounded border px-2 py-1 hover:bg-muted transition"
             aria-label={`Review ${name}'s application`}
           >

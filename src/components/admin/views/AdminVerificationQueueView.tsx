@@ -1,10 +1,6 @@
 import { LawyerVerificationQueue, type LawyerQueueItem } from '@/components/admin/LawyerVerificationQueue';
 
 export function AdminVerificationQueueView({ lawyers = [] }: { lawyers?: LawyerQueueItem[] }) {
-  return (
-    <div className="admin-page">
-      <h1 className="sr-only">Lawyer verification queue</h1>
-      <LawyerVerificationQueue lawyers={lawyers} />
-    </div>
-  );
+  // The queue lays out its own page (same margins as the client and lawyer screens).
+  return <LawyerVerificationQueue lawyers={lawyers} />;
 }

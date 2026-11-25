@@ -24,12 +24,249 @@
 }
 
 .admin-portal .admin-content { background: var(--admin-paper); }
+/* Same page margins as the client and lawyer portals (LawyerDashboardView's root):
+   max-w-[1196px] px-4 pb-14 pt-6 sm:px-8 sm:pt-10 lg:px-12 lg:pt-12. */
 .admin-portal .admin-page {
   width: 100%;
-  max-width: 1280px;
+  max-width: 1196px;
   margin-inline: auto;
-  padding: 32px clamp(20px, 3vw, 48px) 48px;
+  padding: 24px 16px 56px;
 }
+@media (min-width: 640px) {
+  .admin-portal .admin-page { padding: 40px 32px 56px; }
+}
+@media (min-width: 1024px) {
+  .admin-portal .admin-page { padding: 48px 48px 56px; }
+}
+
+/* ── Overview ──────────────────────────────────────────────────────────────
+   One screen tall on desktop (keep in step with FIT_QUERY in overview/useFitRows.ts): the
+   panels take the height left under the KPIs and each list shows the rows that fit. Below
+   that it flows and scrolls. */
+@media (min-width: 1280px) and (min-height: 640px), (min-width: 1024px) and (min-height: 880px) {
+  .admin-content > [data-keep-alive="/admin/dashboard"] { height: 100%; }
+  .admin-portal .admin-overview { height: 100%; }
+  .admin-portal .admin-overview-panels {
+    flex: 1 1 0;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .admin-portal .admin-overview-list {
+    flex: 1 1 0;
+    min-height: 0;
+    /* Rows are counted to fit; the clip only matters for a frame before that, and its
+       margin leaves room for a row's hover shadow. */
+    overflow: clip;
+    overflow-clip-margin: 12px;
+  }
+}
+/* The KPIs, divider and panels keep their full 32px spacing at every height (the tables show
+   fewer rows instead); only the heading-to-table gap tightens on shorter windows. */
+@media (min-width: 1280px) and (min-height: 640px) and (max-height: 860px) {
+  .admin-portal .admin-overview-section { gap: 20px; }
+}
+.admin-portal .admin-overview-surface:focus-visible { outline-offset: 4px; }
+/* Ruled rows: a carved hairline between entries (the 1px ROW_GAP in the view). */
+.admin-portal .admin-overview-list > li + li,
+.admin-portal .admin-overview-more {
+  border-top: 1px solid rgba(160, 140, 125, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 240, 0.7);
+}
+/* Square initials / event badge pressed into the panel. */
+.admin-overview-badge {
+  background: #e1d3c5;
+  box-shadow:
+    inset 2px 2px 4px rgba(190, 174, 159, 0.5),
+    inset -2px -2px 4px rgba(255, 248, 240, 0.8);
+}
+.admin-portal .admin-overview-row {
+  border-radius: 10px;
+  transition: background-color 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.admin-portal .admin-overview-row:hover { background: rgba(211, 151, 88, 0.1); }
+.admin-portal .admin-overview-row:focus-visible {
+  outline: 2px solid #c58b3c;
+  outline-offset: -2px;
+}
+.admin-portal .admin-overview-go {
+  opacity: 0;
+  translate: -4px 0;
+  transition:
+    opacity 200ms ease,
+    translate 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.admin-portal .admin-overview-row:is(:hover, :focus-visible) .admin-overview-go {
+  opacity: 1;
+  translate: 0 0;
+}
+/* ── Verification queue ───────────────────────────────────────────────────── */
+/* Recessed search field (.lawyer-field): it already presses deeper while focused, so drop the
+   admin focus outlines that otherwise stack on it (one on the field, one on its input). */
+.admin-portal .lawyer-field:focus-within,
+.admin-portal label.lawyer-field:has(input:focus-visible),
+.admin-portal .lawyer-field input:focus-visible {
+  outline: none;
+}
+.admin-portal .admin-queue-list > li + li,
+.admin-portal .admin-queue-more {
+  border-top: 1px solid rgba(160, 140, 125, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 240, 0.7);
+}
+.admin-portal .admin-queue-row {
+  transition: background-color 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.admin-portal .admin-queue-row:hover:not([aria-current]) { background: rgba(211, 151, 88, 0.08); }
+.admin-portal .admin-queue-row:focus-visible { outline: 2px solid #c58b3c; outline-offset: -2px; }
+/* The selected application: pressed into the list, with a caramel edge (glides between rows). */
+.admin-portal .admin-queue-selected {
+  background: rgba(211, 151, 88, 0.16);
+  box-shadow:
+    inset 3px 3px 7px rgba(190, 168, 146, 0.55),
+    inset -3px -3px 7px rgba(255, 248, 240, 0.75),
+    inset 3px 0 0 #c58b3c;
+}
+/* Dossier cells and chips (also used inside the decision modal, which renders outside the portal). */
+.admin-dossier-cell {
+  background: #e1d3c5;
+  box-shadow:
+    inset 2px 2px 5px rgba(190, 174, 159, 0.42),
+    inset -2px -2px 5px rgba(255, 248, 240, 0.75);
+}
+.admin-dossier-chip {
+  background: rgba(211, 151, 88, 0.16);
+  box-shadow:
+    2px 2px 5px rgba(190, 174, 159, 0.4),
+    -2px -2px 5px rgba(255, 248, 240, 0.75);
+}
+.admin-dossier-note {
+  border-left: 3px solid currentColor;
+  box-shadow:
+    inset 2px 2px 5px rgba(190, 174, 159, 0.3),
+    inset -2px -2px 5px rgba(255, 248, 240, 0.6);
+}
+.admin-dossier-note-danger { color: #863b30; background: rgba(238, 215, 207, 0.6); }
+.admin-dossier-note-info { color: #34575e; background: rgba(220, 227, 227, 0.6); }
+@media (prefers-reduced-motion: reduce) {
+  .admin-portal .admin-queue-row { transition: none; }
+}
+/* ── Directory table ─────────────────────────────────────────────────────── */
+/* Column header band: pressed into the panel so the header reads apart from the rows. */
+.admin-portal .admin-table-band {
+  background: #e0d1c2;
+  box-shadow:
+    inset 2px 2px 5px rgba(190, 174, 159, 0.5),
+    inset -2px -2px 5px rgba(255, 248, 240, 0.7);
+}
+/* Rows: square, ruled (admin-queue-list), every other one faintly tinted, tint deepens on hover. */
+.admin-portal .admin-directory-row { border-radius: 0; }
+.admin-portal .admin-directory-rows > li:nth-child(even) .admin-directory-row { background: rgba(211, 151, 88, 0.05); }
+.admin-portal .admin-directory-rows > li .admin-directory-row:hover { background: rgba(211, 151, 88, 0.13); }
+/* Flat status pill: tinted fill and a hairline edge, no raised shadow, so the table stays calm.
+   Not scoped to .admin-portal: the shared modals render outside it (portal to <body>). */
+.admin-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  border-color: color-mix(in srgb, currentColor 22%, transparent);
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.admin-pill-success { color: #2f5a2a; background: rgba(31, 122, 58, 0.1); }
+.admin-pill-pending { color: #7a5418; background: rgba(197, 139, 60, 0.16); }
+.admin-pill-info { color: #2f5560; background: rgba(52, 87, 94, 0.1); }
+.admin-pill-danger { color: #863b30; background: rgba(134, 59, 48, 0.1); }
+.admin-pill-neutral { color: #5c4535; background: rgba(92, 69, 53, 0.08); }
+.admin-pill-espresso { color: #f3e6d6; background: #4a2e25; border-color: #4a2e25; }
+
+/* ── Reports ─────────────────────────────────────────────────────────────── */
+/* Offense meter: pressed wells that rise caramel once a suspension is used; the termination
+   step is a diamond that turns deep red. (Unscoped: also used inside the review modal.) */
+.admin-offense-dot,
+.admin-offense-end {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #ddd0c2;
+  box-shadow:
+    inset 1.5px 1.5px 2px rgba(176, 156, 136, 0.6),
+    inset -1px -1px 2px rgba(255, 248, 240, 0.8);
+}
+.admin-offense-end { border-radius: 2px; rotate: 45deg; width: 9px; height: 9px; margin-left: 2px; }
+.admin-offense-dot.is-used {
+  background: #c58b3c;
+  box-shadow: 1px 1px 2px rgba(140, 96, 32, 0.45), inset 1px 1px 1px rgba(255, 226, 180, 0.5);
+}
+.admin-offense-end.is-used {
+  background: #9a3b2e;
+  box-shadow: 1px 1px 2px rgba(90, 30, 20, 0.45);
+}
+/* Offense record steps: a pressed square, raised caramel (or deep red) with a check once reached. */
+.admin-offense-step {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  color: #fff8ef;
+  background: #ddd0c2;
+  box-shadow:
+    inset 1.5px 1.5px 3px rgba(176, 156, 136, 0.55),
+    inset -1.5px -1.5px 3px rgba(255, 248, 240, 0.8);
+}
+.admin-offense-step.is-used { background: #c58b3c; box-shadow: 2px 2px 4px rgba(140, 96, 32, 0.35); }
+.admin-offense-step.is-final { background: #9a3b2e; box-shadow: 2px 2px 4px rgba(90, 30, 20, 0.35); }
+/* Decision choices: raised cards; the chosen one is pressed in with a caramel edge. */
+.admin-decision-option {
+  background: #e5d8cb;
+  box-shadow:
+    4px 4px 10px rgba(206, 194, 183, 0.9),
+    -4px -4px 9px rgba(252, 238, 223, 0.9);
+  transition: box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 200ms ease;
+}
+.admin-decision-option:hover:not(:disabled):not(.is-active) { background: #e9ddd0; }
+.admin-decision-option.is-active {
+  background: rgba(211, 151, 88, 0.16);
+  box-shadow:
+    inset 3px 3px 7px rgba(190, 168, 146, 0.6),
+    inset -3px -3px 7px rgba(255, 248, 240, 0.75),
+    inset 0 0 0 1.5px rgba(197, 139, 60, 0.55);
+}
+.admin-decision-option:focus-visible { outline: 2px solid #c58b3c; outline-offset: 3px; }
+
+/* Dossier activity trail: a carved line joins each event's badge to the next. */
+.admin-portal .admin-dossier-timeline > li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 34px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 2px;
+  box-shadow:
+    inset 1px 1px 1px rgba(160, 140, 125, 0.45),
+    inset -1px -1px 1px rgba(255, 248, 240, 0.85);
+}
+
+/* Directory listing dot: green when listed in Find a Lawyer, a pressed grey well when hidden. */
+.admin-portal .admin-listing-on {
+  background: #1f7a3a;
+  box-shadow: 0 0 0 3px rgba(31, 122, 58, 0.14);
+}
+.admin-portal .admin-listing-off {
+  background: #b6a493;
+  box-shadow: inset 1px 1px 2px rgba(110, 90, 70, 0.35);
+}
+
 .admin-page > * + * { margin-top: 28px; }
 .admin-page > .sr-only:first-child + * { margin-top: 0; }
 .admin-portal .admin-surface,
@@ -411,7 +648,6 @@
 .admin-content::-webkit-scrollbar-track { background: #e5d8cb; }
 .admin-content::-webkit-scrollbar-thumb { background: #c8b59e; }
 @media (max-width: 639px) {
-  .admin-portal .admin-page { padding: 24px 16px 36px; }
   .admin-page > * + * { margin-top: 24px; }
   .admin-portal .admin-control,
   .admin-portal .admin-button,
@@ -425,7 +661,9 @@
   .admin-portal .admin-button,
   .admin-portal .admin-choice,
   .admin-portal .admin-metric,
-  .admin-portal .admin-nav-link { transition: none; }
+  .admin-portal .admin-nav-link,
+  .admin-portal .admin-overview-go,
+  .admin-portal .admin-overview-row { transition: none; }
   .admin-portal .admin-table td { transition: none; }
 }
 @media (forced-colors: active) {
