@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
+import { useMyAvatarSync } from '@/components/account/avatarStore';
 import {
   DashboardGridIcon,
   EarningsPayoutsIcon,
@@ -33,10 +34,12 @@ export type LawyerViewKey =
   | 'reviews'
   | 'profile'
   | 'settings'
+  /** My Profile in the account menu: the personal profile page (/lawyer/account). */
+  | 'account'
   | 'other';
 
 interface LawyerNavItem {
-  key: Exclude<LawyerViewKey, 'settings' | 'other'>;
+  key: Exclude<LawyerViewKey, 'settings' | 'account' | 'other'>;
   name: string;
   href: string;
   icon: React.FC<{ className?: string }>;
@@ -50,6 +53,8 @@ interface LawyerShellProps {
     rollNumber?: string;
     ibpChapter?: string;
     isVerified?: boolean;
+    /** Profile photo (null shows the person icon). */
+    avatarUrl?: string | null;
   };
   children?: React.ReactNode;
 }
@@ -86,11 +91,13 @@ function pathnameToView(pathname: string): LawyerViewKey {
   if (pathname === '/lawyer/reviews' || pathname.startsWith('/lawyer/reviews/')) return 'reviews';
   if (pathname === '/lawyer/profile' || pathname.startsWith('/lawyer/profile/')) return 'profile';
   if (pathname === '/lawyer/settings' || pathname.startsWith('/lawyer/settings/')) return 'settings';
+  if (pathname === '/lawyer/account' || pathname.startsWith('/lawyer/account/')) return 'account';
   return 'dashboard';
 }
 
 export function LawyerShell({ user, children }: LawyerShellProps) {
   useInactivityLogout();
+  useMyAvatarSync(user.avatarUrl);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -132,12 +139,13 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
   useEffect(() => {
     for (const item of LAWYER_NAV_ITEMS) router.prefetch(item.href);
     router.prefetch('/lawyer/settings');
+    router.prefetch('/lawyer/account');
   }, [router]);
 
   const navigate = useCallback(
     (key: LawyerViewKey) => {
       const item = LAWYER_NAV_ITEMS.find((n) => n.key === key);
-      const href = item?.href ?? (key === 'settings' ? '/lawyer/settings' : '/lawyer/dashboard');
+      const href = item?.href ?? (key === 'settings' ? '/lawyer/settings' : key === 'account' ? '/lawyer/account' : '/lawyer/dashboard');
       setActiveView(key);
       pendingPathRef.current = href;
       router.push(href, { scroll: false });
@@ -198,7 +206,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
         notifications={liveLawyerNotifs}
         onHome={navigateToDashboard}
         onSettings={() => navigate('settings')}
-        onProfile={() => navigate('profile')}
+        onProfile={() => navigate('account')}
         onNotificationClick={handleNotificationClick}
         mobileMenuOpen={mobileMenuOpen}
         onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}

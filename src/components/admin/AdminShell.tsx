@@ -7,9 +7,11 @@ import { KeepAliveViews } from '@/components/live/KeepAliveViews';
 import { adminTabViews } from './AdminTabs';
 import './admin.css';
 import { usePathname } from 'next/navigation';
-import { signOutAction } from '@/app/actions/auth';
+import { SignOutConfirmModal } from '@/components/shared/SignOutConfirmModal';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
-import { HomeIcon, UserCircleIcon, GearIcon, ShieldCheckIcon, ScaleIcon, UserGroupIcon, DocumentTextIcon, LogoutIcon, FlagIcon } from './AdminIcons';
+import { useMyAvatar, useMyAvatarSync } from '@/components/account/avatarStore';
+import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
+import { HomeIcon, UserCircleIcon, GearIcon, ShieldCheckIcon, ScaleIcon, UserGroupIcon, DocumentTextIcon, LogoutIcon, FlagIcon, EarningsIcon } from './AdminIcons';
 
 const navigation = [
   { name: 'Overview', href: '/admin/dashboard', icon: HomeIcon, active: (path: string) => path === '/admin/dashboard' },
@@ -17,16 +19,25 @@ const navigation = [
   { name: 'Lawyer directory', href: '/admin/lawyers', icon: ScaleIcon, active: (path: string) => path === '/admin/lawyers' || (path.startsWith('/admin/lawyers/') && !path.startsWith('/admin/lawyers/verification-queue')) },
   { name: 'User accounts', href: '/admin/users', icon: UserGroupIcon, active: (path: string) => path.startsWith('/admin/users') },
   { name: 'Reports', href: '/admin/reports', icon: FlagIcon, active: (path: string) => path.startsWith('/admin/reports') },
+  { name: 'Earnings', href: '/admin/earnings', icon: EarningsIcon, active: (path: string) => path.startsWith('/admin/earnings') },
   { name: 'Audit log', href: '/admin/settings/security-audit-log', icon: DocumentTextIcon, active: (path: string) => path.startsWith('/admin/settings/security-audit-log') },
 ];
 
 const navClass = (active: boolean) => `admin-nav-link flex w-full items-center gap-3.5 rounded-xl px-4 py-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9A6A27] ${active ? 'bg-[#D4C1AB] font-semibold text-[#34150F] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.12),inset_-2px_-2px_4px_rgba(255,255,255,0.65)]' : 'text-[#3E2A1E] hover:bg-[#E5D7C5]'}`;
 
-export function AdminShell({ user, children }: { user: { id: string; email?: string; fullName: string }; children: ReactNode }) {
+export function AdminShell({ user, children }: { user: { id: string; email?: string; fullName: string; avatarUrl?: string | null }; children: ReactNode }) {
   useInactivityLogout();
+  useMyAvatarSync(user.avatarUrl);
+  const myAvatar = useMyAvatar(user.avatarUrl);
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const openSignOut = () => {
+    setAccountOpen(false);
+    setMobileOpen(false);
+    setSignOutOpen(true);
+  };
   const accountRef = useRef<HTMLDivElement>(null);
   const accountTrigger = useRef<HTMLButtonElement>(null);
 
@@ -78,13 +89,13 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
       </div>
       <div ref={accountRef} className="relative">
         <button type="button" ref={accountTrigger} aria-label="Account menu" aria-expanded={accountOpen} aria-controls="admin-account-menu" onClick={() => setAccountOpen((open) => !open)} className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-[#352219] focus-visible:outline-2 focus-visible:outline-[#C58B3C]">
-          <span className="hidden max-w-40 truncate text-xs sm:block">{user.fullName}</span><UserCircleIcon className="h-7 w-7 text-[#C58B3C]" />
+          <span className="hidden max-w-40 truncate text-xs sm:block">{user.fullName}</span><ProfilePhoto src={myAvatar} className="h-7 w-7 ring-2 ring-[#C58B3C]" fallback={<UserCircleIcon className="h-7 w-7 text-[#C58B3C]" />} />
         </button>
         {accountOpen && <div id="admin-account-menu" className="admin-account-menu absolute right-0 top-full z-50 mt-3 w-60 max-w-[calc(100vw-32px)] p-3 text-xs">
           <div className="border-b border-[#CBB6A1] px-3 py-2"><p className="truncate font-semibold">{user.fullName}</p><p className="truncate text-[#A69584]">{user.email}</p></div>
           <Link href="/admin/profile" onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><UserCircleIcon className="h-4 w-4 text-[#C58B3C]" />My profile</Link>
           <Link href="/admin/settings" onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><GearIcon className="h-4 w-4 text-[#C58B3C]" />Settings</Link>
-          <form action={signOutAction} className="border-t border-[#CBB6A1] pt-1"><button type="submit" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><LogoutIcon className="h-4 w-4 text-[#C58B3C]" />Sign out</button></form>
+          <div className="border-t border-[#CBB6A1] pt-1"><button type="button" onClick={openSignOut} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><LogoutIcon className="h-4 w-4 text-[#C58B3C]" />Sign out</button></div>
         </div>}
       </div>
     </header>
@@ -93,18 +104,19 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
         <div><p className="admin-sidebar-label">Administration</p><nav aria-label="Main navigation" className="space-y-2">{links()}</nav></div>
         <div className="admin-sidebar-footer space-y-2">
           <Link href="/admin/settings" onNavigate={(event) => navigateTab(event, "/admin/settings")} aria-current={settingsActive ? 'page' : undefined} className={navClass(settingsActive)}><GearIcon className="h-5 w-5 text-[#5C4535]" />Settings</Link>
-          <form action={signOutAction}><button type="submit" className={`${navClass(false)} text-left hover:text-[#99431E]`}><LogoutIcon className="h-5 w-5 text-[#5C4535]" />Sign out</button></form>
+          <div><button type="button" onClick={openSignOut} className={`${navClass(false)} text-left hover:text-[#99431E]`}><LogoutIcon className="h-5 w-5 text-[#5C4535]" />Sign out</button></div>
         </div>
       </aside>
       {mobileOpen && <div id="admin-mobile-navigation" className="fixed inset-0 z-50 md:hidden">
         <button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="absolute inset-0 w-full bg-black/55" />
         <aside aria-label="Mobile admin navigation" className="relative flex h-full w-72 max-w-[85vw] flex-col justify-between overflow-y-auto border-r border-[#D1BEA8] bg-[#DECEB8] p-5 shadow-2xl">
           <div><div className="mb-5 flex items-center justify-between border-b border-[#C8B59E] pb-4"><span className="flex items-center gap-2"><JusticiaLogo className="w-28 h-auto" /> ADMIN</span><button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="rounded-lg p-2 focus-visible:outline-2 focus-visible:outline-[#9A6A27]">×</button></div><nav aria-label="Main navigation" className="space-y-2">{links(true)}</nav></div>
-          <div className="space-y-2 border-t border-[#C8B59E] pt-4"><Link href="/admin/settings" onNavigate={(event) => navigateTab(event, "/admin/settings")} onClick={() => setMobileOpen(false)} aria-current={settingsActive ? 'page' : undefined} className={navClass(settingsActive)}><GearIcon className="h-5 w-5 text-[#5C4535]" />Settings</Link><form action={signOutAction}><button type="submit" className={`${navClass(false)} text-left`}><LogoutIcon className="h-5 w-5 text-[#5C4535]" />Sign out</button></form></div>
+          <div className="space-y-2 border-t border-[#C8B59E] pt-4"><Link href="/admin/settings" onNavigate={(event) => navigateTab(event, "/admin/settings")} onClick={() => setMobileOpen(false)} aria-current={settingsActive ? 'page' : undefined} className={navClass(settingsActive)}><GearIcon className="h-5 w-5 text-[#5C4535]" />Settings</Link><div><button type="button" onClick={openSignOut} className={`${navClass(false)} text-left`}><LogoutIcon className="h-5 w-5 text-[#5C4535]" />Sign out</button></div></div>
         </aside>
       </div>}
       <main id="admin-main-content" className="admin-content min-w-0 flex-1 overflow-y-auto bg-[#EFE5D8]"><KeepAliveViews activeKey={Object.hasOwn(adminTabViews, pathname) ? pathname : null} views={adminTabViews} fallback={children} fallbackKey={pathname} scrollContainerId="admin-main-content" /></main>
     </div>
+    <SignOutConfirmModal open={signOutOpen} onClose={() => setSignOutOpen(false)} />
   </div>;
 }
 

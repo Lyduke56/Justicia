@@ -1,6 +1,8 @@
 import React from 'react';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { readAvatarUrl } from '@/lib/account/avatar';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { AdminShell } from '@/components/admin/AdminShell';
 import '@/components/admin/admin.css';
 
@@ -54,12 +56,21 @@ export default async function AdminLayout({
     redirect('/client/dashboard');
   }
 
+  // Profile photo for the header's account button (the icon shows without one).
+  let avatarUrl: string | null = null;
+  try {
+    avatarUrl = await readAvatarUrl((await createServiceClient()) as unknown as SupabaseClient, user.id);
+  } catch {
+    avatarUrl = null;
+  }
+
   return (
     <AdminShell
       user={{
         id: user.id,
         email: user.email,
         fullName,
+        avatarUrl,
       }}
     >
       {children}

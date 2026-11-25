@@ -790,7 +790,9 @@ test('cancelling or non-confirmed bookings hide reschedule info; meeting reminde
   assert.equal(reminders.length, 2, 'a new reminder for the new time');
   assert.equal(new Date(reminders[1].metadata.scheduledStart).toISOString(), ph('2026-11-21', 15));
 
-  assert.equal((await f.as(CLIENT).cancelConsultationAction(id)).success, true);
+  // A paid booking can't be cancelled by the client directly (it needs the attorney's approval).
+  assert.notEqual((await f.as(CLIENT).cancelConsultationAction(id)).success, true);
+  assert.equal((await f.as(LAWYER).lawyerCancelConsultationAction(id, 'Emergency court hearing')).success, true);
   const cancelled = f.state.tables.consultations.find((c) => c.id === id);
   assert.equal(cancelled.status, 'cancelled');
   const lawyerView = (await f.as(LAWYER).getLawyerConsultationsAction()).find((c) => c.id === id);

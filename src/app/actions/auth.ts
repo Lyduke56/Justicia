@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient as createAuthClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { accountBlockedMessage, checkAccountAccess, ensureProfileRow, getAccountStanding } from '@/lib/moderation/accountStatus';
 import { getDashboardForRole, type UserRole } from '@/lib/utils/rbac';
@@ -333,7 +333,13 @@ export async function forgotPasswordAction(
   const limited = await checkRateLimit('password_reset', email);
   if (limited) return { error: limited };
 
-  const supabase = await createClient();
+  // A stateless client with the implicit flow: the emailed link then carries the recovery session
+  // itself (#access_token…), so it works in any browser or device. The cookie-based (PKCE) client
+  // ties the link to a code verifier saved in *this* browser, so opening the email elsewhere
+  // (Gmail app, another browser) left the reset page without a session and the password unchanged.
+  const supabase = createAuthClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { flowType: 'implicit', persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${siteUrl()}/auth/reset-password`,

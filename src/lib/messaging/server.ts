@@ -116,9 +116,16 @@ export async function findPairMessage(
   return data ?? null;
 }
 
-/** Writes `patch` into a message's stored meta (read → merge → write). */
+/**
+ * Writes `patch` into a message's stored meta (read → merge → write). The row is re-read right
+ * before writing, so a pin by one participant and a "Seen" receipt by the other landing at the
+ * same moment don't overwrite each other (both people then see the pin). `current` is only the
+ * fallback when the re-read fails.
+ */
 export async function patchMeta(db: Db, messageId: string, current: unknown, patch: Partial<StoredMessageMeta>) {
-  const next: StoredMessageMeta = { ...(readMeta(current) ?? emptyMeta()), ...patch, kind: 'dm-meta', v: 1 };
+  const { data: fresh } = await db.from('messages').select('citations').eq('id', messageId).maybeSingle();
+  const base = fresh ? fresh.citations : current;
+  const next: StoredMessageMeta = { ...(readMeta(base) ?? emptyMeta()), ...patch, kind: 'dm-meta', v: 1 };
   const { error } = await db.from('messages').update({ citations: next }).eq('id', messageId);
   return { meta: next, error };
 }

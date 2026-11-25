@@ -16,6 +16,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { LiveScope } from '@/lib/realtime/live';
+import { isLeaving } from '@/lib/auth/leaving';
 
 type Listener = { scopes: ReadonlySet<LiveScope>; run: () => void };
 type Dispatch = (scopes: LiveScope[] | '*') => void;
@@ -40,6 +41,8 @@ const STALE_AFTER_HIDDEN_MS = 15_000;
  * session, so this only sends the tab to the sign-in page; it never signs anyone out itself.
  */
 async function leaveIfSignedOut() {
+  // This tab is signing out on purpose and is already on its way to the landing page.
+  if (isLeaving()) return;
   try {
     const { data, error } = await createClient().auth.getUser();
     if (error?.status === 401 || error?.status === 403 || (!error && !data.user)) {

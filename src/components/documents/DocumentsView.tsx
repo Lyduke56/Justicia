@@ -18,10 +18,35 @@ import {
   deleteDocumentFileAction,
   deleteDocumentFolderAction,
   renameDocumentFolderAction,
-  getDocumentAccessUrlAction,
 } from '@/app/actions/consultationActions';
-import { fetchLive } from '@/lib/live/fetchLive';
+import { getDocumentDownloadUrlAction } from '@/app/actions/documentFeatureActions';
+import type { DocumentFolderView } from '@/lib/documents/types';
 import { useLiveRefresh } from '@/components/live/LiveProvider';
+
+/** The signed-in user's folders (GET /api/live/documents). null: signed out. */
+async function fetchDocumentFolders(role: 'client' | 'lawyer'): Promise<DocumentFolderView[] | null> {
+  const res = await fetch(`/api/live/documents?role=${role}`, {
+    cache: 'no-store',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  });
+  if (res.status === 401) return null;
+  const body = (await res.json().catch(() => null)) as { data?: DocumentFolderView[]; error?: string } | null;
+  if (!res.ok || !body || !Array.isArray(body.data)) throw new Error(body?.error || `Request failed (${res.status})`);
+  return body.data;
+}
+
+/** Starts a browser download from a link that is served as an attachment (no navigation). */
+function startDownload(url: string, fileName: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.rel = 'noopener';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -38,113 +63,22 @@ export interface FolderItem {
   name: string;
   kind?: 'shared' | 'owned';
   isRecentlyCreated?: boolean;
+  /** Shared consultation folders: "Shared by …" (lawyer) or "Shared to …" (client). */
+  sharedLabel?: string | null;
   files: DocumentItem[];
 }
+
+/** Under a folder's name: who shared it, or how many documents it holds. */
+const folderSubtitle = (folder: FolderItem) =>
+  folder.kind === 'shared'
+    ? folder.sharedLabel || 'Shared for a consultation'
+    : `${folder.files.length} ${folder.files.length === 1 ? 'document' : 'documents'}`;
 
 interface DocumentsViewProps {
   role?: 'client' | 'lawyer';
 }
 
 type NavDirection = 'forward' | 'back' | 'fade';
-
-// ─── Default Case Folders (Matching User Design Reference Exactly) ───────────
-
-const DEFAULT_CASE_FOLDERS: FolderItem[] = [
-  {
-    id: 'divorce-case',
-    name: 'Divorce Case',
-    kind: 'owned',
-    files: [
-      { id: 'div-1', name: 'Petition for Nullity of Marriage.pdf', size: '1.8 MB', type: 'pdf', updatedAt: '2 days ago' },
-      { id: 'div-2', name: 'PSA Certified Marriage Certificate.pdf', size: '820 KB', type: 'pdf', updatedAt: '3 days ago' },
-      { id: 'div-3', name: 'Judicial Affidavit of Petitioner.docx', size: '450 KB', type: 'doc', updatedAt: '1 week ago' },
-      { id: 'div-4', name: 'Inventory of Conjugal Properties.xlsx', size: '320 KB', type: 'excel', updatedAt: '2 weeks ago' },
-      { id: 'div-5', name: 'Child Custody and Support Agreement.pdf', size: '640 KB', type: 'pdf', updatedAt: '2 weeks ago' },
-    ],
-  },
-  {
-    id: 'land-ownership-case',
-    name: 'Land Ownership Case',
-    kind: 'owned',
-    files: [
-      { id: 'land-1', name: 'Transfer Certificate of Title (TCT).pdf', size: '2.4 MB', type: 'pdf', updatedAt: '4 days ago' },
-      { id: 'land-2', name: 'Deed of Absolute Sale Notarized.pdf', size: '1.1 MB', type: 'pdf', updatedAt: '1 week ago' },
-      { id: 'land-3', name: 'DENR Cadastral Survey Plan.pdf', size: '3.8 MB', type: 'pdf', updatedAt: '2 weeks ago' },
-      { id: 'land-4', name: 'Real Property Tax Declaration.pdf', size: '750 KB', type: 'pdf', updatedAt: '3 weeks ago' },
-    ],
-  },
-  {
-    id: 'criminal-case',
-    name: 'Criminal Case',
-    kind: 'owned',
-    files: [
-      { id: 'crim-1', name: 'Resolution of City Prosecutor.pdf', size: '980 KB', type: 'pdf', updatedAt: '5 days ago' },
-      { id: 'crim-2', name: 'Criminal Information Sheet (RTC).pdf', size: '620 KB', type: 'pdf', updatedAt: '1 week ago' },
-      { id: 'crim-3', name: 'Official Bail Bond Receipt.pdf', size: '410 KB', type: 'pdf', updatedAt: '2 weeks ago' },
-    ],
-  },
-  {
-    id: 'business-legal-owners',
-    name: 'Business Legal Owners',
-    kind: 'owned',
-    files: [
-      { id: 'biz-1', name: 'SEC Articles of Incorporation.pdf', size: '1.4 MB', type: 'pdf', updatedAt: '1 week ago' },
-      { id: 'biz-2', name: 'General Information Sheet (GIS).pdf', size: '850 KB', type: 'pdf', updatedAt: '2 weeks ago' },
-      { id: 'biz-3', name: 'Shareholders Agreement Final.docx', size: '560 KB', type: 'doc', updatedAt: '3 weeks ago' },
-      { id: 'biz-4', name: 'BIR Certificate of Registration.pdf', size: '490 KB', type: 'pdf', updatedAt: '1 month ago' },
-    ],
-  },
-  {
-    id: 'defamation-case',
-    name: 'Defamation Case',
-    kind: 'owned',
-    files: [
-      { id: 'def-1', name: 'Complaint Affidavit Cyber Libel.pdf', size: '1.3 MB', type: 'pdf', updatedAt: '3 days ago' },
-      { id: 'def-2', name: 'Annex A Social Media Screenshots.png', size: '2.2 MB', type: 'png', updatedAt: '4 days ago' },
-      { id: 'def-3', name: 'Cease and Desist Demand Letter.docx', size: '540 KB', type: 'doc', updatedAt: '1 week ago' },
-    ],
-  },
-  {
-    id: 'school-shooting-case',
-    name: 'School Shooting Case',
-    kind: 'owned',
-    files: [
-      { id: 'sch-1', name: 'PNP Initial Investigation Report.pdf', size: '3.1 MB', type: 'pdf', updatedAt: '1 week ago' },
-      { id: 'sch-2', name: 'Ballistics and Forensic Evidence.pdf', size: '4.2 MB', type: 'pdf', updatedAt: '2 weeks ago' },
-      { id: 'sch-3', name: 'Medical and Hospital Records.pdf', size: '1.9 MB', type: 'pdf', updatedAt: '3 weeks ago' },
-    ],
-  },
-  {
-    id: 'bullying-case',
-    name: 'Bullying Case',
-    kind: 'owned',
-    files: [
-      { id: 'bul-1', name: 'DepEd Child Protection Incident Report.pdf', size: '720 KB', type: 'pdf', updatedAt: '4 days ago' },
-      { id: 'bul-2', name: 'Guidance Counselor Formal Summary.docx', size: '390 KB', type: 'doc', updatedAt: '1 week ago' },
-      { id: 'bul-3', name: 'Witness Statements Compilation.pdf', size: '880 KB', type: 'pdf', updatedAt: '2 weeks ago' },
-    ],
-  },
-  {
-    id: 'fraud-case',
-    name: 'Fraud Case',
-    kind: 'owned',
-    files: [
-      { id: 'frd-1', name: 'Sworn Affidavit of Complaint for Estafa.pdf', size: '1.6 MB', type: 'pdf', updatedAt: '6 days ago' },
-      { id: 'frd-2', name: 'Bank Statement and Transfer Slips.pdf', size: '2.1 MB', type: 'pdf', updatedAt: '1 week ago' },
-      { id: 'frd-3', name: 'Certified Public Accountant Audit.xlsx', size: '640 KB', type: 'excel', updatedAt: '3 weeks ago' },
-    ],
-  },
-  {
-    id: 'juvenile-employment-case',
-    name: 'Juvenile Employment Case',
-    kind: 'owned',
-    files: [
-      { id: 'juv-1', name: 'DOLE Special Work Permit Application.pdf', size: '810 KB', type: 'pdf', updatedAt: '1 week ago' },
-      { id: 'juv-2', name: 'Parental Sworn Affidavit of Consent.pdf', size: '490 KB', type: 'pdf', updatedAt: '2 weeks ago' },
-      { id: 'juv-3', name: 'Youth Apprenticeship Agreement.docx', size: '380 KB', type: 'doc', updatedAt: '3 weeks ago' },
-    ],
-  },
-];
 
 // Helper: map document extensions to icon paths
 function getDocIconPath(type: DocumentItem['type']) {
@@ -564,7 +498,8 @@ const folderMenuItemVariants: Variants = {
 interface FolderMenuProps {
   open: boolean;
   folderName: string;
-  count: number;
+  /** e.g. "3 documents", or "Shared by …" for a shared folder. */
+  subtitle: string;
   onToggle: () => void;
   onClose: () => void;
   onOpenFolder: () => void;
@@ -572,7 +507,7 @@ interface FolderMenuProps {
   onDelete: () => void;
 }
 
-function FolderMenu({ open, folderName, count, onToggle, onClose, onOpenFolder, onRename, onDelete }: FolderMenuProps) {
+function FolderMenu({ open, folderName, subtitle, onToggle, onClose, onOpenFolder, onRename, onDelete }: FolderMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -662,8 +597,8 @@ function FolderMenu({ open, folderName, count, onToggle, onClose, onOpenFolder, 
                   <p className="font-lora text-[13px] font-semibold text-[#34150F] leading-tight truncate" title={folderName}>
                     {folderName}
                   </p>
-                  <p className="font-inter text-[11px] text-[#8C7A6A] mt-0.5">
-                    {count} {count === 1 ? 'document' : 'documents'}
+                  <p className="font-inter text-[11px] text-[#8C7A6A] mt-0.5 truncate" title={subtitle}>
+                    {subtitle}
                   </p>
                 </div>
               </motion.div>
@@ -870,7 +805,7 @@ function ViewportModal({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
-  const [folders, setFolders] = useState<FolderItem[]>(DEFAULT_CASE_FOLDERS);
+  const [folders, setFolders] = useState<FolderItem[]>([]);
   const [loadingDocs, setLoadingDocs] = useState<boolean>(true);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [currentSection, setCurrentSection] = useState<'shared' | 'owned' | null>(null);
@@ -895,6 +830,8 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const [renameFolderName, setRenameFolderName] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<{ id: string; message: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedFileRef = useRef<File | null>(null);
@@ -906,28 +843,19 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
     return () => window.removeEventListener('click', handleOutsideClick);
   }, []);
 
-  // Load real folders from Supabase documents table. The first load shows the
-  // skeleton; live refreshes (shared files, uploads elsewhere) update silently.
+  // Load the signed-in user's own folders and the consultation folders shared with them
+  // (no sample data). The first load shows the skeleton; live refreshes (shared files,
+  // uploads elsewhere) update silently.
   const docsLoadedRef = useRef(false);
   const loadDocuments = React.useCallback(() => {
     if (!docsLoadedRef.current) setLoadingDocs(true);
-    return fetchLive('documents', { role })
+    return fetchDocumentFolders(role)
       .then((dbFolders) => {
-        if (Array.isArray(dbFolders) && dbFolders.length > 0) {
-          // Merge user custom/consultation folders with fallback cases, avoiding duplicate names
-          const existingNames = new Set(dbFolders.map((f) => f.name.toLowerCase().trim()));
-          const unrepresentedDefaults = DEFAULT_CASE_FOLDERS.filter(
-            (def) => !existingNames.has(def.name.toLowerCase().trim())
-          );
-          setFolders([...dbFolders, ...unrepresentedDefaults]);
-        } else {
-          setFolders(DEFAULT_CASE_FOLDERS);
-        }
+        setFolders(dbFolders ?? []);
       })
       .catch((err) => {
+        // Keep whatever is on screen; the next live refresh retries.
         console.error('Failed to load documents:', err);
-        // Only fall back to defaults when nothing has loaded yet.
-        if (!docsLoadedRef.current) setFolders(DEFAULT_CASE_FOLDERS);
       })
       .finally(() => {
         docsLoadedRef.current = true;
@@ -1143,27 +1071,20 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
     }
   };
 
+  // Downloads the real file: a short-lived signed link served as an attachment. Only the owner
+  // and users the file was shared with get a link (checked on the server).
   const handleDownloadFile = async (doc: DocumentItem) => {
+    if (downloadingId) return;
+    setDownloadingId(doc.id);
+    setDownloadError(null);
     try {
-      const res = await getDocumentAccessUrlAction(doc.id);
-      if ('url' in res && res.url) {
-        window.open(res.url, '_blank');
-      } else {
-        // Fallback simulation for client demonstration
-        const mockBlob = new Blob([`Justicia Verified Legal Record: ${doc.name}\nSize: ${doc.size}\nProtected under Rule 130`], {
-          type: 'text/plain',
-        });
-        const url = URL.createObjectURL(mockBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = doc.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }
+      const res = await getDocumentDownloadUrlAction(doc.id);
+      if ('url' in res && res.url) startDownload(res.url, res.fileName);
+      else setDownloadError({ id: doc.id, message: ('error' in res && res.error) || 'This file could not be downloaded.' });
     } catch {
-      alert(`Downloading ${doc.name}...`);
+      setDownloadError({ id: doc.id, message: 'This file could not be downloaded. Please try again.' });
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -1371,7 +1292,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                           <FolderMenu
                             open={menuOpen}
                             folderName={folder.name}
-                            count={count}
+                            subtitle={folderSubtitle(folder)}
                             onToggle={() => setActiveMenuFolderId(menuOpen ? null : folder.id)}
                             onClose={() => setActiveMenuFolderId(null)}
                             onOpenFolder={() => handleEnterFolder(folder)}
@@ -1390,12 +1311,12 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                             className="w-full max-w-[8.5rem] sm:max-w-[9.5rem]"
                           />
 
-                          {/* Folder name + document count */}
+                          {/* Folder name + document count (shared folders: who shared them) */}
                           <span className="docs-label font-lora text-sm sm:text-[15px] text-[#34150F] text-center mt-3 font-medium leading-snug max-w-[190px] line-clamp-2 group-hover:text-[#C58B3C]">
                             {folder.name}
                           </span>
-                          <span className="font-inter text-[11px] sm:text-xs text-[#7D6855] mt-0.5">
-                            {count} {count === 1 ? 'document' : 'documents'}
+                          <span className="font-inter text-[11px] sm:text-xs text-[#7D6855] mt-0.5 text-center max-w-[190px] line-clamp-2">
+                            {folderSubtitle(folder)}
                           </span>
                         </div>
                       </div>
@@ -1406,9 +1327,15 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                   {filteredFolders.length === 0 && !loadingDocs && (
                     <div className="docs-rise col-span-full py-16 text-center space-y-2">
                       <Image src="/assets/folder_icon.svg" alt="" width={72} height={58} className="mx-auto opacity-60" />
-                      <p className="font-lora text-base font-semibold text-[#34150F]">No case folders match your search</p>
+                      <p className="font-lora text-base font-semibold text-[#34150F]">
+                        {searchQuery.trim() ? 'No case folders match your search' : 'No case folders yet'}
+                      </p>
                       <p className="font-inter text-xs text-[#7D6855]">
-                        Try searching with different terms or click + to create a new folder.
+                        {searchQuery.trim()
+                          ? 'Try searching with different terms or click + to create a new folder.'
+                          : role === 'lawyer'
+                            ? 'Documents your clients share with you appear here. Click + to create your own folder.'
+                            : 'Click + to create a folder and upload your documents.'}
                       </p>
                     </div>
                   )}
@@ -1460,9 +1387,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                           </span>
                         </div>
                         <div className="flex items-center gap-4 text-xs font-inter text-[#7D6855]">
-                          <span>
-                            {count} {count === 1 ? 'document' : 'documents'}
-                          </span>
+                          <span>{folderSubtitle(folder)}</span>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1485,7 +1410,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
 
                   {filteredFolders.length === 0 && !loadingDocs && (
                     <p className="docs-rise py-10 text-center font-inter text-xs text-[#7D6855]">
-                      No case folders match your search.
+                      {searchQuery.trim() ? 'No case folders match your search.' : 'No case folders yet.'}
                     </p>
                   )}
                 </div>
@@ -1611,6 +1536,9 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                         <div className="min-w-0">
                           <p className="font-lora text-[15px] font-medium text-[#34150F] truncate">{file.name}</p>
                           <p className="font-inter text-xs text-[#8C7A6A] mt-0.5">{file.size} • {file.updatedAt}</p>
+                          {downloadError?.id === file.id && !previewDocument && (
+                            <p role="alert" className="font-inter text-xs text-red-700 mt-0.5">{downloadError.message}</p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-4 shrink-0">
@@ -1620,9 +1548,10 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                             e.stopPropagation();
                             handleDownloadFile(file);
                           }}
-                          className="font-inter text-xs text-[#C58B3C] hover:text-[#8C6020] hover:underline p-1 font-semibold transition-colors duration-200"
+                          disabled={downloadingId === file.id}
+                          className="font-inter text-xs text-[#C58B3C] hover:text-[#8C6020] hover:underline p-1 font-semibold transition-colors duration-200 disabled:opacity-60"
                         >
-                          Download
+                          {downloadingId === file.id ? 'Downloading…' : 'Download'}
                         </button>
                         <button
                           type="button"
@@ -1943,10 +1872,14 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
               <button
                 type="button"
                 onClick={() => handleDownloadFile(previewDocument)}
-                className="neu-btn-create w-[240px] sm:w-[260px] text-xs sm:text-sm font-semibold tracking-[0.16em] uppercase py-3 sm:py-3.5 px-6 rounded-[14px] active:translate-y-0.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B9833C]/60"
+                disabled={downloadingId === previewDocument.id}
+                className="neu-btn-create w-[240px] sm:w-[260px] text-xs sm:text-sm font-semibold tracking-[0.16em] uppercase py-3 sm:py-3.5 px-6 rounded-[14px] active:translate-y-0.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B9833C]/60 disabled:opacity-60"
               >
-                DOWNLOAD FILE
+                {downloadingId === previewDocument.id ? 'DOWNLOADING…' : 'DOWNLOAD FILE'}
               </button>
+              {downloadError?.id === previewDocument.id && (
+                <p role="alert" className="font-inter text-xs text-red-700 text-center">{downloadError.message}</p>
+              )}
 
               <div className="flex items-center gap-8">
                 <button

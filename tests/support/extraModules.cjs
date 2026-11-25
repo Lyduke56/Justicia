@@ -55,6 +55,17 @@ function extraModule(name) {
       return { DEMO_COOKIE: 'justicia_demo_session', isDemoEnabled: () => false, isDemoFor: () => false };
     case '@/lib/notifications':
       return { writeAuditLog: async () => {}, createNotification: async () => {} };
+    case '@supabase/supabase-js':
+      // Stateless clients made directly by app code (password reset emails, password checks).
+      return {
+        createClient: () => ({
+          auth: {
+            resetPasswordForEmail: async () => ({ data: {}, error: null }),
+            signInWithPassword: async () => ({ data: { user: null }, error: { message: 'Invalid login credentials' } }),
+            signOut: async () => ({ error: null }),
+          },
+        }),
+      };
     default:
       return undefined;
   }

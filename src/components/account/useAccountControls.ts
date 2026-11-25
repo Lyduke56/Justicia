@@ -16,6 +16,7 @@ import {
 } from '@/app/actions/accountPrivacyActions';
 import type { MessagingPrivacy, NotificationCategory, NotificationChoices } from '@/lib/account/preferences';
 import type { ConsentStatus } from '@/lib/legal';
+import { leaveToLanding } from '@/lib/auth/leaving';
 
 export const NOTIFICATION_ROWS: Array<{ key: NotificationCategory; title: string; description: string }> = [
   { key: 'consultations', title: 'Consultation updates', description: 'Requests, approvals, reschedules and cancellations.' },
@@ -98,8 +99,8 @@ export function useSignOutEverywhere() {
       setError('');
       const res = await signOutEverywhereAction();
       if (!res.success) setError(res.error);
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload: no signed-in state may survive
-      else window.location.assign('/login');
+      // Full reload to the landing page: no signed-in state may survive.
+      else leaveToLanding();
     });
   return { pending, error, run };
 }

@@ -261,6 +261,7 @@ export function LawyerDashboardView() {
     onJoin: actions.joinMeet,
     onDocuments: () => router.push('/lawyer/documents'),
     onReschedule: actions.openReschedule,
+    onReviewCancellation: actions.openCancellationReview,
   };
 
   const range = filterRange(filter);
@@ -481,7 +482,7 @@ export function LawyerDashboardView() {
                         onDragEnd={onCardDragEnd}
                         className="touch-pan-y"
                       >
-                        <LawyerConsultationCard c={current} {...handlers} />
+                        <LawyerConsultationCard c={current} extras={actions.extrasFor(current.id)} now={actions.now} {...handlers} />
                       </motion.div>
                     </AnimatePresence>
                   )

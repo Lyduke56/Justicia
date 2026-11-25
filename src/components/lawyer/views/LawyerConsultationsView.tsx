@@ -8,7 +8,7 @@ import { fetchLive } from '@/lib/live/fetchLive';
 import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
 import { CalendarIcon, EmptyState, NeuAlert, NeuButton } from '@/components/shared/neu';
 import { parseIsoDate, startMsOf, todayInManila } from '@/lib/lawyer/dashboardSchedule';
-import { useLawyerConsultationActions } from '../useLawyerConsultationActions';
+import { isMissed, useLawyerConsultationActions } from '../useLawyerConsultationActions';
 import { LawyerConsultationCard, type ConsultationCardHandlers } from '../LawyerConsultationCard';
 import { CardPager, ConsultationCardSkeleton } from '../CardPager';
 import { buildSampleConsultations } from '../sampleConsultations';
@@ -115,7 +115,11 @@ export function LawyerConsultationsView({
   const [monthDir, setMonthDir] = useState(1);
   const [slideDir, setSlideDir] = useState(1);
 
-  const items = useMemo(() => visibleConsultations(all, tab, query, sort, today), [all, tab, query, sort, today]);
+  // ── Actions & modals (also loads attendance and cancellation requests) ──
+  const actions = useLawyerConsultationActions({ consultations: all, reload: load });
+  const { extrasFor } = actions;
+  const missedOf = useCallback((c: LawyerConsultation) => isMissed(c, extrasFor(c.id)), [extrasFor]);
+  const items = useMemo(() => visibleConsultations(all, tab, query, sort, today, missedOf), [all, tab, query, sort, today, missedOf]);
   const index = Math.max(0, selectedId ? items.findIndex((c) => c.id === selectedId) : 0);
   const current = items[index] ?? null;
   const selectedDate = pickedDate ?? (current ? isoOfConsultation(current) : today);
@@ -126,10 +130,10 @@ export function LawyerConsultationsView({
     const q = query.trim().toLowerCase();
     const result = {} as Record<ConsultationTab, number | null>;
     for (const t of TABS) {
-      result[t.key] = loaded ? all.filter((c) => matchesTab(c, t.key) && (!q || c.client.name.toLowerCase().includes(q))).length : null;
+      result[t.key] = loaded ? all.filter((c) => matchesTab(c, t.key, missedOf(c)) && (!q || c.client.name.toLowerCase().includes(q))).length : null;
     }
     return result;
-  }, [all, query, loaded]);
+  }, [all, query, loaded, missedOf]);
 
   const dayCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -202,12 +206,12 @@ export function LawyerConsultationsView({
 
   const changeQuery = (q: string) => {
     setQuery(q);
-    const still = selectedId && visibleConsultations(all, tab, q, sort, today).some((c) => c.id === selectedId);
+    const still = selectedId && visibleConsultations(all, tab, q, sort, today, missedOf).some((c) => c.id === selectedId);
     if (!still) resetSelection();
   };
 
   // ── Actions & modals ──
-  const actions = useLawyerConsultationActions({ consultations: all, reload: load });
+  // (created above, before the filters: the Missed tab needs its attendance data)
   const handlers: ConsultationCardHandlers = {
     onDetails: actions.openDetails,
     onMessage: actions.openMessages,
@@ -217,6 +221,7 @@ export function LawyerConsultationsView({
     onApprove: (c) => actions.openDecision('approve', c.id),
     onDecline: (c) => actions.openDecision('decline', c.id),
     onReschedule: actions.openReschedule,
+    onReviewCancellation: actions.openCancellationReview,
   };
 
   // ← / → page through consultations while this tab is shown, no dialog is open and focus isn't
@@ -409,7 +414,7 @@ export function LawyerConsultationsView({
                     onDragEnd={onCardDragEnd}
                     className="flex touch-pan-y flex-col xl:min-h-0 xl:flex-1"
                   >
-                    <LawyerConsultationCard c={current} fill={isXl} previewLines={6} {...handlers} />
+                    <LawyerConsultationCard c={current} fill={isXl} previewLines={6} extras={actions.extrasFor(current.id)} now={actions.now} {...handlers} />
                   </motion.div>
                 )}
               </AnimatePresence>

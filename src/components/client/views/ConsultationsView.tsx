@@ -16,7 +16,6 @@ import { cancelConsultationAction } from '@/app/actions/consultationActions';
 import { fetchLive } from '@/lib/live/fetchLive';
 import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
 import {
-  getPaymentChannelAction,
   submitPaymentProofAction,
   getDocumentAccessUrlAction,
 } from '@/app/actions/consultationActions';
@@ -34,6 +33,11 @@ import type {
 import type { ViewKey } from '@/components/client/ClientShell';
 import { ConsultationsSkeleton } from '@/components/skeletons';
 import { RescheduleModal, type RescheduleModalMode } from '@/components/shared/RescheduleModal';
+import { CancellationRequestModal, type CancellationModalMode } from '@/components/shared/CancellationRequestModal';
+import { useConsultationExtras } from '@/components/consultations/useConsultationExtras';
+import { usePeopleAvatars } from '@/components/account/avatarStore';
+import { getConsultationPaymentChannelAction } from '@/app/actions/lawyerPaymentQrActions';
+import { joinOpensLabel, joinState, missedSummary, type ConsultationExtras } from '@/lib/consultations/extras';
 import {
   NeuModal,
   NeuButton,
@@ -119,6 +123,29 @@ const MONTH_LABELS = [
 
 /** Statuses a client may still cancel. */
 const CANCELLABLE_STATUSES = ['pending', 'confirmed', 'awaiting_client_confirmation'];
+
+/** A booking's reminders, with missed consultations and open cancellation requests explained. */
+function remindersOf(a: ClientConsultation, extras: ConsultationExtras | null): string[] {
+  const missed = extras?.attendance.missed;
+  if (a.rawStatus === 'confirmed' && missed) {
+    return [
+      `${missedSummary(missed, 'client', a.lawyerName)} It is marked as a missed consultation.`,
+      'You can message the attorney from the Messages tab to talk about what happens next.',
+    ];
+  }
+  const pending = extras?.cancellation.pending;
+  if (a.rawStatus === 'confirmed' && pending) {
+    return [
+      `You asked ${a.lawyerName} to cancel this consultation. It stays booked until they accept.`,
+      'If the attorney accepts, your payment is marked for a refund.',
+      ...a.reminders.slice(0, 1),
+    ];
+  }
+  if (a.rawStatus === 'confirmed') {
+    return [a.reminders[0], 'The Join Meet button opens 1 hour before the session starts.', ...a.reminders.slice(1)].filter(Boolean);
+  }
+  return a.reminders;
+}
 
 /**
  * Wraps the lawyer banner: a light sheen sweeps across it whenever a consultation arrives, and on
@@ -243,9 +270,36 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
     }
   };
 
+  // Attendance (join window, missed) and cancellation requests for paid bookings.
+  const { extrasFor, now, joinMeeting, reload: reloadExtras } = useConsultationExtras();
+  // Attorneys' profile photos (cards and View Details), kept live.
+  const lawyerPhotos = usePeopleAvatars(allAppointments.map((a) => a.lawyerId));
+  const [cancelRequest, setCancelRequest] = useState<{ mode: CancellationModalMode; id: string } | null>(null);
+  const [cancelNotice, setCancelNotice] = useState<string | null>(null);
+
   const rawStatus = currentAppointment?.rawStatus ?? 'pending';
-  const canCancel = CANCELLABLE_STATUSES.includes(rawStatus);
-  const canJoinMeet = rawStatus === 'confirmed';
+  const currentExtras = extrasFor(currentAppointment?.id);
+  const currentJoin = joinState(currentExtras?.attendance, now);
+  const currentMissed = currentExtras?.attendance.missed ?? null;
+  // Paid (confirmed) bookings are cancelled by request, until the session starts.
+  const canCancel =
+    rawStatus === 'confirmed'
+      ? !currentMissed && currentJoin !== 'ended' && (currentExtras ? currentExtras.cancellation.canRequest : true)
+      : CANCELLABLE_STATUSES.includes(rawStatus);
+  const canJoinMeet = rawStatus === 'confirmed' && !currentMissed && currentJoin !== 'ended';
+
+  /** Cancel: paid bookings send a request to the attorney; others cancel right away. */
+  const startCancel = (a: Appointment) => {
+    setCancelError(null);
+    if (a.rawStatus === 'confirmed') setCancelRequest({ mode: 'request', id: a.id });
+    else setShowCancelModal(true);
+  };
+
+  /** The client may join from 1 hour before the start until the end. */
+  const enterMeeting = (a: Appointment) => {
+    if (!a.meetingLink || joinState(extrasFor(a.id)?.attendance, now) === 'not_yet') return;
+    joinMeeting(a.id, a.meetingLink);
+  };
 
   const handleConfirmCancel = async () => {
     if (!currentAppointment || isCancelling) return;
@@ -330,7 +384,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
             a.day === selectedDate.day &&
             a.rawStatus !== 'cancelled'
         )
-        .flatMap((a) => a.reminders)
+        .flatMap((a) => remindersOf(a, extrasFor(a.id)))
     )
   );
   const selectedDateLabel = new Date(selectedDate.year, selectedDate.month, selectedDate.day).toLocaleDateString(
@@ -354,14 +408,19 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const [paymentFile, setPaymentFile] = useState<File | null>(null);
   const [submittingPayment, setSubmittingPayment] = useState<boolean>(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
-  const [paymentChannel, setPaymentChannel] = useState<PaymentChannel | null>(null);
+  // The QR to pay each booking with: the attorney's own payment QR, else the platform QR.
+  const [paymentChannels, setPaymentChannels] = useState<Record<string, PaymentChannel>>({});
 
   const openDetails = () => {
     setDetailsError(null);
     setPaymentFile(null);
     setShowDetailsModal(true);
-    if (!paymentChannel) {
-      getPaymentChannelAction().then(setPaymentChannel);
+    const target = currentAppointment;
+    if (target && target.rawStatus === 'awaiting_client_confirmation') {
+      // Re-read each time: the attorney may have changed their QR, and the image link is short-lived.
+      getConsultationPaymentChannelAction(target.id)
+        .then((channel) => setPaymentChannels((prev) => ({ ...prev, [target.id]: channel })))
+        .catch(() => undefined);
     }
   };
 
@@ -410,6 +469,16 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
     const isPaid = a.rawStatus === 'confirmed' || a.rawStatus === 'completed';
     const needsPayment = isPaymentStage && (a.payment.state === 'none' || a.payment.state === 'rejected');
     const underReview = isPaymentStage && a.payment.state === 'submitted';
+    // Attendance and cancellation requests (confirmed bookings only).
+    const ax = a.rawStatus === 'confirmed' ? extrasFor(a.id) : null;
+    const missed = ax?.attendance.missed ?? null;
+    const join = joinState(ax?.attendance, now);
+    const sessionOver = !!missed || join === 'ended';
+    const cancelPending = ax?.cancellation.pending ?? null;
+    const cancelLast =
+      ax?.cancellation.last && ax.cancellation.last.byMe && ax.cancellation.last.recent && ['declined', 'expired'].includes(ax.cancellation.last.status)
+        ? ax.cancellation.last
+        : null;
 
     const summary: DetailsSummary = {
       title: isPaid || underReview ? 'Payment Summary' : 'Booking Summary',
@@ -439,6 +508,23 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
         title: 'Payment under review',
         text: 'Your attorney is verifying your proof of payment. The Google Meet link will be shared once confirmed.',
       };
+    } else if (missed) {
+      notice = { tone: 'red', title: 'Missed consultation', text: missedSummary(missed, 'client', a.lawyerName) };
+    } else if (cancelPending) {
+      notice = {
+        tone: 'amber',
+        title: 'Cancellation request sent',
+        text: `You asked ${a.lawyerName} to cancel this consultation. It stays booked until they accept.\nYour reason: ${cancelPending.reason}`,
+      };
+    } else if (cancelLast && !a.reschedule?.pending) {
+      notice = {
+        tone: 'red',
+        title: cancelLast.status === 'declined' ? 'Your cancellation request was declined' : 'Your cancellation request lapsed',
+        text:
+          cancelLast.status === 'declined'
+            ? `${a.lawyerName} declined it, so the consultation stays booked.${cancelLast.responseReason ? `\nReason: ${cancelLast.responseReason}` : ''}`
+            : `${a.lawyerName} didn't answer before the session started, so the consultation stayed booked.`,
+      };
     } else if (a.reschedule?.pending) {
       const p = a.reschedule.pending;
       notice = p.byMe
@@ -463,6 +549,14 @@ Reason: ${last.responseReason}` : ''}`,
       };
     }
 
+    if (!notice && join === 'not_yet' && ax?.attendance.joinOpensAt && a.meetingLink) {
+      notice = {
+        tone: 'amber',
+        title: `Join opens ${joinOpensLabel(ax.attendance.joinOpensAt, now).includes(' at ') ? 'on ' : 'at '}${joinOpensLabel(ax.attendance.joinOpensAt, now)}`,
+        text: 'You can join the meeting from 1 hour before the scheduled start.',
+      };
+    }
+
     const close = { label: 'Close', variant: 'caramel' as const, onClick: closeDetails };
     let actions: ConsultationDetailsModalProps['actions'] = [close];
     if (needsPayment) {
@@ -475,15 +569,16 @@ Reason: ${last.responseReason}` : ''}`,
           disabled: !paymentFile || submittingPayment,
         },
       ];
-    } else if (isPaid && a.rawStatus === 'confirmed') {
+    } else if (isPaid && a.rawStatus === 'confirmed' && !sessionOver) {
       actions = [
         {
-          label: 'Cancel',
+          label: cancelPending ? 'Withdraw Cancellation' : 'Cancel',
           variant: 'outline',
+          disabled: !cancelPending && !!ax && !ax.cancellation.canRequest,
           onClick: () => {
             setShowDetailsModal(false);
             setCancelError(null);
-            setShowCancelModal(true);
+            setCancelRequest({ mode: cancelPending ? 'withdraw' : 'request', id: a.id });
           },
         },
         {
@@ -502,8 +597,8 @@ Reason: ${last.responseReason}` : ''}`,
           label: 'Join Meet',
           variant: 'caramel',
           icon: 'video',
-          disabled: !a.meetingLink,
-          onClick: () => a.meetingLink && window.open(a.meetingLink, '_blank', 'noopener,noreferrer'),
+          disabled: !a.meetingLink || join === 'not_yet',
+          onClick: () => enterMeeting(a),
         },
       ];
     }
@@ -512,11 +607,13 @@ Reason: ${last.responseReason}` : ''}`,
     return {
       dateStr: a.dateStr,
       timeSlot: a.timeSlot,
-      statusLabel: a.status,
+      statusLabel: missed ? 'MISSED CONSULTATION' : a.status,
       statusTone:
         a.rawStatus === 'declined' || a.rawStatus === 'cancelled'
           ? 'grey'
-          : needsPayment
+          : missed
+            ? 'red'
+            : needsPayment
             ? 'red'
             : underReview
               ? 'amber'
@@ -525,6 +622,7 @@ Reason: ${last.responseReason}` : ''}`,
                 : 'caramel',
       person: {
         name: a.lawyerName,
+        photo: lawyerPhotos[a.lawyerId] ?? null,
         lines: [
           `Roll No. ${a.rollNumber}  |  IBP ${a.ibpChapter}`,
           a.practiceAreas.join(' • '),
@@ -546,8 +644,8 @@ Reason: ${last.responseReason}` : ''}`,
       summary: isPaymentStage || isPaid ? summary : null,
       payment: needsPayment
         ? {
-          qrImageUrl: paymentChannel?.qrImageUrl ?? null,
-          qrCaption: paymentChannel?.caption ?? null,
+          qrImageUrl: paymentChannels[a.id]?.qrImageUrl ?? null,
+          qrCaption: paymentChannels[a.id]?.caption ?? null,
           file: paymentFile,
           onFileChange: (file) => {
             setDetailsError(null);
@@ -577,7 +675,7 @@ Reason: ${last.responseReason}` : ''}`,
   };
 
   // ← / → page through consultations when no dialog is open and focus isn't in a text field.
-  const anyModalOpen = showCancelModal || showDetailsModal || showMeetModal || reschedule !== null;
+  const anyModalOpen = showCancelModal || showDetailsModal || showMeetModal || reschedule !== null || cancelRequest !== null;
   useEffect(() => {
     if (anyModalOpen || allAppointments.length < 2) return;
     const onKey = (e: KeyboardEvent) => {
@@ -926,6 +1024,39 @@ Reason: ${last.responseReason}` : ''}`,
                       </NeuAlert>
                     )}
 
+                    {cancelNotice && (
+                      <NeuAlert key="cancel-notice" tone="success" onDismiss={() => setCancelNotice(null)} className="shrink-0">
+                        {cancelNotice}
+                      </NeuAlert>
+                    )}
+
+                    {currentAppointment.rawStatus === 'confirmed' && currentExtras?.cancellation.pending && (
+                      <NeuAlert
+                        key="cancel-pending"
+                        tone="warning"
+                        className="shrink-0"
+                        title="Cancellation request sent"
+                        action={
+                          <NeuButton size="sm" variant="secondary" onClick={() => setCancelRequest({ mode: 'withdraw', id: currentAppointment.id })}>
+                            Withdraw
+                          </NeuButton>
+                        }
+                      >
+                        Waiting for {currentAppointment.lawyerName} to accept. The consultation stays booked until then.
+                      </NeuAlert>
+                    )}
+
+                    {currentAppointment.rawStatus === 'confirmed' &&
+                      !currentExtras?.cancellation.pending &&
+                      currentExtras?.cancellation.last?.status === 'declined' &&
+                      currentExtras.cancellation.last.byMe &&
+                      currentExtras.cancellation.last.recent && (
+                        <NeuAlert key="cancel-declined" tone="error" className="shrink-0" title="Cancellation request declined">
+                          {currentAppointment.lawyerName} declined it, so the consultation stays booked.
+                          {currentExtras.cancellation.last.responseReason ? ` Reason: ${currentExtras.cancellation.last.responseReason}` : ''}
+                        </NeuAlert>
+                      )}
+
                     {currentAppointment.reschedule?.pending && (
                       <NeuAlert
                         key="reschedule-pending"
@@ -973,10 +1104,7 @@ Reason: ${last.responseReason}` : ''}`,
                     {canCancel && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setCancelError(null);
-                          setShowCancelModal(true);
-                        }}
+                        onClick={() => startCancel(currentAppointment)}
                         className="px-5 sm:px-6 py-2 rounded-[12px] border border-[#341512]/50 bg-[#E5D8CB] font-lora text-xs font-semibold text-[#341512] hover:bg-[#DDCFC0] hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-sm cursor-pointer motion-reduce:transform-none"
                       >
                         Cancel
@@ -999,7 +1127,7 @@ Reason: ${last.responseReason}` : ''}`,
                         onClick={() => setShowMeetModal(true)}
                         className="neu-btn-caramel relative px-5 sm:px-6 py-2 rounded-[12px] bg-[#D49E56] font-lora text-xs font-bold text-[#341512] flex items-center gap-1.5 transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 cursor-pointer motion-reduce:transform-none"
                       >
-                        {currentAppointment.meetingLink && (
+                        {currentAppointment.meetingLink && currentJoin !== 'not_yet' && (
                           <span aria-hidden="true" className="absolute -top-1 -right-1 size-2.5">
                             <span className="neu-beacon absolute inset-0 rounded-full bg-[#1FAA00]" />
                             <span className="absolute inset-0 rounded-full bg-[#1FAA00] ring-2 ring-[#E5D8CB]" />
@@ -1153,6 +1281,29 @@ Reason: ${last.responseReason}` : ''}`,
         })()}
       </AnimatePresence>
 
+      {/* ─── Cancellation request for a paid booking (request / withdraw) ──── */}
+      {(() => {
+        const target = cancelRequest ? allAppointments.find((x) => x.id === cancelRequest.id) : undefined;
+        return (
+          <CancellationRequestModal
+            open={!!cancelRequest && !!target}
+            mode={cancelRequest?.mode ?? 'request'}
+            consultationId={target?.id ?? ''}
+            counterpartName={target?.lawyerName ?? ''}
+            dateLong={target?.dateLong ?? ''}
+            timeRange={target?.timeRange ?? ''}
+            requestReason={target ? extrasFor(target.id)?.cancellation.pending?.reason : null}
+            onClose={() => setCancelRequest(null)}
+            onDone={(message) => {
+              setCancelRequest(null);
+              setCancelNotice(message);
+              void reloadExtras();
+              void loadAppointments();
+            }}
+          />
+        );
+      })()}
+
       {/* ─── Join Meet Preview Modal (Neumorphic Design) ───────────────────── */}
       <AnimatePresence>
       {showMeetModal && currentAppointment && (
@@ -1170,11 +1321,11 @@ Reason: ${last.responseReason}` : ''}`,
               </NeuButton>
               <NeuButton
                 variant="primary"
-                disabled={!currentAppointment.meetingLink}
+                disabled={!currentAppointment.meetingLink || currentJoin === 'not_yet'}
                 icon={<VideoIcon className="w-4 h-4" />}
                 onClick={() => {
-                  if (!currentAppointment.meetingLink) return;
-                  window.open(currentAppointment.meetingLink, '_blank', 'noopener,noreferrer');
+                  if (!currentAppointment.meetingLink || currentJoin === 'not_yet') return;
+                  enterMeeting(currentAppointment);
                   setShowMeetModal(false);
                 }}
               >
@@ -1186,7 +1337,7 @@ Reason: ${last.responseReason}` : ''}`,
           {/* Recessed "room" preview */}
           <div className="neu-recessed rounded-[24px] aspect-[16/8] w-full flex flex-col items-center justify-center gap-3 p-6 text-center">
             <div className="relative neu-raised-sm size-14 rounded-full flex items-center justify-center text-[#C58B3C]">
-              {currentAppointment.meetingLink && (
+              {currentAppointment.meetingLink && currentJoin !== 'not_yet' && (
                 <span aria-hidden="true" className="neu-beacon absolute inset-0 rounded-full border-2 border-[#1FAA00]/50" />
               )}
               {currentAppointment.communicationMode === 'audio' ? <PhoneIcon className="w-6 h-6" /> : <VideoIcon className="w-6 h-6" />}
@@ -1199,7 +1350,14 @@ Reason: ${last.responseReason}` : ''}`,
             </div>
           </div>
 
-          {currentAppointment.meetingLink ? (
+          {currentAppointment.meetingLink && currentJoin === 'not_yet' && currentExtras?.attendance.joinOpensAt ? (
+            <NeuAlert
+              tone="warning"
+              title={`Join opens ${joinOpensLabel(currentExtras.attendance.joinOpensAt, now).includes(' at ') ? 'on ' : 'at '}${joinOpensLabel(currentExtras.attendance.joinOpensAt, now)}`}
+            >
+              You can enter the meeting from 1 hour before the scheduled start. Come back then to join.
+            </NeuAlert>
+          ) : currentAppointment.meetingLink ? (
             <NeuAlert tone="success" title="Meeting link ready">
               Join a few minutes early and check your {currentAppointment.communicationMode === 'audio' ? 'microphone and speakers' : 'camera and microphone'}.
             </NeuAlert>

@@ -9,6 +9,9 @@ import { ComingSoonPill, Hint, KeyIcon, NeuSwitch, PAGE, PasswordField, RISE_IN,
 import { ChevronRightIcon, EXTRUDE, InfoIcon, NeuAlert, NeuButton, PencilIcon } from '@/components/shared/neu';
 import { EASE_OUT } from '@/components/shared/neu/motion';
 import { PAGE_FRAME } from '../table/kit';
+import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
+import { setMyAvatar, useMyAvatar } from '@/components/account/avatarStore';
+import { changeProfilePhotoAction, removeMyProfilePhotoAction } from '@/app/actions/profilePhotoActions';
 
 /**
  * Admin Settings and My Profile, built from the client Account Settings page's own pieces
@@ -48,6 +51,7 @@ function AdminAccountLayout({
   link: { href: string; label: string };
   children: ReactNode;
 }) {
+  const myAvatar = useMyAvatar();
   return (
     <MotionConfig reducedMotion="user">
       <motion.div variants={PAGE} initial="hidden" animate="show" className={`${PAGE_FRAME} admin-account`}>
@@ -62,8 +66,8 @@ function AdminAccountLayout({
           {/* Account summary (the client page's caramel card) */}
           <motion.aside variants={EXTRUDE} aria-label="Account summary" className="neu-raised rounded-[24px] p-5 sm:rounded-[28px] sm:p-6 lg:sticky lg:top-6" style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}>
             <div className="flex items-center gap-4 lg:flex-col lg:items-start">
-              <span aria-hidden className="neu-btn-banner flex size-14 shrink-0 items-center justify-center rounded-full font-lora text-lg font-bold text-[#341512] sm:size-16 sm:text-xl">
-                {initialsOf(account.fullName)}
+              <span aria-hidden className="neu-btn-banner flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full font-lora text-lg font-bold text-[#341512] sm:size-16 sm:text-xl">
+                {myAvatar ? <ProfilePhoto src={myAvatar} className="size-full" fallback={initialsOf(account.fullName)} /> : initialsOf(account.fullName)}
               </span>
               <div className="min-w-0">
                 <p className="break-words font-lora text-base font-bold leading-tight text-[#341512] sm:text-lg">{account.fullName || 'Administrator'}</p>
@@ -416,6 +420,82 @@ export function AdminProfile({ account }: { account: PersonalAccount }) {
           )}
         </AnimatePresence>
       </SectionCard>
+      <ProfilePhotoSection fullName={account.fullName} />
     </AdminAccountLayout>
+  );
+}
+
+/** Profile photo: shows in the header's account button and the account summary. */
+function ProfilePhotoSection({ fullName }: { fullName: string }) {
+  const photo = useMyAvatar();
+  const input = React.useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const fd = new FormData();
+      fd.set('file', file);
+      const res = await changeProfilePhotoAction(fd);
+      if (!res.success) setError(res.error);
+      else {
+        setMyAvatar(res.avatarUrl);
+        setMessage('Your photo has been updated.');
+      }
+    } catch {
+      setError('Your photo could not be uploaded. Please try again.');
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = '';
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await removeMyProfilePhotoAction();
+      if (!res.success) setError(res.error);
+      else {
+        setMyAvatar(null);
+        setMessage('Your photo has been removed.');
+      }
+    } catch {
+      setError('Your photo could not be removed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SectionCard labelId="admin-profile-photo" icon={<PersonGlyph />} title="Profile photo" subtitle="PNG, JPG or WebP up to 4 MB. It replaces the person icon in the header.">
+      <div className="flex flex-wrap items-center gap-4">
+        <span aria-hidden className="neu-btn-banner flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full font-lora text-lg font-bold text-[#341512]">
+          {photo ? <ProfilePhoto src={photo} className="size-full" fallback={initialsOf(fullName)} /> : initialsOf(fullName)}
+        </span>
+        <input ref={input} id="admin-profile-photo-input" type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={busy} onChange={(e) => void upload(e.target.files?.[0])} />
+        <NeuButton size="sm" variant="primary" loading={busy} onClick={() => input.current?.click()}>
+          {busy ? 'Saving…' : photo ? 'Change photo' : 'Add a photo'}
+        </NeuButton>
+        {photo && (
+          <NeuButton size="sm" disabled={busy} onClick={() => void remove()}>
+            Remove photo
+          </NeuButton>
+        )}
+      </div>
+      <AnimatePresence>
+        {(error || message) && (
+          <NeuAlert key={error ? 'photo-error' : 'photo-ok'} tone={error ? 'error' : 'success'} onDismiss={() => (error ? setError('') : setMessage(''))}>
+            {error || message}
+          </NeuAlert>
+        )}
+      </AnimatePresence>
+    </SectionCard>
   );
 }

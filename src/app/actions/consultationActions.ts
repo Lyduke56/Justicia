@@ -1414,6 +1414,13 @@ export async function cancelConsultationAction(
     if (!ACTIVE_BOOKING_STATUSES.includes(consultation.status)) {
       return { error: 'This consultation can no longer be cancelled.' };
     }
+    // Paid (confirmed) bookings need the attorney's approval: the client sends a cancellation
+    // request instead (requestCancellationAction in consultationExtrasActions.ts).
+    if (consultation.status === 'confirmed') {
+      return {
+        error: 'This consultation is already paid, so your attorney has to approve a cancellation. Send a cancellation request instead.',
+      };
+    }
 
     const summary = toClientConsultation(consultation, null);
     const wasPaid = summary.payment.state === 'verified';

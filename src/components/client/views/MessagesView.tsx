@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useSyncExternalStore } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { AnimatePresence, motion, MotionConfig, type Variants } from 'motion/react';
 import { MessagesIcon, ScaleIcon } from '@/components/client/ClientIcons';
 import { sendDirectMessageAction, type ThreadContext } from '@/app/actions/consultationActions';
@@ -16,6 +15,8 @@ import {
 import { fetchLive } from '@/lib/live/fetchLive';
 import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
 import { addLawyerReviewAction } from '@/app/actions/reviewActions';
+import { recordMeetingJoinAction } from '@/app/actions/consultationExtrasActions';
+import { usePeopleAvatars } from '@/components/account/avatarStore';
 import { ReportAccountModal } from '@/components/shared/ReportAccountModal';
 import { ConsultationRatingDialog } from '@/components/client/ConsultationRatingDialog';
 import {
@@ -562,48 +563,8 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
   }, [activeMessages, activeExtras]);
 
   // ─── Profile photos of the people you're talking to (thread id = their user id) ───
-  // Read straight from Supabase like Find a Lawyer does; anyone without a readable photo shows initials.
-  const [photos, setPhotos] = useState<Record<string, string>>({});
-  const threadIdsKey = threads
-    .map((t) => t.id)
-    .sort()
-    .join(',');
-  useEffect(() => {
-    if (!threadIdsKey) return;
-    const ids = threadIdsKey.split(',');
-    const supabase = createClient();
-    let cancelled = false;
-    const apply = (rows: Array<{ user_id: string; url: string | null }>) => {
-      if (cancelled) return;
-      const next: Record<string, string> = {};
-      for (const r of rows) if (r.user_id && r.url) next[r.user_id] = r.url;
-      setPhotos(next);
-    };
-    if (isLawyer) {
-      supabase
-        .from('profiles')
-        .select('user_id, avatar_url')
-        .in('user_id', ids)
-        // avatar_url exists in the live schema but not in the generated types.
-        .then(({ data }) =>
-          apply(
-            ((data ?? []) as unknown as Array<{ user_id: string; avatar_url: string | null }>).map((r) => ({
-              user_id: r.user_id,
-              url: r.avatar_url,
-            }))
-          )
-        );
-    } else {
-      supabase
-        .from('lawyer_profiles')
-        .select('user_id, photo_url')
-        .in('user_id', ids)
-        .then(({ data }) => apply((data ?? []).map((r) => ({ user_id: r.user_id, url: r.photo_url }))));
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [threadIdsKey, isLawyer]);
+  // Shared with the rest of the portal and re-read live when someone changes their photo.
+  const photos = usePeopleAvatars(threads.map((t) => t.id));
   const activePhoto = activeThread ? photos[activeThread.id] : undefined;
 
   const query = search.trim().toLowerCase();
@@ -1395,7 +1356,11 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
           variant="primary"
           size="sm"
           icon={meeting.method === 'audio' ? <PhoneIcon className="w-3.5 h-3.5" /> : <VideoIcon className="w-3.5 h-3.5" />}
-          onClick={() => window.open(meetingUrl, '_blank', 'noopener,noreferrer')}
+          onClick={() => {
+            window.open(meetingUrl, '_blank', 'noopener,noreferrer');
+            // Counts toward attendance (missed consultations); the banner only shows near the start.
+            if (meeting?.consultationId) void recordMeetingJoinAction(meeting.consultationId).catch(() => undefined);
+          }}
           className="shrink-0 self-start sm:self-center px-5"
         >
           Join Meeting

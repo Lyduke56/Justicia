@@ -1,7 +1,9 @@
 import React from 'react';
 import { redirect } from 'next/navigation';
 import { headers, cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { readAvatarUrl } from '@/lib/account/avatar';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { LawyerShell } from '@/components/lawyer/LawyerShell';
 import { LiveProvider } from '@/components/live/LiveProvider';
 import { liveTopicFor } from '@/lib/realtime/live';
@@ -120,6 +122,16 @@ export default async function LawyerLayout({
 
 
 
+  // Profile photo for the top bar and account menu (the icon shows without one).
+  let avatarUrl: string | null = null;
+  if (user) {
+    try {
+      avatarUrl = await readAvatarUrl((await createServiceClient()) as unknown as SupabaseClient, user.id);
+    } catch {
+      avatarUrl = null;
+    }
+  }
+
   return (
     <LiveProvider topic={user ? liveTopicFor(user.id) : null}>
       <LawyerShell
@@ -127,6 +139,7 @@ export default async function LawyerLayout({
           id: user?.id || 'demo-lawyer-santos',
           email: user?.email || 'atty.santos@justicia.ph',
           fullName,
+          avatarUrl,
           rollNumber,
           ibpChapter,
           isVerified,

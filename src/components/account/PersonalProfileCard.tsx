@@ -4,12 +4,10 @@ import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserCircleIcon } from '@/components/client/ClientIcons';
 import { updatePersonalAccountAction, type PersonalAccount } from '@/app/actions/accountActions';
-import {
-  removeProfilePhotoAction,
-  updateProfileExtrasAction,
-  uploadProfilePhotoAction,
-  type ProfileSummary,
-} from '@/app/actions/profileExtrasActions';
+import { updateProfileExtrasAction, type ProfileSummary } from '@/app/actions/profileExtrasActions';
+import { changeProfilePhotoAction, removeMyProfilePhotoAction } from '@/app/actions/profilePhotoActions';
+import { setMyAvatar, useMyAvatar } from './avatarStore';
+import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
 import { ResendVerificationButton } from '@/components/auth/ResendVerificationButton';
 import {
   CONSULTATION_LANGUAGES,
@@ -34,7 +32,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-export function PersonalProfileCard({ account, extras: initialExtras = null }: { account: PersonalAccount; extras?: ProfileExtrasData | null }) {
+export function PersonalProfileCard({ account, extras: initialExtras = null, avatarUrl = null }: { account: PersonalAccount; extras?: ProfileExtrasData | null; avatarUrl?: string | null }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -43,6 +41,8 @@ export function PersonalProfileCard({ account, extras: initialExtras = null }: {
   const [extras, setExtras] = useState<ProfileExtras | null>(initialExtras?.extras ?? null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
+  // One photo per person, shared with the top bar, Messages and consultation cards.
+  const photo = useMyAvatar(avatarUrl ?? initialExtras?.extras.avatarUrl ?? null);
   const role = account.role[0].toUpperCase() + account.role.slice(1);
   const showExtras = !!initialExtras && !!extras;
   const completeness = showExtras ? profileCompleteness({ fullName: account.fullName, phone: account.phone, emailVerified: account.emailVerified, extras: extras! }) : null;
@@ -54,8 +54,9 @@ export function PersonalProfileCard({ account, extras: initialExtras = null }: {
     try {
       const fd = new FormData();
       fd.set('file', file);
-      const res = await uploadProfilePhotoAction(fd);
+      const res = await changeProfilePhotoAction(fd);
       if (!res.success) { setError(res.error); return; }
+      setMyAvatar(res.avatarUrl);
       setExtras((e) => (e ? { ...e, avatarUrl: res.avatarUrl } : e));
       setMessage('Your photo has been updated.');
       router.refresh();
@@ -70,9 +71,11 @@ export function PersonalProfileCard({ account, extras: initialExtras = null }: {
     setPhotoBusy(true);
     setError(''); setMessage('');
     try {
-      const res = await removeProfilePhotoAction();
+      const res = await removeMyProfilePhotoAction();
       if (!res.success) { setError(res.error); return; }
+      setMyAvatar(null);
       setExtras((e) => (e ? { ...e, avatarUrl: null } : e));
+      setMessage('Your photo has been removed.');
       router.refresh();
     } finally { setPhotoBusy(false); }
   };
@@ -80,10 +83,7 @@ export function PersonalProfileCard({ account, extras: initialExtras = null }: {
   return <div className="rounded-3xl p-8 bg-[#EFE5D8] shadow-[6px_6px_16px_rgba(0,0,0,0.06),-6px_-6px_16px_rgba(255,255,255,0.85)] border border-[#E8DCCB]/60 space-y-6">
     <div className="flex items-center gap-5">
       <div className="w-16 h-16 shrink-0 rounded-full border-2 border-[#5C4535]/80 flex items-center justify-center text-[#5C4535] bg-[#EAE0D2] overflow-hidden">
-        {extras?.avatarUrl
-          // eslint-disable-next-line @next/next/no-img-element -- public avatar from Supabase Storage
-          ? <img src={extras.avatarUrl} alt="" className="w-full h-full object-cover" />
-          : <UserCircleIcon className="w-10 h-10" />}
+        <ProfilePhoto src={photo} className="w-full h-full" fallback={<UserCircleIcon className="w-10 h-10" />} />
       </div>
       <div className="min-w-0">
         <h2 className="font-cormorant font-bold text-xl text-[#34150F] break-words">{account.fullName}</h2>
@@ -96,15 +96,13 @@ export function PersonalProfileCard({ account, extras: initialExtras = null }: {
             <ResendVerificationButton className="text-[11px] text-[#946525] underline disabled:opacity-60" messageClassName="text-[11px] text-[#7D6855]" />
           </div>
         )}
-        {showExtras && (
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
-            <input ref={photoInput} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" id="profile-photo" disabled={photoBusy} onChange={(e) => void uploadPhoto(e.target.files?.[0])} />
-            <label htmlFor="profile-photo" className={`text-[#946525] underline cursor-pointer ${photoBusy ? 'opacity-60 pointer-events-none' : ''}`}>
-              {photoBusy ? 'Uploading…' : extras?.avatarUrl ? 'Change photo' : 'Add a photo'}
-            </label>
-            {extras?.avatarUrl && <button type="button" disabled={photoBusy} onClick={() => void removePhoto()} className="text-[#7D6855] hover:text-red-700 disabled:opacity-60">Remove photo</button>}
-          </div>
-        )}
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
+          <input ref={photoInput} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" id="profile-photo" disabled={photoBusy} onChange={(e) => void uploadPhoto(e.target.files?.[0])} />
+          <label htmlFor="profile-photo" className={`text-[#946525] underline cursor-pointer ${photoBusy ? 'opacity-60 pointer-events-none' : ''}`}>
+            {photoBusy ? 'Uploading…' : photo ? 'Change photo' : 'Add a photo'}
+          </label>
+          {photo && <button type="button" disabled={photoBusy} onClick={() => void removePhoto()} className="text-[#7D6855] hover:text-red-700 disabled:opacity-60">Remove photo</button>}
+        </div>
       </div>
     </div>
     {editing ? <form onSubmit={(event) => {
@@ -178,7 +176,9 @@ export function PersonalProfileCard({ account, extras: initialExtras = null }: {
         <span className="font-medium text-[#34150F] mt-1 block">{formatDate(initialExtras.summary.memberSince)}</span>
         <span className="text-[#7D6855] mt-1 block">
           {initialExtras.summary.consultationsCompleted} consultation{initialExtras.summary.consultationsCompleted === 1 ? '' : 's'} completed
-          {' · '}{initialExtras.summary.lawyersConsulted} lawyer{initialExtras.summary.lawyersConsulted === 1 ? '' : 's'} consulted
+          {' · '}{account.role === 'lawyer'
+            ? `${initialExtras.summary.lawyersConsulted} client${initialExtras.summary.lawyersConsulted === 1 ? '' : 's'} served`
+            : `${initialExtras.summary.lawyersConsulted} lawyer${initialExtras.summary.lawyersConsulted === 1 ? '' : 's'} consulted`}
           {initialExtras.summary.upcomingConsultations > 0 && ` · ${initialExtras.summary.upcomingConsultations} upcoming`}
         </span>
       </div>

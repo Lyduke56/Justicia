@@ -1,7 +1,7 @@
 'use client';
 
 import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
-import React, { useState, useTransition } from 'react';
+import React, { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -22,15 +22,62 @@ function EyeIcon({ open }: { open: boolean }) {
   );
 }
 
+type LinkState = { status: 'checking' } | { status: 'ready'; email: string } | { status: 'invalid'; reason: string };
+
+/**
+ * Signs this browser in with the recovery session carried by the reset link, whatever its form:
+ *  - #access_token=…&refresh_token=…&type=recovery (links sent by forgotPasswordAction now;
+ *    they work in any browser or device),
+ *  - ?token_hash=…&type=recovery (custom email templates),
+ *  - ?code=… (older links; only works in the browser that asked for the reset).
+ * The link's account replaces any account already signed in here, so the right password changes.
+ */
+async function sessionFromResetLink(): Promise<LinkState> {
+  const supabase = createClient();
+  const url = new URL(window.location.href);
+  const hash = new URLSearchParams(url.hash.replace(/^#/, ''));
+  const linkError = hash.get('error_description') || url.searchParams.get('error_description');
+  if (linkError) return { status: 'invalid', reason: linkError.replace(/\+/g, ' ') };
+
+  const accessToken = hash.get('access_token');
+  const refreshToken = hash.get('refresh_token');
+  const tokenHash = url.searchParams.get('token_hash');
+  const code = url.searchParams.get('code');
+  let failure: string | null = null;
+
+  if (accessToken && refreshToken) {
+    const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+    if (error) failure = error.message;
+  } else if (tokenHash) {
+    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' });
+    if (error) failure = error.message;
+  } else if (code) {
+    // The browser client may already have exchanged it while starting up.
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) failure = 'This link can only be used in the browser where you asked for the reset.';
+    }
+  }
+  // Remove the one-time tokens from the address bar.
+  if (accessToken || tokenHash || code) window.history.replaceState(null, '', url.pathname);
+
+  const { data, error } = await supabase.auth.getUser();
+  if (failure || error || !data.user) {
+    return { status: 'invalid', reason: failure ?? 'This password reset link is invalid or has expired.' };
+  }
+  return { status: 'ready', email: data.user.email ?? '' };
+}
+
 /**
  * /auth/reset-password — Set a new password after clicking the reset email link.
  *
- * The user arrives here after /auth/callback exchanges the recovery code.
- * At this point they already have an active session with PASSWORD_RECOVERY type.
- * We call supabase.auth.updateUser({ password }) to set the new password.
+ * The link signs this browser in with a short-lived recovery session (sessionFromResetLink);
+ * supabase.auth.updateUser({ password }) then sets the new password for that account.
  */
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const [link, setLink] = useState<LinkState>({ status: 'checking' });
   const [isPending, startTransition] = useTransition();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -67,18 +114,44 @@ export default function ResetPasswordPage() {
 
     startTransition(async () => {
       const supabase = createClient();
-      const { error: updateError } = await supabase.auth.updateUser({ password });
+      const { data: current } = await supabase.auth.getUser();
+      if (!current.user) {
+        setLink({ status: 'invalid', reason: 'Your reset session has ended. Please request a new link.' });
+        return;
+      }
+      const { data: updated, error: updateError } = await supabase.auth.updateUser({ password });
 
-      if (updateError) {
-        setError(updateError.message);
+      if (updateError || !updated.user) {
+        const message = updateError?.message ?? 'Your password could not be changed. Please try again.';
+        setError(
+          /different from the old password/i.test(message)
+            ? 'Choose a password you have not used for this account before.'
+            : /session/i.test(message)
+              ? 'Your reset session has ended. Please request a new link.'
+              : message
+        );
         return;
       }
 
+      // A reset usually means the old password may be known: end the other devices' sessions.
+      await supabase.auth.signOut({ scope: 'others' }).catch(() => undefined);
       setSuccess(true);
-      // Redirect to dashboard after 2 seconds
-      setTimeout(() => router.push('/client/dashboard'), 2000);
+      // Then open this account's own portal (the role is the server-written claim).
+      const role = (updated.user.app_metadata as { role?: string } | undefined)?.role;
+      const home = role === 'lawyer' ? '/lawyer/dashboard' : role === 'admin' ? '/admin/dashboard' : '/client/dashboard';
+      setTimeout(() => router.replace(home), 2000);
     });
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    sessionFromResetLink()
+      .then((state) => !cancelled && setLink(state))
+      .catch(() => !cancelled && setLink({ status: 'invalid', reason: 'This password reset link is invalid or has expired.' }));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 py-12 bg-[#0c0805]">
@@ -120,10 +193,36 @@ export default function ResetPasswordPage() {
                 </svg>
               </div>
               <p className="font-cinzel text-sm font-bold text-emerald-300 tracking-wide">Password Updated!</p>
-              <p className="text-[12px] text-[#8c7a6a]">Redirecting you to your dashboard…</p>
+              <p className="text-[12px] text-[#8c7a6a]">Use your new password the next time you sign in. Redirecting you to your dashboard…</p>
+            </div>
+          ) : link.status === 'checking' ? (
+            <div className="flex items-center justify-center gap-2 py-6 text-[12px] text-[#8c7a6a]" role="status" aria-busy="true">
+              <svg className="w-3.5 h-3.5 animate-spin text-[#c59341]" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3" />
+                <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+              Checking your reset link…
+            </div>
+          ) : link.status === 'invalid' ? (
+            <div className="text-center space-y-4">
+              <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm" role="alert">
+                {link.reason}
+              </div>
+              <p className="text-[12px] text-[#8c7a6a]">Reset links work once and expire after an hour. Request a new one and open the newest email.</p>
+              <Link
+                href="/forgot-password"
+                className="inline-block w-full font-cinzel text-xs font-bold tracking-[0.2em] uppercase bg-[#c59341] hover:bg-[#d6a54f] text-[#0c0805] py-3 rounded-lg transition-all duration-200 shadow-lg shadow-[#c59341]/20"
+              >
+                Request a new link
+              </Link>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+              {link.email && (
+                <p className="text-[12px] text-[#8c7a6a] text-center">
+                  Resetting the password for <span className="text-[#ded7cb] font-medium">{link.email}</span>
+                </p>
+              )}
               {/* Error */}
               {error && (
                 <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2" role="alert">
