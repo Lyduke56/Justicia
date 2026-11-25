@@ -1,72 +1,199 @@
 'use client';
 
-import { refreshAdminTabs } from '@/lib/live/adminRefresh';
-
 import { useMemo, useState } from 'react';
-import { getAdminUsersData, updateUserRoleAction, sendUserPasswordResetAction } from '@/app/actions/adminData';
+import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
+import { refreshAdminTabs } from '@/lib/live/adminRefresh';
+import { getAdminUsersData } from '@/app/actions/adminData';
 import type { AdminUserAccount } from '@/types/admin';
-import { UserGroupIcon } from '@/components/admin/AdminIcons';
+import { ChevronRightIcon, NeuButton } from '@/components/shared/neu';
+import { DRAW, EMBOSS, PAGE } from '@/components/lawyer/motion';
+import { stamp } from '@/components/admin/overview/activity';
+import { QueueToolbar } from '@/components/admin/verification/QueueToolbar';
+import { PAGE_FRAME, ROW_HEIGHT, TableBand, TableEmpty, TablePager, TableRows, pageOf, rowClass, useEntrance } from '@/components/admin/table/kit';
+import { ROLE_META, USER_SORTS, USER_TABS, shortId, visibleUsers, type UserSort, type UserTab } from '@/components/admin/users/model';
+import { UserAccountModal } from '@/components/admin/users/UserAccountModal';
 
-type RoleFilter = 'all' | AdminUserAccount['role'];
-const cardClass = 'admin-surface';
+/**
+ * User Accounts, in the same design as the Lawyer Directory: the Consultations-style toolbar
+ * (role tabs, search, sort), a carved divider, then a structured table of accounts. A row opens
+ * the account in the shared modal (role, password reset, lawyer dossier).
+ */
 
-export function AdminUsersView({ initialUsers = [], initialRole = 'all', initialSelectedId = null }: { initialUsers?: AdminUserAccount[]; initialRole?: RoleFilter; initialSelectedId?: string | null }) {
+/*
+ * Columns, shared by the header band and the rows:
+ *   narrow:  Account · Role
+ *   40rem:   + Joined
+ *   56rem:   + Account ID
+ */
+const COLS = [
+  'grid-cols-[minmax(0,1fr)_auto_14px]',
+  '@[40rem]:grid-cols-[minmax(0,1fr)_120px_150px_14px]',
+  '@[56rem]:grid-cols-[minmax(0,1fr)_120px_150px_110px_14px]',
+].join(' ');
+const JOINED = 'hidden @[40rem]:block';
+const ACCOUNT_ID = 'hidden @[56rem]:block';
+
+type RoleFilter = UserTab;
+
+export function AdminUsersView({
+  initialUsers = [],
+  initialRole = 'all',
+  initialSelectedId = null,
+}: {
+  initialUsers?: AdminUserAccount[];
+  initialRole?: RoleFilter;
+  initialSelectedId?: string | null;
+}) {
+  const reduceMotion = useReducedMotion();
+  const { entranceKey, rowsAt } = useEntrance();
+
   const [users, setUsers] = useState(initialUsers);
   const [previousData, setPreviousData] = useState(initialUsers);
   if (previousData !== initialUsers) {
     setPreviousData(initialUsers);
     setUsers(initialUsers);
   }
-  const [roleFilter, setRoleFilter] = useState<RoleFilter>(initialRole);
+
+  const [tab, setTab] = useState<UserTab>(initialRole);
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<UserSort>('newest');
+  const [pageStart, setPageStart] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
-  const [nextRole, setNextRole] = useState<AdminUserAccount['role'] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const selected = users.find((user) => user.id === selectedId);
+  const [now] = useState(() => Date.now());
+  const selected = users.find((u) => u.id === selectedId) ?? null;
 
-  const filtered = useMemo(() => users.filter((user) => {
-    const term = query.trim().toLowerCase();
-    return (roleFilter === 'all' || user.role === roleFilter) && (!term || [user.fullName, user.email].some((value) => value.toLowerCase().includes(term)));
-  }), [users, roleFilter, query]);
-
-  const refresh = async () => setUsers(await getAdminUsersData());
-
-  const changeRole = async () => {
-    if (!selected || !nextRole || selected.role === nextRole) return;
-    if (!window.confirm(`Change ${selected.fullName}'s role from ${selected.role} to ${nextRole}?`)) return;
-    setBusy(true);
-    try {
-      const result = await updateUserRoleAction(selected.id, nextRole);
-      if (result.error) setMessage(result.error);
-      else { await refresh(); refreshAdminTabs(); setMessage('Role updated.'); setNextRole(null); }
-    } catch { setMessage('The role update could not be completed. Please refresh and try again.');
-    } finally { setBusy(false); }
+  const counts = useMemo(
+    () => Object.fromEntries(USER_TABS.map((t) => [t.key, t.key === 'all' ? users.length : users.filter((u) => u.role === t.key).length])) as Record<UserTab, number>,
+    [users]
+  );
+  const items = useMemo(() => visibleUsers(users, tab, query, sort), [users, tab, query, sort]);
+  const { start, shown } = pageOf(items, pageStart);
+  const tabMeta = USER_TABS.find((t) => t.key === tab)!;
+  const emptyTitle = query.trim() ? `No accounts match “${query.trim()}”` : tabMeta.empty;
+  const changeTab = (next: UserTab) => {
+    setTab(next);
+    setPageStart(0);
   };
 
-  const sendReset = async () => {
-    if (!selected) return;
-    setBusy(true);
-    try {
-      const result = await sendUserPasswordResetAction(selected.email);
-      setMessage(result.error ?? `Password reset email requested for ${selected.email}.`);
-    } catch { setMessage('The password reset request could not be completed.');
-    } finally { setBusy(false); }
+  const refresh = async () => {
+    setUsers(await getAdminUsersData());
+    refreshAdminTabs();
   };
 
-  return <div className="admin-page">
-    <h1 className="sr-only">User accounts</h1>
-    <div className="admin-filters">{(['all', 'client', 'lawyer', 'admin'] as const).map((role) => <button key={role} type="button" onClick={() => setRoleFilter(role)} aria-pressed={roleFilter === role} className="admin-filter"><span className="text-xs font-semibold capitalize text-[#705C49]">{role === 'all' ? 'All accounts' : `${role}s`}</span><span className="admin-count">{role === 'all' ? users.length : users.filter((user) => user.role === role).length}</span></button>)}</div>
-    <div className="admin-search"><label htmlFor="admin-user-search" className="sr-only">Search accounts</label><input id="admin-user-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name or email" className="admin-field mt-2 w-full max-w-lg px-4 py-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-[#946525]" /><p className="mt-2 text-xs text-[#7D6855]">Showing {filtered.length} of {users.length} loaded accounts</p></div>
-    <section className={`${cardClass} overflow-hidden`} aria-label="User accounts"><div className="admin-table-well overflow-x-auto"><table className="admin-table w-full min-w-[600px] text-left text-sm"><thead className="text-xs text-[#5C4535]"><tr><th className="px-5 py-4 font-semibold">Account</th><th className="px-5 py-4 font-semibold">Role</th><th className="px-5 py-4 font-semibold">Joined</th><th className="px-5 py-4 font-semibold"><span className="sr-only">Actions</span></th></tr></thead><tbody>
-      {filtered.map((user) => <tr key={user.id} className="hover:bg-[#F5EDE2]"><td className="px-5 py-4"><span className="block font-semibold">{user.fullName}</span><span className="text-xs text-[#7D6855]">{user.email}</span></td><td className="px-5 py-4"><span className="admin-status admin-status-neutral capitalize">{user.role}</span></td><td className="px-5 py-4 text-xs text-[#705C49]">{new Date(user.createdAt).toLocaleDateString('en-PH')}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => { setSelectedId(user.id); setNextRole(user.role); setMessage(null); }} className="admin-control px-2 py-1 text-xs font-semibold text-[#946525] hover:text-[#6B4517] focus-visible:outline-2 focus-visible:outline-[#946525]">Manage</button></td></tr>)}
-      {!filtered.length && <tr><td colSpan={4} className="px-5 py-12 text-center text-sm text-[#7D6855]">{users.length ? 'No accounts match your search.' : 'No accounts are available.'}</td></tr>}
-    </tbody></table></div></section>
-    {selected && <div className="fixed inset-0 z-50 flex justify-end"><button type="button" aria-label="Close account details" onClick={() => setSelectedId(null)} className="absolute inset-0 w-full bg-black/55" /><aside role="dialog" aria-modal="true" aria-labelledby="admin-account-title" className="admin-drawer relative z-10 flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[#D8CAAD] bg-[#EFE5D8] p-6 shadow-2xl sm:p-8"><div className="flex items-start justify-between gap-3 border-b border-[#D8CAAD] pb-5"><div><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E5D7C5] text-[#946525]"><UserGroupIcon className="h-5 w-5" /></span><h2 id="admin-account-title" className="mt-3 font-lora text-lg font-semibold">{selected.fullName}</h2><p className="text-sm text-[#705C49]">{selected.email}</p></div><button type="button" onClick={() => setSelectedId(null)} aria-label="Close account details" className="admin-control p-2 focus-visible:outline-2 focus-visible:outline-[#946525]">×</button></div>
-      {message && <p role="status" className="mt-5 rounded-xl border border-[#D8CAAD] bg-[#F5EDE2] p-3 text-sm">{message}</p>}
-      <dl className="mt-6 space-y-3 text-sm"><div><dt className="text-[#7D6855]">Account ID</dt><dd className="break-all font-medium">{selected.id}</dd></div><div><dt className="text-[#7D6855]">Current role</dt><dd className="font-medium capitalize">{selected.role}</dd></div><div><dt className="text-[#7D6855]">Joined</dt><dd className="font-medium">{new Date(selected.createdAt).toLocaleDateString('en-PH')}</dd></div></dl>
-      <div className="mt-8 space-y-4 border-t border-[#D8CAAD] pt-6"><div><label htmlFor="account-role" className="block text-xs font-semibold text-[#5C4535]">Change role</label><div className="mt-2 flex gap-2"><select id="account-role" value={nextRole ?? selected.role} onChange={(event) => setNextRole(event.target.value as AdminUserAccount['role'])} className="admin-field min-w-0 flex-1 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-[#946525]"><option value="client">Client</option><option value="lawyer">Lawyer</option><option value="admin">Admin</option></select><button type="button" disabled={busy || !nextRole || nextRole === selected.role} onClick={changeRole} className="admin-control admin-primary px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-[#946525] disabled:opacity-50">Update</button></div></div>
-      <button type="button" disabled={busy} onClick={sendReset} className="admin-control w-full px-4 py-3 text-left text-sm font-semibold focus-visible:outline-2 focus-visible:outline-[#946525] disabled:opacity-50">Send password reset email</button></div>
-    </aside></div>}
-  </div>;
+  return (
+    <MotionConfig reducedMotion="user">
+      <motion.div key={entranceKey} variants={PAGE} initial={reduceMotion ? false : 'hidden'} animate="show" className={`${PAGE_FRAME} admin-users`}>
+        <h1 className="sr-only">User accounts</h1>
+
+        <motion.section variants={EMBOSS} aria-label="Filter accounts" className="rounded-[24px] bg-[#E5D8CB] p-4 sm:p-5">
+          <QueueToolbar
+            tabs={USER_TABS}
+            tab={tab}
+            counts={counts}
+            onTab={changeTab}
+            query={query}
+            onQuery={(q) => {
+              setQuery(q);
+              setPageStart(0);
+            }}
+            searchLabel="Search name, email or account ID"
+            sorts={USER_SORTS}
+            sort={sort}
+            onSort={(next) => {
+              setSort(next);
+              setPageStart(0);
+            }}
+            sortLabel="Sort accounts"
+            tabsLabel="Account role"
+            idPrefix="users"
+          />
+        </motion.section>
+
+        <motion.div variants={DRAW} className="lawyer-dash-groove mx-auto my-3 w-[78%] shrink-0" aria-hidden />
+
+        <motion.section variants={EMBOSS} aria-label={tabMeta.heading} className="@container rounded-[24px] bg-[#E5D8CB] p-3 sm:p-4">
+          {items.length ? (
+            <>
+              <TableBand cols={COLS}>
+                <span>Account</span>
+                <span>Role</span>
+                <span className={JOINED}>Joined</span>
+                <span className={ACCOUNT_ID}>Account ID</span>
+                <span />
+              </TableBand>
+              <div className="mt-1.5">
+                <TableRows
+                  key={`${tab}|${sort}|${start}|${entranceKey}`}
+                  label="Accounts"
+                  items={shown}
+                  itemKey={(u) => u.id}
+                  rowsAt={rowsAt}
+                  render={(user) => {
+                    const role = ROLE_META[user.role];
+                    const joined = stamp(user.createdAt, now);
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(user.id)}
+                        aria-label={`${user.fullName || 'Unnamed account'}, ${role.label}. Manage account`}
+                        className={rowClass(COLS)}
+                        style={{ height: ROW_HEIGHT }}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-lora text-[14px] font-semibold text-[#341512]">{user.fullName || 'Unnamed account'}</span>
+                          <span className="block truncate font-inter text-[11px] text-[#7D6855]">{user.email}</span>
+                        </span>
+                        <span>
+                          <span className={`admin-pill ${role.pill}`}>{role.label}</span>
+                        </span>
+                        <span className={`${JOINED} font-inter text-[12px] tabular-nums text-[#3E2A1E]`}>{joined.date}</span>
+                        <span className={`${ACCOUNT_ID} truncate font-inter text-[11.5px] tabular-nums tracking-[0.04em] text-[#7D6855]`} title={user.id}>
+                          #{shortId(user.id)}
+                        </span>
+                        <ChevronRightIcon className="admin-overview-go h-3.5 w-3.5 text-[#B07A34]" />
+                      </button>
+                    );
+                  }}
+                />
+              </div>
+              <TablePager start={start} shownCount={shown.length} total={items.length} noun="accounts" onPage={setPageStart} />
+            </>
+          ) : (
+            <TableEmpty
+              emptyKey={`empty-${tab}-${query}`}
+              icon={
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="9" cy="8" r="3.5" />
+                  <path d="M3 20a6 6 0 0 1 12 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6 6 0 0 1 3 5.5" />
+                </svg>
+              }
+              title={emptyTitle}
+              hint={query.trim() ? 'Check the spelling, or search in All Accounts.' : tabMeta.hint}
+              actions={
+                <>
+                  {query.trim() && (
+                    <NeuButton size="sm" onClick={() => setQuery('')}>
+                      Clear search
+                    </NeuButton>
+                  )}
+                  {tab !== 'all' && (
+                    <NeuButton size="sm" variant="primary" onClick={() => changeTab('all')}>
+                      Show all accounts
+                    </NeuButton>
+                  )}
+                </>
+              }
+            />
+          )}
+          <p className="sr-only" aria-live="polite">
+            {items.length ? `${tabMeta.heading}: ${items.length} accounts, showing ${start + 1} to ${start + shown.length}` : emptyTitle}
+          </p>
+        </motion.section>
+      </motion.div>
+
+      <AnimatePresence>
+        {selected && <UserAccountModal key={selected.id} user={selected} onClose={() => setSelectedId(null)} onRoleChanged={refresh} />}
+      </AnimatePresence>
+    </MotionConfig>
+  );
 }

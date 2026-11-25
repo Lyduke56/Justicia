@@ -15,22 +15,23 @@ import { EASE_OUT } from '@/components/shared/neu/motion';
 
 /**
  * Client "Account Settings" page in the neumorphic parchment style used by the other client
- * screens (Dashboard, Consultations, Messages, Documents). Lawyer and admin settings keep the
- * shared AccountSettings component; this one only renders for client accounts.
+ * screens (Dashboard, Consultations, Messages, Documents). Lawyer settings keep the shared
+ * AccountSettings component; this one only renders for client accounts. Its building blocks
+ * (section card, setting row, switch, password field) are exported for the admin account pages.
  */
 
-const PAGE: Variants = {
+export const PAGE: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.09, delayChildren: 0.04 } },
 };
-const RISE_IN: Variants = {
+export const RISE_IN: Variants = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE_OUT } },
 };
 
 // ─── Small building blocks ────────────────────────────────────────────────────
 
-const KeyIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
+export const KeyIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <circle cx="7.5" cy="15.5" r="4.5" />
     <path d="M10.7 12.3 20 3M16 7l3 3M14 9l2 2" />
@@ -54,7 +55,7 @@ const EyeIcon = ({ off = false }: { off?: boolean }) => (
 );
 
 /** Pressed-in track with a raised knob; the track fills caramel when on. */
-function NeuSwitch({
+export function NeuSwitch({
   checked,
   disabled,
   onChange,
@@ -97,7 +98,7 @@ function NeuSwitch({
 }
 
 /** Raised section card with an icon bubble, title, subtitle and an optional status slot. */
-function SectionCard({
+export function SectionCard({
   icon,
   title,
   subtitle,
@@ -135,7 +136,7 @@ function SectionCard({
   );
 }
 
-function ComingSoonPill() {
+export function ComingSoonPill() {
   return (
     <span className="inline-flex items-center h-5 px-2 rounded-full bg-[#D9C9B8] font-inter text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#7D6855] align-middle">
       Coming soon
@@ -143,7 +144,7 @@ function ComingSoonPill() {
   );
 }
 
-function SettingRow({
+export function SettingRow({
   id,
   title,
   description,
@@ -171,7 +172,7 @@ function SettingRow({
   );
 }
 
-function PasswordField({
+export function PasswordField({
   name,
   label,
   autoComplete,
@@ -220,7 +221,7 @@ function PasswordField({
   );
 }
 
-function Hint({ ok, children }: { ok: boolean; children: React.ReactNode }) {
+export function Hint({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
     <span className={`inline-flex items-center gap-1.5 font-inter text-[11px] transition-colors ${ok ? 'text-[#1F7A3A]' : 'text-[#7D6855]'}`}>
       <span
@@ -236,7 +237,7 @@ function Hint({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   );
 }
 
-function initialsOf(name: string) {
+export function initialsOf(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
   return ((parts[0][0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] ?? '' : '')).toUpperCase();

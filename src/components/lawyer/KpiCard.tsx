@@ -105,6 +105,7 @@ export function KpiCard({
   onClick,
   actionLabel,
   valueTitle,
+  labelClassName = 'font-lora text-[15.5px] font-medium text-[#341512]',
 }: {
   label: React.ReactNode;
   /** null shows a skeleton. */
@@ -115,6 +116,8 @@ export function KpiCard({
   actionLabel: string;
   /** Exact figure shown on hover (e.g. the full peso amount). */
   valueTitle?: string;
+  /** Typography of the label (the admin Overview uses a formal small-caps style). */
+  labelClassName?: string;
 }) {
   return (
     <motion.button
@@ -126,7 +129,7 @@ export function KpiCard({
       className="lawyer-dash-kpi group flex h-full flex-col rounded-[18px] bg-[#E5D8CB] px-4 pb-5 pt-4 text-left sm:px-5"
     >
       <motion.span variants={RISE} className="flex items-center justify-between gap-2">
-        <span className="font-lora text-[15.5px] font-medium text-[#341512]">{label}</span>
+        <span className={labelClassName}>{label}</span>
         <span className="lawyer-dash-kpi-arrow flex items-center gap-1 font-inter text-[10px] font-semibold uppercase tracking-wider text-[#B07A34]" aria-hidden>
           {actionLabel.split(' ')[0]}
           <ChevronRightIcon className="h-3 w-3" />
