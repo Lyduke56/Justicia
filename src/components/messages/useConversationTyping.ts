@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { getConversationChannelAction } from '@/app/actions/messageFeatureActions';
 
 /** Topics never change for a conversation, so ask the server once per thread. */
-const topicCache = new Map<string, string>();
+const topicCache = new Map<string, { topic: string; hideTyping: boolean }>();
 
 const SEND_EVERY_MS = 2500;
 const IDLE_STOP_MS = 4000;
@@ -20,6 +20,8 @@ const REMOTE_EXPIRE_MS = 6000;
 export function useConversationTyping(threadId: string | null) {
   const [typingThread, setTypingThread] = useState<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  /** The user hides their typing status, so they neither send nor see it. */
+  const hiddenRef = useRef(false);
   const lastSentRef = useRef(0);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const expireTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -30,8 +32,10 @@ export function useConversationTyping(threadId: string | null) {
     let channel: RealtimeChannel | null = null;
     let cancelled = false;
 
-    const join = (topic: string) => {
+    const join = ({ topic, hideTyping }: { topic: string; hideTyping: boolean }) => {
       if (cancelled) return;
+      hiddenRef.current = hideTyping;
+      if (hideTyping) return;
       channel = supabase
         .channel(topic, { config: { broadcast: { self: false } } })
         .on('broadcast', { event: 'typing' }, ({ payload }) => {
@@ -56,8 +60,9 @@ export function useConversationTyping(threadId: string | null) {
       getConversationChannelAction(threadId)
         .then((res) => {
           if ('topic' in res) {
-            topicCache.set(threadId, res.topic);
-            join(res.topic);
+            const entry = { topic: res.topic, hideTyping: res.hideTyping };
+            topicCache.set(threadId, entry);
+            join(entry);
           }
         })
         .catch(() => {});
@@ -74,6 +79,7 @@ export function useConversationTyping(threadId: string | null) {
   }, [threadId]);
 
   const send = (typing: boolean) => {
+    if (hiddenRef.current) return;
     void channelRef.current?.send({ type: 'broadcast', event: 'typing', payload: { typing } });
   };
 

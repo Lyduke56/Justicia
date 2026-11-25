@@ -1,5 +1,11 @@
 # Justicia — Supabase Configuration Guide
 
+> **Which SQL is authoritative?** The live database was built by hand and differs from
+> `migrations/` and `complete_setup.sql` (both kept for history and local setups only).
+> Changes to the live project are made with the numbered scripts in
+> [`manual/`](manual/README.md), run in order in the Supabase SQL editor. Each script is safe to
+> run more than once and ends with a check query.
+
 ## Database Migrations
 
 Run the initial schema migration:

@@ -6,6 +6,7 @@ export interface AdminUserAccount {
   email: string;
   role: UserRole;
   createdAt: string;
+  accountStatus?: AdminAccountStatus;
 }
 
 export interface AdminAuditEntry {

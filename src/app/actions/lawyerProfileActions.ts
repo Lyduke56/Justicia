@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { checkAccountAccess } from '@/lib/moderation/accountStatus';
 import type {
   LawyerProfileRow,
   LawyerPracticeAreaDetailRow,
@@ -123,8 +125,11 @@ async function requireLawyer() {
 
   const db = await createServiceClient();
   const { data: account } = await db.from('user_accounts').select('role').eq('id', user.id).maybeSingle();
-  const role = (account?.role as string | undefined) ?? (user.user_metadata?.role as string | undefined);
+  // The database role only: user_metadata can be edited by the user.
+  const role = account?.role as string | undefined;
   if (role !== 'lawyer') return { error: 'Only lawyer accounts can edit a lawyer profile.' } as const;
+  const blocked = await checkAccountAccess(db as unknown as SupabaseClient, user.id);
+  if (blocked) return { error: blocked } as const;
 
   const { data: profile } = await db.from('lawyer_profiles').select('user_id').eq('user_id', user.id).maybeSingle();
   if (!profile) return { error: 'Lawyer profile not found.' } as const;

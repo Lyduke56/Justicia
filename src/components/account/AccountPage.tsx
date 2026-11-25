@@ -1,4 +1,5 @@
 import { getPersonalAccountAction } from '@/app/actions/accountActions';
+import { getProfileExtrasAction } from '@/app/actions/profileExtrasActions';
 import { PersonalProfileCard } from './PersonalProfileCard';
 import { AccountSettings } from './AccountSettings';
 import { ClientAccountSettings } from './ClientAccountSettings';
@@ -10,6 +11,8 @@ export async function AccountPage({ mode }: { mode: 'profile' | 'settings' }) {
   if (mode === 'settings' && result.success && result.account.role === 'client') {
     return <ClientAccountSettings account={result.account} />;
   }
+  // Clients' profile also shows photo, location, contact preferences and their Justicia summary.
+  const extras = mode === 'profile' && result.success && result.account.role === 'client' ? await getProfileExtrasAction() : null;
   return <div className="p-6 sm:p-10 lg:p-12 max-w-4xl mx-auto space-y-8">
     <div>
       <h1 className="font-cormorant text-4xl sm:text-5xl font-medium text-[#34150F]">
@@ -21,7 +24,9 @@ export async function AccountPage({ mode }: { mode: 'profile' | 'settings' }) {
         : 'Preferences, notification settings, and privacy controls.'}</p>
     </div>
     {!result.success ? <p role="alert" className="text-sm text-red-700">{result.error}</p> : <>
-      {(mode === 'profile' || result.account.role === 'lawyer') && <PersonalProfileCard account={result.account} />}
+      {(mode === 'profile' || result.account.role === 'lawyer') && (
+        <PersonalProfileCard account={result.account} extras={extras && extras.success ? extras : null} />
+      )}
       {mode === 'settings' && <AccountSettings account={result.account} />}
     </>}
   </div>;

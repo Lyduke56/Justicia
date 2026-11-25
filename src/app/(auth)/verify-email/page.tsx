@@ -1,6 +1,7 @@
 import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { ResendVerificationButton } from '@/components/auth/ResendVerificationButton';
 
 
 export const metadata: Metadata = { title: 'Verify Email' };
@@ -16,6 +17,14 @@ export default function VerifyEmailPage() {
           <h2 className="font-cinzel text-xl font-bold text-[#ded7cb]">Check your inbox</h2>
           <p className="text-sm text-[#8c7a6a]">
             We sent a verification link to your email address. Click the link to activate your account.
+          </p>
+          <p className="text-xs text-[#8c7a6a]">
+            Didn&apos;t get it? Check your spam folder, or{' '}
+            <ResendVerificationButton
+              label="send a new link"
+              className="font-semibold text-[#c59341] hover:text-[#d6a54f] underline underline-offset-2 transition-colors disabled:opacity-60"
+              messageClassName="block text-xs text-[#8c7a6a] pt-1"
+            />
           </p>
           <div className="pt-2">
             <Link

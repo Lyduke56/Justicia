@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { aiRequestGuard } from '@/lib/security/aiGuard';
 
 interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -194,9 +195,13 @@ async function generateGeminiContentWithRetry(
 
 export async function POST(request: NextRequest) {
   try {
+    // Public endpoint backed by a paid AI API: rate limit per IP (and per user when signed in)
+    // and refuse oversized requests before doing any work.
+    const refused = await aiRequestGuard(request);
+    if (refused) return refused;
     const body = await request.json();
-    const messages: Message[] = body.messages || [];
-    const attachedDocumentText: string = body.documentText || '';
+    const messages: Message[] = Array.isArray(body.messages) ? body.messages.slice(-30) : [];
+    const attachedDocumentText: string = typeof body.documentText === 'string' ? body.documentText.slice(0, 60_000) : '';
 
     if (!messages.length) {
       return NextResponse.json({ error: 'Messages are required' }, { status: 400 });

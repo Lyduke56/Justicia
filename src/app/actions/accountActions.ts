@@ -4,7 +4,13 @@ import { revalidatePath } from 'next/cache';
 import { createClient as createAuthClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { checkAccountAccess, signalUsers } from '@/lib/moderation/accountStatus';
-import { accountPreferences } from '@/lib/account/preferences';
+import {
+  accountPreferences,
+  NOTIFICATION_CATEGORIES,
+  preferencesToMetadata,
+  type MessagingPrivacy,
+  type NotificationChoices,
+} from '@/lib/account/preferences';
 import type { UserRole } from '@/types/database';
 
 export type AccountResult = { success: true; message: string } | { success: false; error: string };
@@ -15,6 +21,8 @@ export interface PersonalAccount {
   role: UserRole;
   emailVerified: boolean;
   consultationNotifications: boolean;
+  notifications: NotificationChoices;
+  messaging: MessagingPrivacy;
 }
 
 async function accountSession() {
@@ -99,12 +107,39 @@ export async function updatePersonalAccountAction(input: { fullName: string; pho
   }
 }
 
-export async function updateAccountPreferencesAction(input: { consultationNotifications: boolean }): Promise<AccountResult> {
+export interface AccountPreferencesInput {
+  /** Older single switch: consultation, payment and reminder alerts together. */
+  consultationNotifications?: boolean;
+  notifications?: Partial<NotificationChoices>;
+  messaging?: Partial<MessagingPrivacy>;
+}
+
+export async function updateAccountPreferencesAction(input: AccountPreferencesInput): Promise<AccountResult> {
   try {
     const { auth, user } = await accountSession();
-    if (typeof input?.consultationNotifications !== 'boolean') return { success: false, error: 'Invalid notification preference.' };
+    const isBool = (v: unknown) => typeof v === 'boolean';
+    const legacy = input?.consultationNotifications;
+    const notifications = input?.notifications && typeof input.notifications === 'object' ? input.notifications : undefined;
+    const messaging = input?.messaging && typeof input.messaging === 'object' ? input.messaging : undefined;
+    if (legacy === undefined && !notifications && !messaging) return { success: false, error: 'Invalid notification preference.' };
+    if (legacy !== undefined && !isBool(legacy)) return { success: false, error: 'Invalid notification preference.' };
+    if (notifications && Object.entries(notifications).some(([k, v]) => !(NOTIFICATION_CATEGORIES as readonly string[]).includes(k) || !isBool(v))) {
+      return { success: false, error: 'Invalid notification preference.' };
+    }
+    if (messaging && Object.entries(messaging).some(([k, v]) => !['hideTyping', 'hideReadReceipts'].includes(k) || !isBool(v))) {
+      return { success: false, error: 'Invalid messaging preference.' };
+    }
+
+    const current = accountPreferences(user.user_metadata);
+    const nextNotifications = { ...current.notifications, ...(notifications ?? {}) };
+    if (isBool(legacy)) {
+      nextNotifications.consultations = legacy as boolean;
+      nextNotifications.payments = legacy as boolean;
+      nextNotifications.reminders = legacy as boolean;
+    }
+    const nextMessaging = { ...current.messaging, ...(messaging ?? {}) };
     const { error } = await auth.auth.updateUser({ data: {
-      justicia_preferences: { consultationNotifications: input.consultationNotifications },
+      justicia_preferences: preferencesToMetadata({ notifications: nextNotifications, messaging: nextMessaging }),
     } });
     if (error) return { success: false, error: 'Unable to save preferences. Please try again.' };
     signalUsers([user.id], ['notifications']);

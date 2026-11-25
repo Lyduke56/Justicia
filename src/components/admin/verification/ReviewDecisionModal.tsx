@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NeuAlert, NeuButton, NeuModal, type NeuTone } from '@/components/shared/neu';
-import type { ReviewDecision } from '@/app/actions/adminLawyerReview';
+import { getAdminVerificationDocumentsAction } from '@/app/actions/lawyerVerificationDocs';
+import { documentGaps, documentLabel, type PostApprovalAction, type ReviewDecision } from '@/lib/lawyer/verification';
 import { formatAttorneyName } from '@/lib/utils/attorneyName';
 import { CAPS, DECISION_GLYPH } from './ApplicationDossier';
 import type { LawyerQueueItem } from './model';
@@ -14,17 +15,26 @@ import { stamp } from '../overview/activity';
  * takes a message the applicant sees on their Application Status page.
  */
 
-const CONFIG: Record<ReviewDecision, { title: string; confirm: string; busy: string; tone: NeuTone; variant: 'dark' | 'primary' | 'danger' }> = {
+export type DossierDecision = ReviewDecision | PostApprovalAction;
+
+const CONFIG: Record<DossierDecision, { title: string; confirm: string; busy: string; tone: NeuTone; variant: 'dark' | 'primary' | 'danger' }> = {
   approved: { title: 'Approve this lawyer?', confirm: 'Approve lawyer', busy: 'Approving…', tone: 'success', variant: 'dark' },
   needs_resubmission: { title: 'Request more information?', confirm: 'Send request', busy: 'Sending…', tone: 'caramel', variant: 'primary' },
   rejected: { title: 'Reject this application?', confirm: 'Reject application', busy: 'Rejecting…', tone: 'danger', variant: 'danger' },
+  reverify: { title: 'Request re-verification?', confirm: 'Send request', busy: 'Sending…', tone: 'caramel', variant: 'primary' },
+  revoke: { title: 'Revoke this verification?', confirm: 'Revoke verification', busy: 'Revoking…', tone: 'danger', variant: 'danger' },
 };
 
-const DEFAULT_NOTE: Record<ReviewDecision, string> = {
+const DEFAULT_NOTE: Record<DossierDecision, string> = {
   approved: '',
   needs_resubmission: '',
   rejected: 'Credentials could not be verified against IBP records.',
+  reverify: '',
+  revoke: '',
 };
+
+/** Post-approval actions need a longer explanation (they are separately audited). */
+const MIN_NOTE: Record<DossierDecision, number> = { approved: 0, needs_resubmission: 5, rejected: 5, reverify: 10, revoke: 10 };
 
 export function ReviewDecisionModal({
   lawyer,
@@ -35,18 +45,54 @@ export function ReviewDecisionModal({
   onConfirm,
 }: {
   lawyer: LawyerQueueItem;
-  decision: ReviewDecision;
+  decision: DossierDecision;
   submitting: boolean;
   error: string | null;
   onCancel: () => void;
-  onConfirm: (note: string) => void;
+  /** `exception` is set when approving with incomplete documents. */
+  onConfirm: (note: string, exception?: string) => void;
 }) {
   const [note, setNote] = useState(DEFAULT_NOTE[decision]);
+  const [exception, setException] = useState('');
   const [now] = useState(() => Date.now());
   const config = CONFIG[decision];
   const needsNote = decision !== 'approved';
-  const noteOk = !needsNote || note.trim().length >= 5;
   const name = formatAttorneyName(lawyer.full_name);
+
+  // Approving checks the required proof documents first; gaps need a recorded exception.
+  const [docCheck, setDocCheck] = useState<{ state: 'idle' | 'loading' | 'ready' | 'failed'; problems: string[] }>({
+    state: decision === 'approved' ? 'loading' : 'idle',
+    problems: [],
+  });
+  useEffect(() => {
+    if (decision !== 'approved') return;
+    let cancelled = false;
+    getAdminVerificationDocumentsAction(lawyer.user_id)
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.success) {
+          setDocCheck({ state: 'failed', problems: [] });
+          return;
+        }
+        const current = res.documents.filter((d) => !d.superseded);
+        const gaps = documentGaps(current.map((d) => ({ docType: d.docType, reviewStatus: d.reviewStatus })));
+        setDocCheck({
+          state: 'ready',
+          problems: [...gaps.missing.map((t) => `${documentLabel(t)} not uploaded`), ...gaps.rejected.map((t) => `${documentLabel(t)} rejected`)],
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setDocCheck({ state: 'failed', problems: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [decision, lawyer.user_id]);
+  const needsException = decision === 'approved' && (docCheck.problems.length > 0 || docCheck.state === 'failed');
+  const noteOk =
+    (!needsNote || note.trim().length >= MIN_NOTE[decision]) &&
+    (!needsException || exception.trim().length >= 10) &&
+    docCheck.state !== 'loading';
 
   return (
     <NeuModal
@@ -66,7 +112,7 @@ export function ReviewDecisionModal({
           <NeuButton onClick={onCancel} disabled={submitting}>
             Cancel
           </NeuButton>
-          <NeuButton variant={config.variant} loading={submitting} disabled={!noteOk} onClick={() => onConfirm(note)}>
+          <NeuButton variant={config.variant} loading={submitting} disabled={!noteOk} onClick={() => onConfirm(note, needsException ? exception : undefined)}>
             {submitting ? config.busy : config.confirm}
           </NeuButton>
         </>
@@ -93,24 +139,50 @@ export function ReviewDecisionModal({
         )}
         {decision === 'needs_resubmission' && <>The application returns to {name} with your message. It stays out of Find a Lawyer until they resubmit and you approve it.</>}
         {decision === 'rejected' && <>{name} will not be listed in Find a Lawyer. They will see your reason on their Application Status page.</>}
+        {decision === 'revoke' && <>{name} loses the verified status and leaves Find a Lawyer and the lawyer portal. They will see your reason on their Application Status page.</>}
+        {decision === 'reverify' && <>{name} is hidden from Find a Lawyer and asked to upload new documents. They return once you approve the resubmission.</>}
       </p>
+
+      {decision === 'approved' && docCheck.state === 'loading' && (
+        <p role="status" className="font-inter text-[12px] text-[#7D6855]">Checking the required documents…</p>
+      )}
+      {needsException && (
+        <label className="flex flex-col gap-2">
+          <span className={`text-[10px] text-[#B07A34] ${CAPS}`}>Exception reason (required)</span>
+          <span className="font-inter text-[12px] leading-relaxed text-[#5C4535]">
+            {docCheck.state === 'failed'
+              ? 'The documents could not be checked.'
+              : `Required documents are incomplete: ${docCheck.problems.join(', ')}.`}{' '}
+            To approve anyway, record why. This is saved in the security audit log.
+          </span>
+          <textarea
+            rows={3}
+            value={exception}
+            onChange={(e) => setException(e.target.value)}
+            disabled={submitting}
+            placeholder="e.g. Credentials confirmed directly with the IBP chapter office on 25 Nov."
+            className="lawyer-field min-h-[84px] w-full resize-y rounded-[12px] px-3.5 py-3 font-inter text-[12.5px] leading-relaxed text-[#341512] placeholder:text-[#9E8E7D] focus:outline-none"
+          />
+          <span className="font-inter text-[11px] text-[#7D6855]">At least 10 characters.</span>
+        </label>
+      )}
 
       {needsNote && (
         <label className="flex flex-col gap-2">
-          <span className={`text-[10px] text-[#B07A34] ${CAPS}`}>{decision === 'rejected' ? 'Reason for rejection' : 'Message to the applicant'}</span>
+          <span className={`text-[10px] text-[#B07A34] ${CAPS}`}>{decision === 'rejected' ? 'Reason for rejection' : decision === 'revoke' ? 'Reason for revoking' : 'Message to the applicant'}</span>
           <textarea
             rows={4}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             disabled={submitting}
             placeholder={
-              decision === 'rejected'
+              decision === 'rejected' || decision === 'revoke'
                 ? 'e.g. The roll number does not match Supreme Court or IBP records.'
                 : 'e.g. Please upload a clear photo of your IBP ID and current chapter clearance.'
             }
             className="lawyer-field min-h-[104px] w-full resize-y rounded-[12px] px-3.5 py-3 font-inter text-[12.5px] leading-relaxed text-[#341512] placeholder:text-[#9E8E7D] focus:outline-none"
           />
-          <span className="font-inter text-[11px] text-[#7D6855]">Shown to the applicant on their Application Status page. At least 5 characters.</span>
+          <span className="font-inter text-[11px] text-[#7D6855]">Shown to the applicant on their Application Status page. At least {MIN_NOTE[decision]} characters.</span>
         </label>
       )}
 

@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server';
 import { LawyerShell } from '@/components/lawyer/LawyerShell';
 import { LiveProvider } from '@/components/live/LiveProvider';
 import { liveTopicFor } from '@/lib/realtime/live';
+import { DEMO_COOKIE, isDemoFor } from '@/lib/auth/demo';
+import { roleFromAppMetadata } from '@/lib/auth/roles';
 
 export const metadata = {
   title: {
@@ -37,20 +39,25 @@ export default async function LawyerLayout({
   }
 
   const cookieStore = await cookies();
-  const demoCookie = cookieStore.get('justicia_demo_session')?.value;
-  const isDemo = demoCookie === 'lawyer' || demoCookie === 'true';
+  // Signed-out sample portal: local development with JUSTICIA_DEMO=true only.
+  const demoCookieOk = isDemoFor(cookieStore.get(DEMO_COOKIE)?.value, 'lawyer');
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // A demo cookie only matters while signed out; a real session always uses real data and checks.
+  const isDemo = !user && demoCookieOk;
+
   if (!user && !isDemo) {
     redirect('/login?redirectTo=/lawyer/dashboard');
   }
 
   // Resolve lawyer profile details
-  let role = (user?.user_metadata?.role as string) || (isDemo ? 'lawyer' : '');
+  // Role: server-written app_metadata, then the user_accounts row below. Never user_metadata,
+  // which users can edit themselves.
+  let role: string = (user ? roleFromAppMetadata(user) : null) ?? (isDemo ? 'lawyer' : '');
   let fullName = (user?.user_metadata?.full_name as string) || (isDemo ? 'Atty. Maria Santos' : 'Attorney');
   let rollNumber = isDemo ? '78910' : '';
   let ibpChapter = isDemo ? 'Quezon City Chapter' : '';

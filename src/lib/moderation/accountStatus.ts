@@ -17,6 +17,7 @@ import { after } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emitLive, type LiveScope } from '@/lib/realtime/live';
 import { sendEmail } from '@/lib/integrations/email';
+import { SUPPORT_EMAIL } from '@/lib/support';
 import type { AccountStatus } from './constants';
 
 type Db = SupabaseClient;
@@ -221,15 +222,17 @@ export async function reinstateExpiredSuspension(db: Db, userId: string): Promis
 
 /** Message shown to a user whose account cannot be used. */
 export function accountBlockedMessage(standing: Pick<AccountStanding, 'status' | 'suspendedUntil'>): string {
+  // Support path for suspended or terminated users (they can't sign in to ask in the app).
+  const support = ` If you think this is a mistake, contact ${SUPPORT_EMAIL}.`;
   if (standing.status === 'terminated') {
-    return 'This account has been permanently terminated for violating the Justicia community guidelines.';
+    return `This account has been permanently terminated for violating the Justicia community guidelines.${support}`;
   }
   if (standing.status === 'pending_deletion') {
     return 'This account is scheduled for deletion and can no longer be used.';
   }
   return standing.suspendedUntil
-    ? `This account is suspended until ${formatManilaDateTime(standing.suspendedUntil)} for violating the Justicia community guidelines.`
-    : 'This account is currently suspended for violating the Justicia community guidelines.';
+    ? `This account is suspended until ${formatManilaDateTime(standing.suspendedUntil)} for violating the Justicia community guidelines.${support}`
+    : `This account is currently suspended for violating the Justicia community guidelines.${support}`;
 }
 
 /**
@@ -404,7 +407,8 @@ async function emailAccount(db: Db, userId: string, subject: string, heading: st
 export interface EnforcementInput {
   userId: string;
   adminId: string;
-  reportId: string;
+  /** The report that led to this decision, or null for a direct admin action. */
+  reportId: string | null;
   /** Shown to the account owner. */
   reason: string;
 }
@@ -446,23 +450,37 @@ export async function suspendAccount(db: Db, input: EnforcementInput & { days: n
     untilMs,
     'The other participant’s account was suspended, so this consultation could not go ahead.'
   );
-  await writeAudit(db, adminId, 'account.suspended', userId, { reportId, days, until, lawyerWasVisible, cancelledConsultations: cancelled });
+  // Open tabs of the suspended user leave right away (Auth already rejects the session).
+  signalUsers([userId], ['session']);
+  await writeAudit(db, adminId, 'account.suspended', userId, {
+    reportId,
+    source: reportId ? 'report' : 'admin',
+    reason,
+    days,
+    until,
+    lawyerWasVisible,
+    cancelledConsultations: cancelled,
+  });
 
+  const opening = reportId
+    ? `After reviewing a report about your account, our team has suspended it until ${formatManilaDateTime(until)}.`
+    : `The Justicia team has suspended your account until ${formatManilaDateTime(until)}.`;
   await notifyAccount(
     db,
     userId,
     'account_suspended',
     'Your account has been suspended',
-    `After reviewing a report, your account is suspended until ${formatManilaDateTime(until)}. Reason: ${reason}`,
+    `${opening} Reason: ${reason}`,
     { reportId, until }
   );
   await emailAccount(db, userId, 'Your Justicia account has been suspended', 'Account suspended', [
-    `After reviewing a report about your account, our team has suspended it until ${formatManilaDateTime(until)}.`,
+    opening,
     `Reason: ${reason}`,
     cancelled > 0
       ? `${cancelled} consultation(s) scheduled during the suspension were cancelled, and any payments for them will be refunded.`
       : 'You will be able to sign in again automatically when the suspension ends.',
     'Accounts that receive more than three suspensions are permanently terminated.',
+    `If you believe this is a mistake, reply to this email or write to ${SUPPORT_EMAIL}.`,
   ]);
   return { until };
 }
@@ -494,11 +512,74 @@ export async function terminateAccount(db: Db, input: EnforcementInput): Promise
     null,
     'The other participant’s account was closed by Justicia, so this consultation will not take place.'
   );
-  await writeAudit(db, adminId, 'account.terminated', userId, { reportId, previousStatus: previous, cancelledConsultations: cancelled });
+  signalUsers([userId], ['session']);
+  await writeAudit(db, adminId, 'account.terminated', userId, {
+    reportId,
+    source: reportId ? 'report' : 'admin',
+    reason,
+    previousStatus: previous,
+    cancelledConsultations: cancelled,
+  });
 
   await emailAccount(db, userId, 'Your Justicia account has been terminated', 'Account terminated', [
-    'After reviewing a report about your account, our team has permanently terminated it for violating the Justicia community guidelines.',
+    reportId
+      ? 'After reviewing a report about your account, our team has permanently terminated it for violating the Justicia community guidelines.'
+      : 'The Justicia team has permanently terminated your account for violating the Justicia community guidelines.',
     `Reason: ${reason}`,
     'You can no longer sign in. Any pending payments for cancelled consultations will be refunded to the clients concerned.',
   ]);
+}
+
+/**
+ * Ends a suspension early (admin decision). Lifts the Auth ban, sets the account active, restores
+ * a lawyer's listing if it was visible before, and records who did it and why. Idempotent: an
+ * account that is already active is left as it is.
+ */
+export async function reinstateAccount(
+  db: Db,
+  input: { userId: string; adminId: string; reason: string }
+): Promise<{ changed: boolean }> {
+  const { userId, adminId, reason } = input;
+  const status = await readStatus(db, userId);
+  if (status === 'active') return { changed: false };
+  if (status !== 'suspended') throw new Error('Only suspended accounts can be reinstated.');
+
+  const { error: banError } = await db.auth.admin.updateUserById(userId, { ban_duration: 'none' });
+  if (banError) throw new Error(`Could not lift the sign-in block: ${banError.message}`);
+  const { data: updated, error } = await db
+    .from('profiles')
+    .update({ account_status: 'active', updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('account_status', 'suspended')
+    .select('user_id');
+  if (error) throw new Error(`Could not record the reinstatement: ${error.message}`);
+  if (!updated || updated.length === 0) return { changed: false };
+
+  const { data: last } = await db
+    .from('audit_log')
+    .select('details')
+    .eq('action', 'account.suspended')
+    .eq('target_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if ((last?.[0]?.details as { lawyerWasVisible?: boolean } | null)?.lawyerWasVisible === true) {
+    await db
+      .from('lawyer_profiles')
+      .update({ is_visible: true, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('verification_status', 'approved');
+  }
+  await writeAudit(db, adminId, 'account.reinstated', userId, { reason, source: 'admin' });
+  await notifyAccount(
+    db,
+    userId,
+    'account_reinstated',
+    'Your account is active again',
+    'The Justicia team ended your suspension early and full access has been restored. Consultations cancelled during the suspension stay cancelled.'
+  );
+  await emailAccount(db, userId, 'Your Justicia account is active again', 'Account reinstated', [
+    'The Justicia team has ended your suspension and you can sign in again.',
+    'Consultations that were cancelled during the suspension stay cancelled; you can book or accept new ones.',
+  ]);
+  return { changed: true };
 }

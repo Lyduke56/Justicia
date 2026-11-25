@@ -160,7 +160,15 @@ export function toExtras(meta: StoredMessageMeta, userId: string, urls: Map<stri
 }
 
 /** Replies, pins, read receipts and attachments (with signed URLs) for a whole conversation. */
-export async function loadThreadExtras(db: Db, pair: Pair, userId: string): Promise<ThreadExtras> {
+/**
+ * `hideReadReceipts`: the viewer chose not to share "Seen", so they don't see it either.
+ */
+export async function loadThreadExtras(
+  db: Db,
+  pair: Pair,
+  userId: string,
+  options: { hideReadReceipts?: boolean } = {}
+): Promise<ThreadExtras> {
   const { data } = await db
     .from('messages')
     .select('id, citations')
@@ -176,6 +184,9 @@ export async function loadThreadExtras(db: Db, pair: Pair, userId: string): Prom
   const urls = await signDocuments(db, attachmentIds);
 
   const messages: ThreadExtras['messages'] = {};
-  for (const [id, meta] of metas) messages[id] = toExtras(meta, userId, urls);
+  for (const [id, meta] of metas) {
+    const extras = toExtras(meta, userId, urls);
+    messages[id] = options.hideReadReceipts ? { ...extras, seenAt: null } : extras;
+  }
   return { messages };
 }

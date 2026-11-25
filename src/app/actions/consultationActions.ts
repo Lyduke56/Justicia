@@ -8,6 +8,11 @@ import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { checkAccountAccess } from '@/lib/moderation/accountStatus';
 import { accountPreferences } from '@/lib/account/preferences';
+import { ensureConsultationReminders } from '@/lib/consultationReminders';
+import { writeAuditLog } from '@/lib/notifications';
+import { checkRateLimit } from '@/lib/security/rateLimit';
+import { FILE_CONTENT_MISMATCH, fileMatchesExtension } from '@/lib/security/fileType';
+import { contactPreferenceLine } from '@/lib/account/profileExtras';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -78,6 +83,12 @@ export interface BookConsultationInput {
   description: string;
   /** IDs of rows in public.documents owned by the client (from My Documents). */
   documentIds: string[];
+  /**
+   * Idempotency key (a UUID made once per booking attempt in the browser). Submitting the same
+   * booking twice (double click, retry after a timeout) returns the first booking instead of
+   * creating a second one.
+   */
+  requestId?: string;
 }
 
 export type ClientConsultationStatusLabel =
@@ -1092,6 +1103,32 @@ export async function bookConsultationAction(input: BookConsultationInput): Prom
     const session = await requireSession();
     if ('error' in session) return { error: session.error };
     const { db, user, profile } = session;
+    const requestId = typeof input?.requestId === 'string' && UUID_REGEX.test(input.requestId) ? input.requestId.toLowerCase() : null;
+
+    // A repeated submission of the same booking returns the booking that was already made.
+    const findRepeat = async () => {
+      if (!requestId) return null;
+      const { data: repeat } = await db
+        .from('consultations')
+        .select(`${CONSULTATION_COLUMNS}, lawyer_profiles(${LAWYER_SUMMARY_COLUMNS})`)
+        .eq('client_id', user.id)
+        .like('concern_summary', `%"idempotencyKey":"${requestId}"%`)
+        .limit(1)
+        .maybeSingle();
+      if (!repeat) return null;
+      const row = repeat as unknown as ConsultationRow & { lawyer_profiles: LawyerSummaryRow | null };
+      return {
+        success: true as const,
+        consultation: toClientConsultation(row, row.lawyer_profiles, await getPlatformFee(db)),
+        sharedDocumentCount: sharedDocsFromMeta(parseMeta(row.concern_summary)).length,
+        sharingComplete: true,
+      };
+    };
+    const repeated = await findRepeat();
+    if (repeated) return repeated;
+
+    const limited = await checkRateLimit('booking', user.id);
+    if (limited) return { error: limited };
 
     // ── 1. Validate input ──
     const lawyerId = typeof input?.lawyerId === 'string' ? input.lawyerId.trim() : '';
@@ -1221,6 +1258,7 @@ export async function bookConsultationAction(input: BookConsultationInput): Prom
       fee,
       attachedFiles: sharedDocs,
       bookedAt: new Date().toISOString(),
+      ...(requestId ? { idempotencyKey: requestId } : {}),
     };
 
     const { data: inserted, error: insertErr } = await db
@@ -1241,9 +1279,19 @@ export async function bookConsultationAction(input: BookConsultationInput): Prom
 
     if (insertErr || !inserted) {
       if (insertErr?.code === '23505' || insertErr?.code === '23P01') {
+        // The same booking submitted twice at once: the other request created it.
+        const raced = await findRepeat();
+        if (raced) return raced;
+        if (/client_overlap/.test(insertErr.message ?? '')) {
+          return { error: 'You already have another consultation scheduled at this time. Please choose a different slot.' };
+        }
         return {
           error: `The ${timeSlotLabel} slot was just reserved by another client. Please choose another time slot.`,
         };
+      }
+      // Database eligibility rule (supabase/manual/005): the lawyer or client can't book right now.
+      if (insertErr?.code === 'P0001' && insertErr.message) {
+        return { error: insertErr.message };
       }
       console.error('[bookConsultationAction] insert failed:', insertErr);
       return { error: 'We could not save your booking right now. Please try again in a moment.' };
@@ -1504,6 +1552,9 @@ export async function uploadDocumentFileAction(
     const session = await requireSession();
     if ('error' in session) return { error: session.error };
     const { db, user } = session;
+    const uploadLimited = await checkRateLimit('upload', user.id);
+    if (uploadLimited) return { error: uploadLimited };
+    if (!(await fileMatchesExtension(file, ext))) return { error: FILE_CONTENT_MISMATCH };
 
     // Only accept folders the user actually owns.
     const requestedFolderId = String(formData.get('folderId') ?? '');
@@ -1843,6 +1894,8 @@ export interface LawyerConsultation {
     address: string | null;
     email: string;
     phone: string | null;
+    /** How, when and in which language the client prefers to be reached (from their profile). */
+    contactPreference?: string | null;
   };
   subjectCategory: string;
   subjectTitle: string;
@@ -1953,6 +2006,33 @@ function toLawyerConsultation(
 }
 
 /** Session for a signed-in lawyer (must own a lawyer_profiles row). */
+/**
+ * Adds each client's city/province and contact preference (profile fields the client chose to
+ * share) to the lawyer's consultations. Only clients the lawyer has a consultation with are read.
+ * Skipped silently before supabase/manual/007_profile_fields.sql has been run.
+ */
+async function attachClientPreferences(db: Db, items: LawyerConsultation[]): Promise<void> {
+  const ids = [...new Set(items.map((i) => i.clientId).filter(Boolean))];
+  if (ids.length === 0) return;
+  const { data, error } = await db
+    .from('profiles')
+    .select('user_id, city_province, contact_method, contact_time, consultation_language')
+    .in('user_id', ids);
+  if (error) return;
+  const byId = new Map(
+    ((data ?? []) as Array<{ user_id: string; city_province: string | null; contact_method: string | null; contact_time: string | null; consultation_language: string | null }>).map((p) => [p.user_id, p])
+  );
+  for (const item of items) {
+    const p = byId.get(item.clientId);
+    if (!p) continue;
+    const line = [
+      p.city_province,
+      contactPreferenceLine({ contactMethod: p.contact_method as never, contactTime: p.contact_time as never, preferredLanguage: p.consultation_language }),
+    ].filter(Boolean).join('  |  ');
+    item.client.contactPreference = line || null;
+  }
+}
+
 async function requireLawyerSession(): Promise<(Session & { lawyerName: string }) | { error: string }> {
   const session = await requireSession();
   if ('error' in session) return session;
@@ -2000,6 +2080,7 @@ export async function getLawyerConsultationsAction(): Promise<LawyerConsultation
       item: toLawyerConsultation(row, row.client, self as LawyerSelfRow | null, platformFee),
       startMs: scheduleOf(row).startMs,
     }));
+    await attachClientPreferences(db, items.map((i) => i.item));
 
     const rank = ({ item, startMs }: { item: LawyerConsultation; startMs: number }) => {
       if (item.status === 'pending') return 0;
@@ -2371,6 +2452,8 @@ export async function sendDirectMessageAction(
     const session = await requireSession();
     if ('error' in session) return { error: session.error };
     const { db, user, profile } = session;
+    const messageLimited = await checkRateLimit('message_send', user.id);
+    if (messageLimited) return { error: messageLimited };
 
     const pair = await getPairThread(db, threadId, user.id);
     if (!pair) return { error: 'Conversation not found.' };
@@ -2561,7 +2644,7 @@ export async function getThreadContextAction(threadId: string): Promise<ThreadCo
       .filter((x): x is { c: ConsultationRow; w: { start: number; end: number } } => !!x.w && isMeetingWindow(x.w, now))
       .sort((a, b) => a.w.start - b.w.start)[0];
     if (live) {
-      await ensureMeetingNotifications(db, user.id);
+      if (accountPreferences(user.user_metadata).notifications.reminders) await ensureMeetingNotifications(db, user.id);
       const schedule = scheduleOf(live.c);
       const startParts = toManilaParts(live.c.scheduled_start!);
       const endParts = toManilaParts(new Date(live.w.end).toISOString());
@@ -2630,20 +2713,24 @@ export async function getUserNotificationsAction(
     if ('error' in session) return [];
     const { db, user } = session;
 
-    // Surface "consultation starting soon" alerts on the bell (15 minutes before a confirmed meeting).
-    const { consultationNotifications } = accountPreferences(user.user_metadata);
-    if (consultationNotifications) await ensureMeetingNotifications(db, user.id);
+    // Reminders on the bell: 24 hours and 1 hour before, and "starting soon" 15 minutes before a
+    // confirmed meeting. Created lazily here, only when the user wants reminders.
+    const { notifications: choices } = accountPreferences(user.user_metadata);
+    if (choices.reminders) {
+      await ensureConsultationReminders(db, user.id);
+      await ensureMeetingNotifications(db, user.id);
+    }
 
     let notificationQuery = db
       .from('notifications')
       .select('id, type, title, body, created_at, is_read, metadata')
       .eq('user_id', user.id);
-    // Keep history intact, but respect the user's bell preference before pagination.
-    // Security, moderation and direct-message notifications are never filtered out.
-    if (!consultationNotifications) {
-      notificationQuery = notificationQuery.not('type', 'like', 'consultation_%')
-        .not('type', 'like', 'payment_%').neq('type', 'meeting_starting');
-    }
+    // Keep history intact, but respect the user's category choices before pagination.
+    // Account, security, moderation and verification notices are never filtered out.
+    if (!choices.consultations) notificationQuery = notificationQuery.not('type', 'like', 'consultation_%');
+    if (!choices.payments) notificationQuery = notificationQuery.not('type', 'like', 'payment_%');
+    if (!choices.messages) notificationQuery = notificationQuery.neq('type', 'new_message');
+    if (!choices.reminders) notificationQuery = notificationQuery.neq('type', 'meeting_starting').not('type', 'like', 'reminder_%');
     const { data, error } = await notificationQuery
       .order('created_at', { ascending: false })
       .limit(15);
@@ -2718,6 +2805,9 @@ export async function submitPaymentProofAction(
     const session = await requireSession();
     if ('error' in session) return { error: session.error };
     const { db, user, profile } = session;
+    const proofLimited = await checkRateLimit('upload', user.id);
+    if (proofLimited) return { error: proofLimited };
+    if (!(await fileMatchesExtension(file, ext))) return { error: FILE_CONTENT_MISMATCH };
 
     const { data: found } = await db
       .from('consultations')
@@ -2821,6 +2911,14 @@ export async function submitPaymentProofAction(
       `${profile.full_name || 'Your client'} submitted a proof of payment for the consultation on ${when}. Please review and confirm it.`,
       { consultationId, clientId: user.id, documentId: doc.id }
     );
+    // Payment trail (append-only): who submitted which proof for which booking.
+    await writeAuditLog({
+      actorId: user.id,
+      action: 'payment.proof_submitted',
+      targetType: 'consultation',
+      targetId: consultationId,
+      details: { document_id: doc.id, size_bytes: file.size },
+    });
 
     revalidateConsultationPaths();
     signalLive([user.id, consultation.lawyer_id], ['consultations', 'payments', 'documents', 'messages']);
@@ -2921,6 +3019,13 @@ export async function reviewPaymentAction(
     if (!recorded && decision === 'confirm') {
       console.error('[reviewPaymentAction] payment confirmed but ledger write failed; earnings loader will re-sync', consultationId);
     }
+    await writeAuditLog({
+      actorId: user.id,
+      action: decision === 'confirm' ? 'payment.confirmed' : 'payment.rejected',
+      targetType: 'consultation',
+      targetId: consultationId,
+      details: { ledger_recorded: recorded, ...(decision === 'reject' ? { reason } : {}) },
+    });
 
     if (decision === 'confirm') {
       await postSystemMessage(
@@ -3085,6 +3190,16 @@ export async function getDocumentAccessUrlAction(
     if (error || !signed?.signedUrl) {
       console.error('[getDocumentAccessUrlAction]', error?.message);
       return { error: 'This file could not be opened. Please try again.' };
+    }
+    // Someone else's private file was opened through a grant: keep an access record.
+    if (doc.owner_id !== user.id) {
+      await writeAuditLog({
+        actorId: user.id,
+        action: 'document.accessed',
+        targetType: 'document',
+        targetId: documentId,
+        details: { owner_id: doc.owner_id },
+      });
     }
     return { success: true, url: signed.signedUrl, fileName: doc.filename };
   } catch (err) {
@@ -3731,6 +3846,8 @@ export async function requestRescheduleAction(
 
     const target = await loadRescheduleTarget(consultationId);
     if ('error' in target) return { error: target.error };
+    const rescheduleLimited = await checkRateLimit('reschedule', target.user.id);
+    if (rescheduleLimited) return { error: rescheduleLimited };
     const { db, user, consultation, party, meta } = target;
     if (consultation.status !== 'confirmed') return { error: 'Only confirmed appointments can be rescheduled.' };
 

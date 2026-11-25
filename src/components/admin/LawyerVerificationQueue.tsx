@@ -247,12 +247,12 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: { lawyers: 
     resetLimit();
   };
 
-  const confirmReview = (note: string) => {
+  const confirmReview = (note: string, exception?: string) => {
     if (!review) return;
     const { lawyer, decision } = review;
     setReviewError(null);
     startSubmit(async () => {
-      const res = await reviewLawyerApplicationAction(lawyer.user_id, decision, note);
+      const res = await reviewLawyerApplicationAction(lawyer.user_id, decision, note, { exceptionReason: exception });
       if (res.error) {
         setReviewError(res.error);
         return;

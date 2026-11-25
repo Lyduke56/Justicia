@@ -117,6 +117,20 @@ const SEED_LAWYERS = [
   },
 ];
 
+/**
+ * One account per email: refuse to create an auth user when another account (any role or status,
+ * including a profile row left behind by a deleted auth user) already holds the address.
+ */
+async function emailHeldElsewhere(email) {
+  const pattern = email.trim().toLowerCase().replace(/[\\%_]/g, (c) => '\\' + c);
+  for (const table of ['user_accounts', 'profiles']) {
+    const { data, error } = await supabase.from(table).select('email').ilike('email', pattern).limit(1);
+    if (error) throw new Error(`${table} lookup failed: ${error.message}`);
+    if (data && data.length > 0) return true;
+  }
+  return false;
+}
+
 async function seed() {
   console.log('🌱 Seeding test lawyers...');
 
@@ -126,11 +140,16 @@ async function seed() {
     let authUser = userList?.users?.find(u => u.email === lawyer.email);
 
     if (!authUser) {
+      if (await emailHeldElsewhere(lawyer.email)) {
+        console.warn(`Skipping ${lawyer.email}: the address is already used by another account record.`);
+        continue;
+      }
       const { data: newUser, error: createErr } = await supabase.auth.admin.createUser({
         email: lawyer.email,
         password: 'Password123!',
         email_confirm: true,
-        user_metadata: { full_name: lawyer.fullName, role: 'lawyer' },
+        user_metadata: { full_name: lawyer.fullName },
+        app_metadata: { role: 'lawyer' },
       });
       if (createErr) {
         console.warn(`Could not create auth user for ${lawyer.email}:`, createErr.message);

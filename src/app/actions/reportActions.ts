@@ -15,6 +15,8 @@
  */
 
 import { randomUUID } from 'crypto';
+import { checkRateLimit } from '@/lib/security/rateLimit';
+import { FILE_CONTENT_MISMATCH, fileMatchesExtension } from '@/lib/security/fileType';
 import { revalidatePath } from 'next/cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
@@ -183,6 +185,13 @@ export async function submitAccountReportAction(formData: FormData): Promise<Sub
     db = await getDb();
     const blocked = await checkAccountAccess(db, user.id);
     if (blocked) return { error: blocked };
+    const limited = await checkRateLimit('report', user.id);
+    if (limited) return { error: limited };
+    for (const file of files) {
+      if (!(await fileMatchesExtension(file, fileExtension(file.name)))) {
+        return { error: `“${file.name}”: ${FILE_CONTENT_MISMATCH}` };
+      }
+    }
     if (!(await ensureProfileRow(db, user.id))) {
       return { error: 'We could not load your account profile. Please sign out and sign in again.' };
     }

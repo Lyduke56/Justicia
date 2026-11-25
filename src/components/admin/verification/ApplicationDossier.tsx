@@ -6,7 +6,7 @@ import { motion } from 'motion/react';
 import { ChevronRightIcon } from '@/components/shared/neu';
 import { CARD_ITEM } from '@/components/lawyer/motion';
 import { initials, stamp, waitedFor } from '../overview/activity';
-import type { ReviewDecision } from '@/app/actions/adminLawyerReview';
+import { allowedReviewDecisions, type PostApprovalAction, type ReviewDecision } from '@/lib/lawyer/verification';
 import { peso, statusMeta, type LawyerQueueItem } from './model';
 
 /**
@@ -49,10 +49,12 @@ const Glyph = ({ d }: { d: string }) => (
     <path d={d} />
   </svg>
 );
-export const DECISION_GLYPH: Record<ReviewDecision, string> = {
+export const DECISION_GLYPH: Record<ReviewDecision | PostApprovalAction, string> = {
   approved: 'm5 12.5 4.5 4.5L19 7.5',
   needs_resubmission: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   rejected: 'M6.5 6.5l11 11M17.5 6.5l-11 11',
+  reverify: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
+  revoke: 'M6.5 6.5l11 11M17.5 6.5l-11 11',
 };
 
 export function ApplicationDossier({
@@ -67,6 +69,7 @@ export function ApplicationDossier({
   onDecision: (decision: ReviewDecision) => void;
 }) {
   const status = lawyer.verification_status;
+  const allowed = allowedReviewDecisions(status);
   const submitted = lawyer.submitted_at ? stamp(lawyer.submitted_at, now) : null;
   const reviewed = lawyer.reviewed_at ? stamp(lawyer.reviewed_at, now) : null;
   const waiting = status === 'pending' && lawyer.submitted_at ? waitedFor(lawyer.submitted_at, now) : null;
@@ -199,17 +202,18 @@ export function ApplicationDossier({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
-            {status !== 'rejected' && (
+            {/* Only the decisions valid for this status (approved lawyers are managed from the full dossier). */}
+            {allowed.includes('rejected') && (
               <DecisionButton tone="danger" disabled={busy} onClick={() => onDecision('rejected')} glyph={DECISION_GLYPH.rejected}>
                 Reject
               </DecisionButton>
             )}
-            {status !== 'needs_resubmission' && (
+            {allowed.includes('needs_resubmission') && (
               <DecisionButton tone="plain" disabled={busy} onClick={() => onDecision('needs_resubmission')} glyph={DECISION_GLYPH.needs_resubmission}>
                 Request info
               </DecisionButton>
             )}
-            {status !== 'approved' && (
+            {allowed.includes('approved') && (
               <DecisionButton tone="primary" disabled={busy} onClick={() => onDecision('approved')} glyph={DECISION_GLYPH.approved}>
                 Approve
               </DecisionButton>

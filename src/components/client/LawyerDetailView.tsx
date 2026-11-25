@@ -1415,7 +1415,9 @@ export function LawyerDetailView({
       return;
     }
 
-    // Valid: open the review sheet; the request is only sent from there.
+    // Valid: open the review sheet; the request is only sent from there. One idempotency key per
+    // review, so a double click or a retry after a timeout can't create a second booking.
+    bookingRequestId.current = crypto.randomUUID();
     setConfirmError(null);
     setConfirmDetails({
       dateStr: `${selectedMonthName} ${selectedDay}, ${currentYear}`.toUpperCase(),
@@ -1436,6 +1438,8 @@ export function LawyerDetailView({
     setConfirmPhase('review');
   };
 
+  const bookingRequestId = useRef<string | null>(null);
+
   const handleConfirmBooking = async () => {
     if (submittingBooking) return;
     setConfirmError(null);
@@ -1452,6 +1456,7 @@ export function LawyerDetailView({
           subject,
           description,
           documentIds: attachedFiles.map((f) => f.id),
+          requestId: bookingRequestId.current ?? undefined,
         }),
         new Promise((resolve) => setTimeout(resolve, 1300)),
       ]);

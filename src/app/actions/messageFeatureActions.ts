@@ -8,6 +8,9 @@
 import { randomUUID } from 'crypto';
 import { after } from 'next/server';
 import { emitLive } from '@/lib/realtime/live';
+import { accountPreferences } from '@/lib/account/preferences';
+import { checkRateLimit } from '@/lib/security/rateLimit';
+import { FILE_CONTENT_MISMATCH, fileMatchesExtension } from '@/lib/security/fileType';
 import { sendDirectMessageAction, type ThreadMessage } from '@/app/actions/consultationActions';
 import {
   DOCUMENTS_BUCKET,
@@ -68,13 +71,15 @@ async function grantToRecipient(db: Db, documentIds: string[], granteeId: string
 /** Private Realtime topic for this conversation; both participants broadcast "typing" on it. */
 export async function getConversationChannelAction(
   threadId: string
-): Promise<{ topic: string } | { error: string }> {
+): Promise<{ topic: string; hideTyping: boolean } | { error: string }> {
   const session = await getMessagingSession();
   if ('error' in session) return { error: session.error };
   const pair = await resolvePair(session.db, threadId, session.user.id);
   if (!pair) return { error: 'Conversation not found.' };
   const topic = conversationTopic(session.user.id, pair.otherId);
-  return topic ? { topic } : { error: 'Live updates are not configured.' };
+  // "Hide when I'm typing": this user neither sends nor sees typing signals.
+  const { hideTyping } = accountPreferences(session.user.user_metadata).messaging;
+  return topic ? { topic, hideTyping } : { error: 'Live updates are not configured.' };
 }
 
 // ─── Attachments ─────────────────────────────────────────────────────────────
@@ -102,6 +107,9 @@ export async function uploadMessageAttachmentAction(
     const { db, user } = session;
     const pair = await resolvePair(db, threadId, user.id);
     if (!pair) return { error: 'Conversation not found.' };
+    const limited = await checkRateLimit('upload', user.id);
+    if (limited) return { error: limited };
+    if (!(await fileMatchesExtension(file, fileExt(name)))) return { error: FILE_CONTENT_MISMATCH };
 
     const safeName = name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-120);
     const storagePath = `${user.id}/messages/${pair.otherId}/${randomUUID()}-${safeName}`;
@@ -295,7 +303,9 @@ export async function togglePinMessageAction(
  */
 export async function markThreadSeenAction(
   threadId: string
-): Promise<{ success: true; messageId: string | null; seenAt: string | null } | { success?: false; error: string }> {
+): Promise<
+  { success: true; messageId: string | null; seenAt: string | null; hidden?: boolean } | { success?: false; error: string }
+> {
   try {
     const session = await getMessagingSession();
     if ('error' in session) return { error: session.error };
@@ -313,6 +323,11 @@ export async function markThreadSeenAction(
       .limit(1)
       .maybeSingle();
     if (!latest) return { success: true, messageId: null, seenAt: null };
+
+    // "Hide read receipts": nothing is recorded, so the sender never sees "Seen".
+    if (accountPreferences(session.user.user_metadata).messaging.hideReadReceipts) {
+      return { success: true, messageId: latest.id, seenAt: null, hidden: true };
+    }
 
     const existing = readMeta(latest.citations)?.seenAt;
     if (existing) return { success: true, messageId: latest.id, seenAt: existing };

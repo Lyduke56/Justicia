@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 const ts = require('typescript');
+const { extraModule } = require('./support/extraModules.cjs');
 const { AsyncLocalStorage } = require('node:async_hooks');
 
 const ADMIN = '99999999-9999-4999-8999-000000000001';
@@ -469,6 +470,8 @@ function fixture({ now = '2026-11-21T02:00:00Z' } = {}) {
     if (name === '@/lib/supabase/server') {
       return { createServiceClient: async () => db, createClient: async () => authClient() };
     }
+    const extra = extraModule(name);
+    if (extra) return extra;
     throw new Error(`unexpected import ${name}`);
   }
 
@@ -807,7 +810,14 @@ function reportForm({ threadId = LAWYER, reasonKey = 'harassment', details = 'He
   files.forEach((file) => fd.append('files', file));
   return fd;
 }
-const png = (name = 'shot.png', bytes = 10) => new File([new Uint8Array(bytes)], name, { type: 'image/png' });
+// Real file headers: uploads are checked against their extension by content.
+const PNG_HEADER = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const png = (name = 'shot.png', bytes = 10) => {
+  const data = new Uint8Array(Math.max(bytes, PNG_HEADER.length));
+  data.set(PNG_HEADER);
+  return new File([data], name, { type: 'image/png' });
+};
+const pdf = (name) => new File([new TextEncoder().encode('%PDF-1.4 test')], name, { type: 'application/pdf' });
 
 function withConversation(f) {
   const id = f.seedConsultation({ start: ph('2026-11-25', 14) });
@@ -822,7 +832,7 @@ function withConversation(f) {
 test('client reports a lawyer with files and the conversation', async () => {
   const f = fixture({ now: NOW });
   withConversation(f);
-  const res = await f.as(CLIENT).submitAccountReportAction(reportForm({ files: [png('chat 1.png'), new File([new Uint8Array(5)], 'receipt.pdf', { type: 'application/pdf' })] }));
+  const res = await f.as(CLIENT).submitAccountReportAction(reportForm({ files: [png('chat 1.png'), pdf('receipt.pdf')] }));
   assert.equal(res.success, true, res.error);
   assert.equal(res.targetName, 'Atty. Test Lawyer');
 

@@ -1,25 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { notImplementedResponse } from '@/lib/api/notImplemented';
 
 /**
- * Moderation API Route
+ * Moderation API (reserved).
  *
- * Handles content/user reports submitted by clients and lawyers.
- *
- * TODO: POST — create a report
- *   - Verify auth (any authenticated user can report)
- *   - Validate target_type (user | review | message | consultation)
- *   - Insert into reports table with status = 'open'
- *   - Notify admin via notifications table
- * TODO: PATCH [reportId] — resolve a report (admin only)
- *   - Update status, resolution_notes
- *   - Log to audit_log_entries
+ * Reports are submitted with submitAccountReportAction and decided with moderateReportAction
+ * (src/app/actions/reportActions.ts); admin suspensions use src/app/actions/adminAccountActions.ts.
+ * This route returns 501 instead of a fake success.
  */
+export const dynamic = 'force-dynamic';
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  const body = await request.json();
-  console.log('[/api/moderation] POST stub received:', body);
-  return NextResponse.json({
-    data: null,
-    message: '[STUB] POST /api/moderation — report submitted (stub)',
-  }, { status: 201 });
-}
+const respond = () => notImplementedResponse('Moderation');
+export { respond as GET, respond as POST, respond as PATCH, respond as DELETE };

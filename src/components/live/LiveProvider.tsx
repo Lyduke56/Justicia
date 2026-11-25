@@ -34,6 +34,23 @@ export const useViewActive = () => useContext(ViewActiveContext);
 /** Refresh-on-return threshold: the browser tab must have been hidden at least this long. */
 const STALE_AFTER_HIDDEN_MS = 15_000;
 
+/**
+ * Leaves the portal when this browser's session is no longer valid, e.g. after "Sign out
+ * everywhere" on another device or an account suspension. Supabase Auth rejects the revoked
+ * session, so this only sends the tab to the sign-in page; it never signs anyone out itself.
+ */
+async function leaveIfSignedOut() {
+  try {
+    const { data, error } = await createClient().auth.getUser();
+    if (error?.status === 401 || error?.status === 403 || (!error && !data.user)) {
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload: no signed-in state may survive
+      window.location.assign('/login');
+    }
+  } catch {
+    // Network problems are not a sign-out; the next request will tell.
+  }
+}
+
 export function LiveProvider({ topic, children }: { topic: string | null; children: React.ReactNode }) {
   const listeners = useRef(new Set<Listener>());
   const [connected, setConnected] = useState(false);
@@ -53,6 +70,7 @@ export function LiveProvider({ topic, children }: { topic: string | null; childr
       .channel(topic, { config: { broadcast: { self: false } } })
       .on('broadcast', { event: 'refresh' }, ({ payload }) => {
         const scopes = Array.isArray(payload?.scopes) ? (payload.scopes as LiveScope[]) : '*';
+        if (scopes !== '*' && scopes.includes('session')) void leaveIfSignedOut();
         dispatch(scopes);
       })
       .subscribe((status) => {
@@ -77,7 +95,10 @@ export function LiveProvider({ topic, children }: { topic: string | null; childr
     let hiddenAt = 0;
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') hiddenAt = Date.now();
-      else if (hiddenAt && Date.now() - hiddenAt >= STALE_AFTER_HIDDEN_MS) dispatch('*');
+      else if (hiddenAt && Date.now() - hiddenAt >= STALE_AFTER_HIDDEN_MS) {
+        void leaveIfSignedOut();
+        dispatch('*');
+      }
     };
     const onOnline = () => dispatch('*');
     document.addEventListener('visibilitychange', onVisibility);

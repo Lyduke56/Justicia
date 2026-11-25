@@ -1,17 +1,27 @@
 'use client';
 
-import React, { useEffect, useId, useState, useTransition } from 'react';
+import React, { useId, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react';
 import {
   changeAccountPasswordAction,
-  updateAccountPreferencesAction,
   type PersonalAccount,
 } from '@/app/actions/accountActions';
-import { BellIcon, ShieldCheckIcon } from '@/components/client/ClientIcons';
+import { BellIcon, DocumentTextIcon, MessagesIcon, ShieldCheckIcon } from '@/components/client/ClientIcons';
 import { NeuAlert, NeuButton, EXTRUDE, CheckCircleIcon, InfoIcon, Spinner } from '@/components/shared/neu';
 import { EASE_OUT } from '@/components/shared/neu/motion';
+import { ResendVerificationButton } from '@/components/auth/ResendVerificationButton';
+import { LEGAL_DOCUMENTS } from '@/lib/legal';
+import {
+  NOTIFICATION_ROWS,
+  PRIVACY_ROWS,
+  formatConsentDate,
+  useConsent,
+  useDataExport,
+  useDeleteAccount,
+  usePreferenceToggles,
+  useSignOutEverywhere,
+} from './useAccountControls';
 
 /**
  * Client "Account Settings" page in the neumorphic parchment style used by the other client
@@ -246,41 +256,16 @@ export function initialsOf(name: string) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function ClientAccountSettings({ account }: { account: PersonalAccount }) {
-  const router = useRouter();
 
-  // Notifications (saved immediately; reverted if the save fails)
-  const [notifications, setNotifications] = useState(account.consultationNotifications);
-  const [saving, startSaving] = useTransition();
-  const [preferenceError, setPreferenceError] = useState('');
-  const [savedTick, setSavedTick] = useState(0);
-
-  useEffect(() => {
-    if (!savedTick) return;
-    const t = window.setTimeout(() => setSavedTick(0), 2400);
-    return () => window.clearTimeout(t);
-  }, [savedTick]);
-
-  const toggleNotifications = (next: boolean) => {
-    const previous = notifications;
-    setNotifications(next);
-    setPreferenceError('');
-    setSavedTick(0);
-    startSaving(async () => {
-      try {
-        const result = await updateAccountPreferencesAction({ consultationNotifications: next });
-        if (!result.success) {
-          setNotifications(previous);
-          setPreferenceError(result.error);
-          return;
-        }
-        setSavedTick(Date.now());
-        router.refresh();
-      } catch {
-        setNotifications(previous);
-        setPreferenceError('Unable to save preferences. Please try again.');
-      }
-    });
-  };
+  // Notification categories and messaging privacy (saved immediately; reverted if the save fails)
+  const prefs = usePreferenceToggles(account);
+  const { saving, savedTick } = prefs;
+  const preferenceError = prefs.error;
+  const setPreferenceError = prefs.setError;
+  const signOutAll = useSignOutEverywhere();
+  const consent = useConsent();
+  const dataExport = useDataExport();
+  const deletion = useDeleteAccount();
 
   // Password
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -427,20 +412,23 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
               status={saveStatus}
             >
               <div className="neu-recessed rounded-[18px] divide-y divide-dotted divide-[#B8946E]/50">
-                <SettingRow
-                  id="notif-inapp"
-                  title="In-app consultation updates"
-                  description="Bookings, confirmations, reschedules and meeting links in your notification bell."
-                  control={
-                    <NeuSwitch
-                      checked={notifications}
-                      disabled={saving}
-                      onChange={toggleNotifications}
-                      labelledBy="notif-inapp-label"
-                      describedBy="notif-inapp-desc"
-                    />
-                  }
-                />
+                {NOTIFICATION_ROWS.map((row) => (
+                  <SettingRow
+                    key={row.key}
+                    id={`notif-${row.key}`}
+                    title={row.title}
+                    description={row.description}
+                    control={
+                      <NeuSwitch
+                        checked={prefs.notifications[row.key]}
+                        disabled={saving}
+                        onChange={(next) => prefs.toggleNotification(row.key, next)}
+                        labelledBy={`notif-${row.key}-label`}
+                        describedBy={`notif-${row.key}-desc`}
+                      />
+                    }
+                  />
+                ))}
                 <SettingRow
                   id="notif-email"
                   title="Email updates"
@@ -471,6 +459,34 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
               </p>
             </SectionCard>
 
+            {/* Messaging privacy */}
+            <SectionCard
+              labelId="settings-messaging"
+              icon={<MessagesIcon className="w-[18px] h-[18px]" />}
+              title="Messaging Privacy"
+              subtitle="Choose what the other person sees while you chat."
+            >
+              <div className="neu-recessed rounded-[18px] divide-y divide-dotted divide-[#B8946E]/50">
+                {PRIVACY_ROWS.map((row) => (
+                  <SettingRow
+                    key={row.key}
+                    id={`privacy-${row.key}`}
+                    title={row.title}
+                    description={row.description}
+                    control={
+                      <NeuSwitch
+                        checked={prefs.messaging[row.key]}
+                        disabled={saving}
+                        onChange={(next) => prefs.toggleMessaging(row.key, next)}
+                        labelledBy={`privacy-${row.key}-label`}
+                        describedBy={`privacy-${row.key}-desc`}
+                      />
+                    }
+                  />
+                ))}
+              </div>
+            </SectionCard>
+
             {/* Security & Session */}
             <SectionCard
               labelId="settings-security"
@@ -479,6 +495,30 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
               subtitle="Protect access to your consultations, messages and documents."
             >
               <div className="neu-recessed rounded-[18px] divide-y divide-dotted divide-[#B8946E]/50">
+                {!account.emailVerified && (
+                  <SettingRow
+                    id="sec-verify"
+                    title="Verify your email"
+                    description={`We'll send a new confirmation link to ${account.email}.`}
+                    control={
+                      <ResendVerificationButton
+                        label="Resend link"
+                        className="neu-raised-pill bg-[#E5D8CB] shrink-0 inline-flex items-center h-8 px-3.5 rounded-full font-lora text-[12px] font-bold text-[#341512] hover:text-[#A8742E] transition-colors cursor-pointer disabled:opacity-60"
+                        messageClassName="font-inter text-[11px] text-[#7D6855] max-w-[200px]"
+                      />
+                    }
+                  />
+                )}
+                <SettingRow
+                  id="sec-everywhere"
+                  title="Sign out everywhere"
+                  description="Ends your session on every device and browser, including this one. Use it if you signed in on a shared or lost device."
+                  control={
+                    <NeuButton size="sm" variant="secondary" loading={signOutAll.pending} onClick={signOutAll.run}>
+                      Sign out all
+                    </NeuButton>
+                  }
+                />
                 <SettingRow
                   id="sec-idle"
                   title="Automatic sign-out"
@@ -614,6 +654,148 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                 {passwordMessage && (
                   <NeuAlert key="pw-ok" tone="success" onDismiss={() => setPasswordMessage('')}>
                     {passwordMessage}
+                  </NeuAlert>
+                )}
+                {signOutAll.error && (
+                  <NeuAlert key="signout-error" tone="error">
+                    {signOutAll.error}
+                  </NeuAlert>
+                )}
+              </AnimatePresence>
+            </SectionCard>
+
+            {/* Privacy & your data */}
+            <SectionCard
+              labelId="settings-data"
+              icon={<DocumentTextIcon className="w-[18px] h-[18px]" />}
+              title="Privacy & Your Data"
+              subtitle="Your rights under the Data Privacy Act (RA 10173): see what you agreed to, get a copy of your data, or delete your account."
+            >
+              <div className="neu-recessed rounded-[18px] divide-y divide-dotted divide-[#B8946E]/50">
+                <SettingRow
+                  id="data-legal"
+                  title="Terms and policies"
+                  description={
+                    consent.consent?.current && consent.consent.acceptedAt
+                      ? `You accepted the current versions on ${formatConsentDate(consent.consent.acceptedAt)}.`
+                      : 'Please review and accept the current versions.'
+                  }
+                  control={
+                    consent.consent && !consent.consent.current ? (
+                      <NeuButton size="sm" variant="secondary" loading={consent.pending} onClick={consent.accept}>
+                        Accept
+                      </NeuButton>
+                    ) : null
+                  }
+                />
+                <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 sm:px-5 py-3">
+                  {LEGAL_DOCUMENTS.map((doc) => (
+                    <Link
+                      key={doc.href}
+                      href={doc.href}
+                      target="_blank"
+                      className="font-inter text-[12px] font-semibold text-[#946525] underline underline-offset-2 hover:text-[#C58B3C] transition-colors"
+                    >
+                      {doc.title}
+                    </Link>
+                  ))}
+                </div>
+                <SettingRow
+                  id="data-export"
+                  title="Download my data"
+                  description="A JSON file with your profile, consultations, messages, payments and reviews. Once a day."
+                  control={
+                    <NeuButton size="sm" variant="secondary" loading={dataExport.pending} onClick={() => void dataExport.run()}>
+                      Download
+                    </NeuButton>
+                  }
+                />
+                <div>
+                  <SettingRow
+                    id="data-delete"
+                    title="Delete my account"
+                    description="Your personal data is erased after 7 days. Sign in before then to undo it."
+                    control={
+                      !deletion.open ? (
+                        <NeuButton size="sm" variant="danger" onClick={() => deletion.setOpen(true)}>
+                          Delete
+                        </NeuButton>
+                      ) : null
+                    }
+                  />
+                  <AnimatePresence initial={false}>
+                    {deletion.open && (
+                      <motion.div
+                        key="delete-form"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.32, ease: EASE_OUT }}
+                        className="overflow-hidden"
+                      >
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            if (deletion.ready) deletion.submit();
+                          }}
+                          className="px-4 sm:px-5 pb-5 pt-1 space-y-4"
+                        >
+                          <p className="font-inter text-[12px] leading-relaxed text-[#5C4535]">
+                            You can’t delete your account while you have upcoming consultations. After you confirm, you are signed out on
+                            every device, and your account is removed in 7 days unless you sign in and restore it.
+                          </p>
+                          <fieldset disabled={deletion.pending} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <PasswordField
+                              name="deletePassword"
+                              label="Your password"
+                              autoComplete="current-password"
+                              value={deletion.password}
+                              onChange={deletion.setPassword}
+                            />
+                            <div className="space-y-1.5">
+                              <label htmlFor="delete-confirm" className="block font-inter text-[10.5px] font-bold uppercase tracking-[0.12em] text-[#7D6855]">
+                                Type DELETE to confirm
+                              </label>
+                              <input
+                                id="delete-confirm"
+                                value={deletion.confirmation}
+                                onChange={(e) => deletion.setConfirmation(e.target.value)}
+                                autoComplete="off"
+                                className="neu-input w-full h-11 rounded-xl px-4 font-inter text-[13px] text-[#341512] disabled:opacity-60"
+                              />
+                            </div>
+                          </fieldset>
+                          <AnimatePresence>
+                            {deletion.error && (
+                              <NeuAlert key="delete-error" tone="error">
+                                {deletion.error}
+                              </NeuAlert>
+                            )}
+                          </AnimatePresence>
+                          <div className="flex flex-wrap items-center gap-3 pt-1">
+                            <NeuButton type="submit" variant="danger" size="sm" loading={deletion.pending} disabled={!deletion.ready}>
+                              Delete my account
+                            </NeuButton>
+                            <NeuButton size="sm" variant="secondary" disabled={deletion.pending} onClick={deletion.reset}>
+                              Cancel
+                            </NeuButton>
+                          </div>
+                        </form>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+
+              <AnimatePresence>
+                {dataExport.message && (
+                  <NeuAlert key="export-msg" tone={dataExport.message.ok ? 'success' : 'error'} onDismiss={dataExport.clear}>
+                    {dataExport.message.text}
+                  </NeuAlert>
+                )}
+                {consent.error && (
+                  <NeuAlert key="consent-error" tone="error">
+                    {consent.error}
                   </NeuAlert>
                 )}
               </AnimatePresence>

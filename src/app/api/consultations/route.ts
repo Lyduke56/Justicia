@@ -1,37 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { notImplementedResponse } from '@/lib/api/notImplemented';
 
 /**
- * Consultations API Route
+ * Consultations API (reserved).
  *
- * Handles consultation CRUD operations for all roles.
- * All business logic must run server-side (auth, payment verification, conferencing setup).
- *
- * TODO: GET  — list consultations (filtered by role: client sees their own, lawyer sees theirs, admin sees all)
- * TODO: POST — create a new consultation booking
- *   - Verify client auth
- *   - Verify lawyer is verified and available at requested slot
- *   - Process payment via paymentGateway.ts
- *   - Create conferencing room via conferencing.ts
- *   - Insert into consultations table
- *   - Send confirmation emails via email.ts
- * TODO: PATCH [consultationId] — update status (accept/decline/cancel/complete)
- * TODO: DELETE [consultationId] — cancel (with cancellation policy check)
+ * Booking, responses, cancellation and rescheduling run through the Server Actions in
+ * src/app/actions/consultationActions.ts. This route returns 501 instead of a fake success.
  */
+export const dynamic = 'force-dynamic';
 
-export async function GET(): Promise<NextResponse> {
-  // TODO: Implement
-  return NextResponse.json({
-    data: [],
-    message: '[STUB] GET /api/consultations — not yet implemented',
-  });
-}
-
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  // TODO: Implement booking flow
-  const body = await request.json();
-  console.log('[/api/consultations] POST stub received:', body);
-  return NextResponse.json({
-    data: null,
-    message: '[STUB] POST /api/consultations — booking flow not yet implemented',
-  }, { status: 201 });
-}
+const respond = () => notImplementedResponse('Consultation management');
+export { respond as GET, respond as POST, respond as PATCH, respond as DELETE };

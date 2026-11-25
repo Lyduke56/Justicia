@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { ClientShell } from '@/components/client/ClientShell';
 import { LiveProvider } from '@/components/live/LiveProvider';
 import { liveTopicFor } from '@/lib/realtime/live';
+import { DEMO_COOKIE, isDemoFor } from '@/lib/auth/demo';
 
 export const metadata = {
   title: {
@@ -23,13 +24,16 @@ export default async function ClientLayout({
   children: React.ReactNode;
 }) {
   const cookieStore = await cookies();
-  const demoCookie = cookieStore.get('justicia_demo_session')?.value;
-  const isDemo = demoCookie === 'true' || demoCookie === 'client';
+  // Signed-out sample portal: local development with JUSTICIA_DEMO=true only.
+  const demoCookieOk = isDemoFor(cookieStore.get(DEMO_COOKIE)?.value, 'client');
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // A demo cookie only matters while signed out; a real session always uses real data and checks.
+  const isDemo = !user && demoCookieOk;
 
   if (!user && !isDemo) {
     redirect('/login?redirectTo=/client/dashboard');

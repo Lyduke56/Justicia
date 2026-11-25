@@ -400,6 +400,8 @@ export function SignUpForm({
         <motion.div variants={currentItemVariants} className="flex items-center justify-start gap-2 pt-1.5 sm:pt-2">
           <input
             id="terms"
+            name="accept_terms"
+            value="yes"
             type="checkbox"
             required
             className={`w-3.5 h-3.5 rounded cursor-pointer transition-transform duration-150 hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B9833C]/60 ${isNeumorphic ? 'accent-[#34150F]' : 'accent-[#c59341]'}`}
@@ -414,13 +416,20 @@ export function SignUpForm({
               className={isNeumorphic ? 'text-[#99431E] hover:text-[#34150F] font-medium hover:underline transition-colors' : 'text-[#c59341] hover:underline transition-colors'}
             >
               Terms of Service
-            </Link>{' '}
-            and{' '}
+            </Link>
+            ,{' '}
             <Link
               href="/privacy"
               className={isNeumorphic ? 'text-[#99431E] hover:text-[#34150F] font-medium hover:underline transition-colors' : 'text-[#c59341] hover:underline transition-colors'}
             >
               Privacy Policy
+            </Link>{' '}
+            and{' '}
+            <Link
+              href="/ai-disclaimer"
+              className={isNeumorphic ? 'text-[#99431E] hover:text-[#34150F] font-medium hover:underline transition-colors' : 'text-[#c59341] hover:underline transition-colors'}
+            >
+              AI Disclaimer
             </Link>
             .
           </label>

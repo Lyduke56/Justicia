@@ -2,6 +2,10 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { DEMO_COOKIE, isDemoFor } from '@/lib/auth/demo';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { loadCurrentDocuments } from '@/lib/lawyer/documentsServer';
+import { documentGaps } from '@/lib/lawyer/verification';
 import { LawyerVerificationStatus } from '@/components/lawyer/LawyerVerificationStatus';
 
 export const metadata: Metadata = {
@@ -11,8 +15,7 @@ export const metadata: Metadata = {
 
 export default async function VerificationPage() {
   const cookieStore = await cookies();
-  const demoCookie = cookieStore.get('justicia_demo_session')?.value;
-  const isDemo = demoCookie === 'lawyer' || demoCookie === 'true';
+  const isDemo = isDemoFor(cookieStore.get(DEMO_COOKIE)?.value, 'lawyer');
 
   const supabase = await createClient();
   const {
@@ -63,9 +66,12 @@ export default async function VerificationPage() {
     full_name: string | null;
   } | null;
 
-  // If approved, redirect to dashboard
+  // Approved lawyers go to their dashboard, unless they were approved before proof documents
+  // were required and still have required ones to upload (they do that here).
   if (profile?.verification_status === 'approved') {
-    redirect('/lawyer/dashboard');
+    const docs = await loadCurrentDocuments(supabase as unknown as SupabaseClient, user.id).catch(() => null);
+    const missing = docs ? documentGaps(docs.map((d) => ({ docType: d.doc_type, reviewStatus: d.review_status ?? 'uploaded' }))).missing : [];
+    if (missing.length === 0) redirect('/lawyer/dashboard');
   }
 
   return (

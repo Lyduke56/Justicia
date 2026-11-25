@@ -22,7 +22,9 @@ export type LiveScope =
   | 'messages'
   | 'documents'
   | 'notifications'
-  | 'reviews';
+  | 'reviews'
+  /** The account's sessions changed (signed out everywhere, suspended): open tabs re-check. */
+  | 'session';
 
 const SEND_TIMEOUT_MS = 2500;
 
