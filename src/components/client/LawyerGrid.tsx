@@ -2,7 +2,7 @@
 
 import React, { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import Image from 'next/image';
+import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
 import {
   motion,
   useMotionValue,
@@ -428,27 +428,7 @@ function FindLawyerCard({
             className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] shrink-0 rounded-full"
           >
             <div className="w-full h-full flex items-center justify-center text-[#4A3528] overflow-hidden rounded-full transition-[color,scale,rotate,translate] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:text-[#C58B3C] group-hover:scale-107 group-hover:-rotate-4 group-hover:-translate-y-px">
-            {lawyer.photoUrl ? (
-              <Image
-                src={lawyer.photoUrl}
-                alt={lawyer.fullName}
-                width={76}
-                height={76}
-                className="w-full h-full object-cover rounded-full"
-              />
-            ) : (
-              <svg
-                className="w-full h-full"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-              </svg>
-            )}
+            <ProfilePhoto src={lawyer.photoUrl} alt={lawyer.fullName} className="w-full h-full" />
             </div>
           </motion.div>
 

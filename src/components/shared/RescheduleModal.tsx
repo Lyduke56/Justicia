@@ -17,6 +17,7 @@ import {
   type RescheduleOptions,
 } from '@/app/actions/consultationActions';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
+import { ScreenLoader } from '@/components/shared/loading';
 import {
   NeuModal,
   NeuButton,
@@ -378,7 +379,7 @@ function RequestStep({
           </div>
           <div className="flex flex-col gap-3.5" aria-busy={loadingSlots}>
             {loadingSlots || !options ? (
-              Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-12 rounded-2xl neu-skeleton-inset" />)
+              <ScreenLoader variant="panel" srLabel="Loading open times" />
             ) : noOpenSlots ? (
               <div className="neu-recessed rounded-[20px]">
                 <EmptyState

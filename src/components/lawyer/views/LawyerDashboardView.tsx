@@ -18,7 +18,7 @@ import { fetchLawyerDashboardStats, fetchLawyerSchedule } from '@/lib/live/fetch
 import { useLawyerConsultationActions } from '../useLawyerConsultationActions';
 import { DashboardDateFilter } from '../dashboard/DashboardDateFilter';
 import { LawyerConsultationCard, type ConsultationCardHandlers } from '../LawyerConsultationCard';
-import { CardPager, ConsultationCardSkeleton } from '../CardPager';
+import { CardPager, ConsultationCardLoader } from '../CardPager';
 import { DashboardConsultationTable } from '../dashboard/DashboardConsultationTable';
 import { buildSampleConsultations, buildSampleStats } from '../sampleConsultations';
 import { MONTHS, emptyCopy, filterHeading, filterKey, filterRange, shortDate, type ScheduleFilter } from '../dashboard/filter';
@@ -72,10 +72,10 @@ function changeLayout(next: Layout) {
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function earningsSubtitle(s: LawyerDashboardStats): string {
-  if (s.monthEarnings == null || s.previousMonthEarnings == null) return 'Earnings are unavailable right now.';
+  if (s.monthEarnings == null || s.previousMonthEarnings == null) return 'Unavailable right now.';
   const prev = MONTHS[(s.month + 11) % 12];
   if (s.previousMonthEarnings === 0) {
-    return s.monthEarnings > 0 ? `Nothing earned in ${prev} to compare.` : 'No paid sessions yet this month.';
+    return s.monthEarnings > 0 ? `Up from ₱0 in ${prev}.` : 'No paid sessions yet.';
   }
   const pct = Math.round(((s.monthEarnings - s.previousMonthEarnings) / s.previousMonthEarnings) * 100);
   if (pct > 0) return `Up ${pct}% from ${prev}.`;
@@ -279,7 +279,7 @@ export function LawyerDashboardView() {
     scheduleRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
   };
 
-  const contentKey = !schedule ? 'skeleton' : items.length === 0 ? `empty-${filterKey(filter)}` : layout;
+  const contentKey = !schedule ? 'loading' : items.length === 0 ? `empty-${filterKey(filter)}` : layout;
 
   return (
     <MotionConfig reducedMotion="user">
@@ -301,7 +301,7 @@ export function LawyerDashboardView() {
                   ? 'Nothing scheduled for today.'
                   : stats.todayUpcoming === 0
                     ? 'No more sessions today.'
-                    : `${stats.todayUpcoming} of ${stats.todayScheduled} still to come today.`
+                    : `${stats.todayUpcoming} of ${stats.todayScheduled} still to come.`
                 : null
             }
             icon={<CalendarClockIcon className="h-10 w-10 shrink-0" />}
@@ -315,7 +315,7 @@ export function LawyerDashboardView() {
               stats
                 ? stats.pendingRequests === 0
                   ? 'You are all caught up.'
-                  : `${plural(stats.pendingClients, 'client')} awaiting your approval.`
+                  : `${plural(stats.pendingClients, 'client')} awaiting approval.`
                 : null
             }
             icon={<BriefcaseClockIcon className="h-10 w-10 shrink-0" />}
@@ -337,7 +337,7 @@ export function LawyerDashboardView() {
               stats
                 ? stats.ratingAvg == null
                   ? 'No reviews yet.'
-                  : `${plural(stats.ratingCount, 'review')}${stats.responseRate != null ? `, ${stats.responseRate}% response rate` : ''}.`
+                  : `${plural(stats.ratingCount, 'review')}${stats.responseRate != null ? ` · ${stats.responseRate}% response rate` : ''}`
                 : null
             }
             icon={<StarCircleIcon className="h-10 w-10 shrink-0" />}
@@ -428,7 +428,7 @@ export function LawyerDashboardView() {
             <AnimatePresence mode="wait" initial={false}>
               <motion.div key={contentKey} variants={SWAP} initial="enter" animate="center" exit="exit">
                 {!schedule ? (
-                  <ConsultationCardSkeleton />
+                  <ConsultationCardLoader />
                 ) : items.length === 0 ? (
                   <EmptyState
                     icon={<CalendarIcon />}

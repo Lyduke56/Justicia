@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import {
   respondToConsultationAction,
@@ -14,7 +15,12 @@ import {
   type ConsultationDetailsModalProps,
   type DetailsStatusTone,
 } from '@/components/shared/ConsultationDetailsModal';
-import { ConsultationDecisionModal, type DecisionMode } from '@/components/lawyer/ConsultationDecisionModal';
+import {
+  ConsultationDecisionModal,
+  type DecisionMode,
+  type DecisionSummary,
+} from '@/components/lawyer/ConsultationDecisionModal';
+import type { SubmissionResult } from '@/components/shared/feedback';
 import { RescheduleModal, type RescheduleModalMode } from '@/components/shared/RescheduleModal';
 import { CancellationRequestModal } from '@/components/shared/CancellationRequestModal';
 import { useConsultationExtras } from '@/components/consultations/useConsultationExtras';
@@ -90,9 +96,9 @@ export function useLawyerConsultationActions({
   const router = useRouter();
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [detailsError, setDetailsError] = useState<string | null>(null);
-  const [decision, setDecision] = useState<{ mode: DecisionMode; id: string } | null>(null);
-  const [decisionSubmitting, setDecisionSubmitting] = useState(false);
-  const [decisionError, setDecisionError] = useState<string | null>(null);
+  // The decision dialog keeps a snapshot of what is being decided, so it stays put while the
+  // list reloads underneath it (the item may leave the current filter once it changes status).
+  const [decision, setDecision] = useState<{ mode: DecisionMode; id: string; summary: DecisionSummary } | null>(null);
   const [reschedule, setReschedule] = useState<{ mode: RescheduleModalMode; id: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cancelReviewId, setCancelReviewId] = useState<string | null>(null);
@@ -108,11 +114,44 @@ export function useLawyerConsultationActions({
     setDetailsId(c.id);
   }, []);
 
-  const openDecision = useCallback((mode: DecisionMode, id: string) => {
-    if (id.startsWith('demo-')) return;
-    setDecisionError(null);
-    setDecision({ mode, id });
+  const openProof = useCallback(async (documentId: string) => {
+    const res = await getDocumentAccessUrlAction(documentId);
+    if ('url' in res && res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
+    else setDetailsError(('error' in res && res.error) || 'This file could not be opened.');
   }, []);
+
+  const openDecision = useCallback(
+    (mode: DecisionMode, id: string) => {
+      if (id.startsWith('demo-')) return;
+      const c = find(id);
+      if (!c) return;
+      const pd = c.paymentDetails;
+      const proofId = pd.proofDocumentId;
+      setDecision({
+        mode,
+        id,
+        summary: {
+          clientName: c.client.name,
+          dateLong: c.dateLong,
+          timeRange: c.timeRange,
+          dateTag: c.dateTag.replace('TODAY, ', ''),
+          timeTag: c.timeTag,
+          communicationMode: c.communicationMode,
+          durationLabel: c.durationLabel,
+          subjectCategory: c.subjectCategory,
+          subjectTitle: c.subjectTitle,
+          payment: {
+            sessionFee: pd.sessionFee,
+            platformFee: pd.platformFee,
+            total: pd.total,
+            proofFileName: pd.proofFileName,
+            onOpenProof: proofId ? () => void openProof(proofId) : undefined,
+          },
+        },
+      });
+    },
+    [find, openProof]
+  );
 
   const openMessages = useCallback(
     (c: LawyerConsultation) => {
@@ -146,38 +185,30 @@ export function useLawyerConsultationActions({
     });
   }, []);
 
-  const handleDecision = async (value?: string) => {
-    if (!decision) return;
-    setDecisionSubmitting(true);
-    setDecisionError(null);
-    try {
-      const { mode, id } = decision;
-      const res =
-        mode === 'approve' || mode === 'decline'
-          ? await respondToConsultationAction(id, mode === 'approve' ? 'approved' : 'rejected', value)
-          : mode === 'confirm_payment'
-            ? await reviewPaymentAction(id, 'confirm', { meetingLink: value })
-            : mode === 'decline_payment'
-              ? await reviewPaymentAction(id, 'reject', { reason: value })
-              : await lawyerCancelConsultationAction(id, value ?? '');
-      if (!('success' in res) || !res.success) {
-        setDecisionError(('error' in res && res.error) || 'We could not update this consultation.');
-        return;
-      }
-      setDecision(null);
-      setDetailsId(null);
-      await reload();
-    } catch {
-      setDecisionError('We could not update this consultation. Please try again.');
-    } finally {
-      setDecisionSubmitting(false);
+  /** Runs the decision's server action; the dialog shows the check or X from this result. */
+  const submitDecision = async (value?: string): Promise<SubmissionResult> => {
+    if (!decision) return { ok: false, error: 'This consultation is no longer selected.' };
+    const { mode, id } = decision;
+    const res =
+      mode === 'approve' || mode === 'decline'
+        ? await respondToConsultationAction(id, mode === 'approve' ? 'approved' : 'rejected', value)
+        : mode === 'confirm_payment'
+          ? await reviewPaymentAction(id, 'confirm', { meetingLink: value })
+          : mode === 'decline_payment'
+            ? await reviewPaymentAction(id, 'reject', { reason: value })
+            : await lawyerCancelConsultationAction(id, value ?? '');
+    if (!('success' in res) || !res.success) {
+      return { ok: false, error: ('error' in res && res.error) || 'We could not update this consultation.' };
     }
+    // Refresh the lists underneath while the dialog shows the result.
+    void reload();
+    return { ok: true };
   };
 
-  const openProof = async (documentId: string) => {
-    const res = await getDocumentAccessUrlAction(documentId);
-    if ('url' in res && res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
-    else setDetailsError(('error' in res && res.error) || 'This file could not be opened.');
+  const closeDecision = (succeeded: boolean) => {
+    setDecision(null);
+    // A decision changes the consultation, so its (now outdated) details close with it.
+    if (succeeded) setDetailsId(null);
   };
 
   const buildDetailsProps = (c: LawyerConsultation): ConsultationDetailsModalProps => {
@@ -299,7 +330,6 @@ export function useLawyerConsultationActions({
   };
 
   const detailsTarget = find(detailsId);
-  const decisionTarget = find(decision?.id ?? null);
   const rescheduleTarget = find(reschedule?.id ?? null);
   const cancelReviewTarget = find(cancelReviewId);
 
@@ -307,18 +337,17 @@ export function useLawyerConsultationActions({
     <>
       {detailsTarget && <ConsultationDetailsModal {...buildDetailsProps(detailsTarget)} />}
 
-      {decision && decisionTarget && (
-        <ConsultationDecisionModal
-          key={`${decision.mode}-${decision.id}`}
-          mode={decision.mode}
-          clientName={decisionTarget.client.name}
-          when={`${decisionTarget.dateTag.replace('TODAY, ', '')} (${decisionTarget.timeTag})`}
-          submitting={decisionSubmitting}
-          error={decisionError}
-          onCancel={() => !decisionSubmitting && setDecision(null)}
-          onConfirm={handleDecision}
-        />
-      )}
+      <AnimatePresence>
+        {decision && (
+          <ConsultationDecisionModal
+            key={`${decision.mode}-${decision.id}`}
+            mode={decision.mode}
+            summary={decision.summary}
+            onSubmit={submitDecision}
+            onClose={closeDecision}
+          />
+        )}
+      </AnimatePresence>
 
       {reschedule && rescheduleTarget?.reschedule && (
         <RescheduleModal

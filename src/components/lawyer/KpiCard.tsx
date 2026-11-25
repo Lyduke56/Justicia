@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from 'react';
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'motion/react';
 import { ChevronRightIcon } from '@/components/shared/neu';
+import { InlineLoader } from '@/components/shared/loading';
 import { CARVE, EMBOSS, RISE } from './motion';
 
 /**
@@ -108,7 +109,7 @@ export function KpiCard({
   labelClassName = 'font-lora text-[15.5px] font-medium text-[#341512]',
 }: {
   label: React.ReactNode;
-  /** null shows a skeleton. */
+  /** null shows the inline loader. */
   value: React.ReactNode | null;
   subtitle: string | null;
   icon: React.ReactNode;
@@ -143,11 +144,11 @@ export function KpiCard({
         <span className="flex items-center gap-3 text-[#341512]">
           {icon}
           <span className="font-lora text-[34px] font-semibold leading-none sm:text-[38px]" title={valueTitle}>
-            {value ?? <span className="neu-skeleton-text inline-block h-7 w-16 align-middle" />}
+            {value ?? <InlineLoader className="text-[18px]" label="Loading value" />}
           </span>
         </span>
         <span className="mt-2.5 block min-h-[1rem] font-inter text-[11px] leading-snug text-[#5C4535]">
-          {subtitle ?? <span className="neu-skeleton-text inline-block h-2.5 w-36 align-middle" />}
+          {subtitle ?? <InlineLoader className="text-[9px]" label="Loading details" />}
         </span>
       </motion.span>
     </motion.button>

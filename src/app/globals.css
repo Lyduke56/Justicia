@@ -1306,93 +1306,176 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Neumorphic Parchment Skeletal Loading System
-   Emphasizes UX: warm harmonious palette, zero CLS, realistic shimmer sweep
+   Loading indicators (ScreenLoader / InlineLoader in components/shared/loading).
+   Skeleton placeholders were retired in favour of these.
    ───────────────────────────────────────────────────────────────────────────── */
 
-@keyframes neuShimmer {
+/* Ring held in the GIF's place while the picture downloads. */
+@keyframes screenLoaderRing {
   0% {
-    background-position: -200% 0;
+    transform: scale(0.82);
+    opacity: 0.35;
   }
-
+  50% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
   100% {
-    background-position: 200% 0;
+    transform: scale(0.82);
+    opacity: 0.35;
   }
 }
 
-.neu-skeleton {
-  background: linear-gradient(
-    90deg,
-    #ece1d2 0%,
-    #f5ede2 35%,
-    #fdfbf7 50%,
-    #f5ede2 65%,
-    #ece1d2 100%
-  );
-  background-size: 200% 100%;
-  animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.screen-loader-ring {
+  border: 3px solid rgba(197, 139, 60, 0.55);
   box-shadow:
-    4px 4px 10px rgba(182, 155, 130, 0.25),
-    -4px -4px 10px rgba(255, 255, 255, 0.85);
-  border: none;
+    4px 4px 10px rgba(206, 194, 183, 0.9),
+    -4px -4px 9px rgba(252, 238, 223, 0.9);
+  animation: screenLoaderRing 1.6s ease-in-out infinite;
 }
 
-.neu-skeleton-plate {
-  background: linear-gradient(
-    90deg,
-    #dfc5a4 0%,
-    #e8d3b8 35%,
-    #f3e4cf 50%,
-    #e8d3b8 65%,
-    #dfc5a4 100%
-  );
-  background-size: 200% 100%;
-  animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  box-shadow:
-    6px 8px 18px rgba(165, 135, 105, 0.35),
-    -6px -6px 16px rgba(255, 255, 255, 0.9);
-  border: none;
+/* "Loading..." – the three dots light up in turn. */
+@keyframes screenLoaderDot {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
 }
 
-.neu-skeleton-inset {
-  background: linear-gradient(
-    90deg,
-    #e6d7c3 0%,
-    #ede1d0 35%,
-    #f6efe5 50%,
-    #ede1d0 65%,
-    #e6d7c3 100%
-  );
-  background-size: 200% 100%;
-  animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  box-shadow:
-    inset 2px 2px 5px rgba(165, 140, 115, 0.4),
-    inset -2px -2px 5px rgba(255, 255, 255, 0.9);
-  border: none;
+.screen-loader-dots > span {
+  animation: screenLoaderDot 1.2s ease-in-out infinite;
 }
 
-.neu-skeleton-text {
-  background: linear-gradient(
-    90deg,
-    rgba(140, 122, 106, 0.22) 0%,
-    rgba(140, 122, 106, 0.38) 50%,
-    rgba(140, 122, 106, 0.22) 100%
-  );
-  background-size: 200% 100%;
-  animation: neuShimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.screen-loader-dots > span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.screen-loader-dots > span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+/* Inline loader: three caramel dots that rise in turn (KPI values, notes, small panels). */
+@keyframes inkDot {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-0.28em);
+    opacity: 1;
+  }
+}
+
+.ink-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  vertical-align: middle;
+}
+
+.ink-dots > span {
+  width: 0.42em;
+  height: 0.42em;
   border-radius: 9999px;
+  background-color: #c58b3c;
+  animation: inkDot 1.1s ease-in-out infinite;
 }
 
-/* ─── Neumorphic text field autofill fix to preserve #E5D8CB background ─── */
+.ink-dots > span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.ink-dots > span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* A view revealed under the transition overlay starts its entrance once the overlay lifts. */
+[data-screen-loading] .client-view-enter {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-loader-ring,
+  .screen-loader-dots > span,
+  .ink-dots > span {
+    animation: none;
+  }
+
+  .screen-loader-dots > span,
+  .ink-dots > span {
+    opacity: 0.7;
+  }
+}
+
+/* ─── Browser autofill ───────────────────────────────────────────────────────
+   Autofill paints its own (blue / yellow) background. The usual fix is a huge inset shadow in
+   the field colour; it must be the LAST shadow so it sits underneath the neumorphic layers
+   instead of covering them (which made autofilled fields look flat and lose their focus/error
+   ring). The 5000s transition keeps Chrome's background from showing at all. Values stay in the
+   field's text colour, and the native behaviour (selection, password managers) is untouched. */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
-  -webkit-box-shadow:
-    0 0 0 1000px #e5d8cb inset,
+  -webkit-text-fill-color: #34150f;
+  caret-color: #34150f;
+  box-shadow:
     inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
-    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9) !important;
-  -webkit-text-fill-color: #34150f !important;
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    inset 0 0 0 1000px #e5d8cb;
   transition: background-color 5000s ease-in-out 0s;
+}
+
+input:autofill {
+  /* Firefox tints autofilled fields with a filter. */
+  filter: none;
+}
+
+.neu-input:-webkit-autofill,
+.neu-input:-webkit-autofill:hover {
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset 0 0 0 1000px #e5d8cb;
+}
+
+.neu-input:-webkit-autofill:focus {
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.2),
+    0 0 0 2px rgba(185, 131, 60, 0.3),
+    inset 0 0 0 1000px #e5d8cb;
+}
+
+.neu-input.neu-input-error:-webkit-autofill,
+.neu-input.neu-input-error:-webkit-autofill:focus {
+  box-shadow:
+    -1px -1px 2px 0 rgba(206, 194, 183, 0.5),
+    1px 1px 2px 0 rgba(252, 238, 223, 0.3),
+    inset 5px 5px 13px 0 rgba(206, 194, 183, 0.9),
+    inset -5px -5px 10px 0 rgba(252, 238, 223, 0.9),
+    inset 5px -5px 10px 0 rgba(206, 194, 183, 0.2),
+    inset -5px 5px 10px 0 rgba(206, 194, 183, 0.2),
+    0 0 0 2px rgba(220, 38, 38, 0.35),
+    inset 0 0 0 1000px #e5d8cb;
+}
+
+/* Autofill previews use the system font in some browsers; keep ours where allowed. */
+.neu-input:-webkit-autofill::first-line {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 14px;
 }
 
 /* ── Client portal chrome: sidebar ─────────────────────────────────────────── */

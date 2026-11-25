@@ -1,10 +1,6 @@
-import React from 'react';
-import { LawyerDetailSkeleton } from '@/components/skeletons';
+import { ScreenLoader } from '@/components/shared/loading';
 
+/** Global loading screen while a lawyer's profile and booking page loads. */
 export default function LawyerDetailLoading() {
-  return (
-    <div className="p-4 sm:p-8">
-      <LawyerDetailSkeleton />
-    </div>
-  );
+  return <ScreenLoader variant="page" />;
 }

@@ -1,7 +1,7 @@
 /**
  * StatTile — Admin-facing component
  * Displays a single KPI metric with label, value, and optional change indicator.
- * TODO: Add loading skeleton state
+ * TODO: Add loading state (InlineLoader from components/shared/loading)
  * TODO: Add sparkline chart mini-visualization
  * TODO: Add click-to-drilldown behavior
  */

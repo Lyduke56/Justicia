@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
 
 export interface LawyerItem {
   id: string;
@@ -10,6 +11,8 @@ export interface LawyerItem {
   hourlyRate?: number;
   rating?: number;
   isVerified?: boolean;
+  /** Profile photo; missing, empty or broken URLs show the default profile icon. */
+  photoUrl?: string | null;
 }
 
 interface LawyerCardProps {
@@ -23,19 +26,9 @@ export function LawyerCard({ lawyer }: LawyerCardProps) {
       className="neu-card-interactive group block rounded-[22px] py-4 pl-3 pr-5 select-none"
     >
       <div className="flex items-center gap-2">
-        {/* Silhouette Avatar Circle - height aligns with IBP Verified capsule & Specializations line */}
-        <div className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] shrink-0 flex items-center justify-center text-[#4A3528] group-hover:text-[#C58B3C] transition-colors">
-          <svg
-            className="w-full h-full"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-          </svg>
+        {/* Profile photo, or the default profile icon - height aligns with IBP Verified capsule & Specializations line */}
+        <div className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] shrink-0 flex items-center justify-center overflow-hidden rounded-full text-[#4A3528] group-hover:text-[#C58B3C] transition-colors">
+          <ProfilePhoto src={lawyer.photoUrl} alt={lawyer.name} className="w-full h-full" />
         </div>
 
         {/* Lawyer Details - height matches profile icon; justify-between aligns top and bottom */}

@@ -158,3 +158,30 @@ The migration also preserves hidden-review filtering, aligns the review lawyer f
 Verified on 2026-11-09: a signed-in client completed a temporary consultation, received the rating modal, submitted four stars, refreshed, and still saw Rated 4 / 5. The public lawyer profile showed the saved feedback and no Write a Review button. The database contained exactly one matching review. The temporary review and consultation were removed afterward. Transactional SQL checks also verified replies, duplicate rejection, immutable ratings, and the completed-only rule, then rolled back test records.
 
 Run automated action checks with `node --test tests/review-actions.test.cjs` (stateful database double; nine cases) and type checks with `npm run typecheck`.
+
+---
+
+## Auth Email Templates (onboarding emails)
+
+Sign-up confirmation, password reset and the other Supabase Auth emails use the same branded
+layout as every email the app sends itself (`src/lib/email/layout.ts`). The HTML is generated
+into [`templates/`](templates/):
+
+```bash
+npm run email:templates   # rebuilds supabase/templates/*.html from the shared layout
+```
+
+Apply them in **Supabase Dashboard → Authentication → Email Templates**. For each template,
+set the subject (it is the first line of each file) and paste the file's HTML as the body:
+
+| Supabase template | File | Subject |
+|---|---|---|
+| Confirm signup | `templates/confirm-signup.html` | Confirm your Justicia account |
+| Reset Password | `templates/reset-password.html` | Reset your Justicia password |
+| Magic Link | `templates/magic-link.html` | Your Justicia sign-in link |
+| Change Email Address | `templates/change-email.html` | Confirm your new Justicia email |
+| Invite user | `templates/invite.html` | You're invited to Justicia |
+
+The templates keep Supabase's own `{{ .ConfirmationURL }}` link, so verification, reset and
+redirect URLs (`/auth/callback`, `/auth/reset-password`) work exactly as before. If the project
+already uses custom templates with `{{ .TokenHash }}` links, keep that link format when pasting.

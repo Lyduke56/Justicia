@@ -53,6 +53,8 @@ import {
 } from './BookingConfirmModal';
 import { NeuModal, NeuButton, NeuAlert, EmptyState, StarIcon as NeuStarIcon } from '@/components/shared/neu';
 import { useMyAvatar } from '@/components/account/avatarStore';
+import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
+import { ScreenLoader } from '@/components/shared/loading';
 
 /** A My Documents file attached to the booking (shared with the lawyer by document ID). */
 interface BookingAttachment {
@@ -819,24 +821,6 @@ function ModeCard({
   );
 }
 
-function ReviewSkeleton() {
-  return (
-    <div className="neu-raised-highlight rounded-[18px] sm:rounded-[20px] p-5 sm:p-6 space-y-3 animate-pulse motion-reduce:animate-none">
-      <div className="flex items-center gap-3.5">
-        <div className="w-9 h-9 rounded-full bg-[#341512]/10" />
-        <div className="space-y-2">
-          <div className="h-3 w-32 rounded-full bg-[#341512]/10" />
-          <div className="h-2.5 w-20 rounded-full bg-[#341512]/10" />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <div className="h-2.5 w-full rounded-full bg-[#341512]/10" />
-        <div className="h-2.5 w-5/6 rounded-full bg-[#341512]/10" />
-      </div>
-    </div>
-  );
-}
-
 // ═════════════════════════════════════════════════════════════════════════════
 //  MAIN COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
@@ -864,18 +848,25 @@ export function LawyerDetailView({
   // Real (database) lawyers opened without server-loaded details — e.g. inline from the Find Lawyer
   // list — load their persisted About / Cases data here. Mock/demo lawyers keep the placeholder content.
   const shouldFetchDetails = !detailsProp && LAWYER_UUID_REGEX.test(lawyer.userId);
-  const [fetchedDetails, setFetchedDetails] = useState<{ id: string; details: LawyerOwnProfileDetails | null } | null>(null);
+  const [fetchedDetails, setFetchedDetails] = useState<{ id: string; details: LawyerOwnProfileDetails | null; failed?: boolean } | null>(null);
+  // Bumped by "Try again" after a failed load.
+  const [detailsAttempt, setDetailsAttempt] = useState(0);
   useEffect(() => {
     if (!shouldFetchDetails) return;
     let active = true;
     getPublicLawyerDetailsAction(lawyer.userId)
       .then((d) => active && setFetchedDetails({ id: lawyer.userId, details: d }))
-      .catch(() => active && setFetchedDetails({ id: lawyer.userId, details: null }));
+      .catch(() => active && setFetchedDetails({ id: lawyer.userId, details: null, failed: true }));
     return () => {
       active = false;
     };
-  }, [shouldFetchDetails, lawyer.userId]);
+  }, [shouldFetchDetails, lawyer.userId, detailsAttempt]);
   const detailsLoading = shouldFetchDetails && fetchedDetails?.id !== lawyer.userId;
+  const detailsFailed = shouldFetchDetails && fetchedDetails?.id === lawyer.userId && !!fetchedDetails.failed;
+  const retryDetails = () => {
+    setFetchedDetails(null);
+    setDetailsAttempt((n) => n + 1);
+  };
   const details: LawyerOwnProfileDetails | undefined =
     detailsProp ??
     (shouldFetchDetails
@@ -1469,7 +1460,8 @@ export function LawyerDetailView({
         const msg = ('error' in res && res.error) || 'Error submitting booking';
         setConfirmError(msg);
         setBookingError(msg);
-        setConfirmPhase('review');
+        // The badge writes an X; "Review Booking" returns to the sheet with the error on top.
+        setConfirmPhase('error');
         setSlotsRefreshKey((k) => k + 1);
         return;
       }
@@ -1482,7 +1474,7 @@ export function LawyerDetailView({
       const msg = err instanceof Error ? err.message : 'Error submitting booking';
       setConfirmError(msg);
       setBookingError(msg);
-      setConfirmPhase('review');
+      setConfirmPhase('error');
     } finally {
       setSubmittingBooking(false);
     }
@@ -1690,21 +1682,9 @@ export function LawyerDetailView({
               transition={{ type: 'spring', stiffness: 220, damping: 18, delay: 0.35 }}
               className="shrink-0"
             >
-              {photoUrl ? (
-                <img
-                  src={photoUrl}
-                  alt={lawyer.fullName}
-                  className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-full"
-                />
-              ) : (
-                <div className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center text-[#341512]/80">
-                  <svg className="w-full h-full" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="4.2">
-                    <circle cx="32" cy="32" r="28" />
-                    <circle cx="32" cy="24" r="8" />
-                    <path d="M16 48c0-8.837 7.163-14 16-14s16 5.163 16 14" strokeLinecap="round" />
-                  </svg>
-                </div>
-              )}
+              <div className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center overflow-hidden rounded-full text-[#341512]/80">
+                <ProfilePhoto src={photoUrl} alt={lawyer.fullName} className="w-full h-full" />
+              </div>
             </motion.div>
 
             {/* Lawyer Info */}
@@ -1727,9 +1707,13 @@ export function LawyerDetailView({
                 <svg className="w-3.5 h-3.5 fill-transparent stroke-current text-[#341512]/80" viewBox="0 0 20 20" strokeWidth="1.6">
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
-                <span>
-                  <CountUp value={averageRating} decimals={1} delay={0.8} /> (<CountUp value={totalReviewsCount} duration={0.7} delay={0.8} /> Reviews)
-                </span>
+                {totalReviewsCount > 0 ? (
+                  <span>
+                    <CountUp value={averageRating} decimals={1} delay={0.8} /> (<CountUp value={totalReviewsCount} duration={0.7} delay={0.8} /> {totalReviewsCount === 1 ? 'Review' : 'Reviews'})
+                  </span>
+                ) : (
+                  <span>No reviews yet</span>
+                )}
                 {(!isLive || lawyer.experienceYears != null) && (
                   <>
                     <span className="mx-1">•</span>
@@ -1744,15 +1728,41 @@ export function LawyerDetailView({
                     ? ''
                     : 'Labor & Employment • Corporate • Civil Law'}
               </motion.p>
+              {isLive && (
+                <motion.div {...enter(0.86)} className="flex flex-wrap items-center gap-2 pt-1.5">
+                  <span className="neu-inset-banner inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 font-inter text-[10.5px] font-bold text-[#5C4535]">
+                    <span aria-hidden="true" className={`size-1.5 rounded-full ${lawyer.isAvailable ? 'bg-[#1F7A3A]' : 'bg-[#9A8270]'}`} />
+                    {lawyer.isAvailable ? 'Accepting consultations' : 'Not taking new bookings'}
+                  </span>
+                  {lawyer.languages && lawyer.languages.length > 0 && (
+                    <span className="neu-inset-banner inline-flex h-6 items-center rounded-full px-2.5 font-inter text-[10.5px] font-bold text-[#5C4535]">
+                      Speaks {lawyer.languages.join(', ')}
+                    </span>
+                  )}
+                </motion.div>
+              )}
             </div>
           </div>
 
-          {/* Rate on right side */}
-          <motion.div {...enter(0.75)} className="flex items-baseline md:justify-end gap-1 shrink-0 self-start md:self-center">
-            <span className="font-lora text-2xl sm:text-3xl font-bold text-[#341512]/80">
-              {standardFee != null ? <CountUp value={standardFee} prefix="₱" duration={1.2} delay={0.85} /> : '₱—'}
-            </span>
-            <span className="text-xs sm:text-sm font-inter text-[#341512]/80 font-normal">/per hour</span>
+          {/* Rate on the right side, with a shortcut to booking for clients */}
+          <motion.div {...enter(0.75)} className="flex flex-col items-start md:items-end gap-3 shrink-0 self-start md:self-center">
+            <div className="flex items-baseline gap-1">
+              {standardFee != null ? (
+                <>
+                  <span className="font-lora text-2xl sm:text-3xl font-bold text-[#341512]/80">
+                    <CountUp value={standardFee} prefix="₱" duration={1.2} delay={0.85} />
+                  </span>
+                  <span className="text-xs sm:text-sm font-inter text-[#341512]/80 font-normal">/per hour</span>
+                </>
+              ) : (
+                <span className="font-inter text-xs sm:text-sm italic text-[#341512]/60">Rate not set yet</span>
+              )}
+            </div>
+            {!isOwner && activeTab !== 'booking' && (
+              <NeuButton size="sm" variant="primary" onClick={() => changeTab('booking')} className="relative z-10">
+                Book a Consultation
+              </NeuButton>
+            )}
           </motion.div>
         </motion.div>
 
@@ -1784,7 +1794,15 @@ export function LawyerDetailView({
                   {isActive && (
                     <HighlightPill layoutId="lawyer-tab-pill" radius={12} intro={introActive ? 1.35 : false} />
                   )}
-                  <span className="relative z-10">{tab.label}</span>
+                  <span className="relative z-10 inline-flex items-center gap-2">
+                    {tab.label}
+                    {tab.key === 'reviews' && totalReviewsCount > 0 && (
+                      <span className="rounded-full bg-[#C58B3C]/20 px-2 py-0.5 font-inter text-[10.5px] font-bold text-[#7A4E14] tabular-nums">
+                        {totalReviewsCount}
+                        <span className="sr-only"> reviews</span>
+                      </span>
+                    )}
+                  </span>
                 </Key>
               </motion.div>
             );
@@ -1889,7 +1907,7 @@ export function LawyerDetailView({
                                   <span className="font-lora font-bold text-sm sm:text-base text-[#341512]/80">
                                     <CountUp value={row.value} prefix="₱" />
                                   </span>
-                                  <span className="text-xs sm:text-[13px] text-[#341512]/80 ml-0.5">/per hour</span>
+                                  <span className="text-xs sm:text-[13px] text-[#341512]/80 ml-0.5">/session</span>
                                 </>
                               ) : (
                                 <span className="text-xs sm:text-[13px] italic text-[#341512]/60">Not set</span>
@@ -1902,6 +1920,24 @@ export function LawyerDetailView({
                   </Reveal>
                 </div>
 
+                {/* Details that load separately: a loader while they arrive, a notice if they fail */}
+                {detailsFailed && (
+                  <NeuAlert
+                    tone="error"
+                    title="Some profile details couldn't be loaded"
+                    action={
+                      <NeuButton size="sm" variant="secondary" onClick={retryDetails}>
+                        Try again
+                      </NeuButton>
+                    }
+                  >
+                    Practice areas, experience and education may be missing below.
+                  </NeuAlert>
+                )}
+                {detailsLoading ? (
+                  <ScreenLoader variant="panel" label="Loading profile details..." className="min-h-[16rem]" />
+                ) : (
+                <>
                 {/* Professional Background Section */}
                 <div className="space-y-4">
                   <Reveal>
@@ -2015,6 +2051,8 @@ export function LawyerDetailView({
                   </div>
                   )}
                 </div>
+                </>
+                )}
               </motion.div>
             )}
 
@@ -2116,10 +2154,7 @@ export function LawyerDetailView({
                         className="space-y-4 pt-1"
                       >
                         {reviewsLoading && reviewsList.length === 0 && (
-                          <>
-                            <ReviewSkeleton />
-                            <ReviewSkeleton />
-                          </>
+                          <ScreenLoader variant="panel" label="Loading reviews..." />
                         )}
 
                         {pagedReviews.map((rev) => {
@@ -3079,11 +3114,7 @@ export function LawyerDetailView({
                 </div>
 
                 {loadingDocPicker ? (
-                  <div className="space-y-1.5 px-0.5" aria-busy="true">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <div key={i} className="h-9 rounded-xl neu-skeleton" />
-                    ))}
-                  </div>
+                  <ScreenLoader variant="panel" srLabel="Loading your folders" className="py-6!" />
                 ) : docPickerFolders.length === 0 ? (
                   <EmptyState size="sm" icon={<FolderIcon />} title="No folders yet" description="Create one with “+ Folder” above." />
                 ) : (
@@ -3264,6 +3295,7 @@ export function LawyerDetailView({
             error={confirmError}
             onConfirm={handleConfirmBooking}
             onClose={closeConfirm}
+            onRetry={() => setConfirmPhase('review')}
           />
         )}
         </AnimatePresence>

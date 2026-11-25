@@ -4,7 +4,7 @@ import React from 'react';
  * Card — Shared UI component
  * A container with a border, background, padding, and optional header/footer.
  * TODO: Add hover effect variant for clickable cards
- * TODO: Add loading skeleton state
+ * TODO: Add loading state (ScreenLoader panel from components/shared/loading)
  */
 
 interface CardProps {

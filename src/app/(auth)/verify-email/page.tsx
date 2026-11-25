@@ -1,41 +1,14 @@
-import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { ResendVerificationButton } from '@/components/auth/ResendVerificationButton';
-
+import { AuthPageCard } from '@/components/auth/AuthPanel';
+import { VerifyEmailPanel } from '@/components/auth/VerifyEmailPanel';
 
 export const metadata: Metadata = { title: 'Verify Email' };
 
+/** Shown after sign-up: how to finish verifying the account. */
 export default function VerifyEmailPage() {
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 py-12 bg-[#0c0805]">
-      <div className="w-full max-w-md text-center">
-        <Link href="/" className="inline-flex items-center justify-center gap-2 mb-6 group">
-          <JusticiaLogo className="w-44 h-auto text-[#C59341]" />
-        </Link>
-        <div className="rounded-2xl border border-[#3c2a1c] bg-[#140d07] p-8 shadow-2xl space-y-4 text-center">
-          <h2 className="font-cinzel text-xl font-bold text-[#ded7cb]">Check your inbox</h2>
-          <p className="text-sm text-[#8c7a6a]">
-            We sent a verification link to your email address. Click the link to activate your account.
-          </p>
-          <p className="text-xs text-[#8c7a6a]">
-            Didn&apos;t get it? Check your spam folder, or{' '}
-            <ResendVerificationButton
-              label="send a new link"
-              className="font-semibold text-[#c59341] hover:text-[#d6a54f] underline underline-offset-2 transition-colors disabled:opacity-60"
-              messageClassName="block text-xs text-[#8c7a6a] pt-1"
-            />
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/login"
-              className="inline-block text-xs font-semibold tracking-wider uppercase text-[#c59341] hover:text-[#d6a54f] transition-colors"
-            >
-              Back to Sign In
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
+    <AuthPageCard>
+      <VerifyEmailPanel />
+    </AuthPageCard>
   );
 }

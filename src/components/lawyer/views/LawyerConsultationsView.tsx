@@ -10,7 +10,7 @@ import { CalendarIcon, EmptyState, NeuAlert, NeuButton } from '@/components/shar
 import { parseIsoDate, startMsOf, todayInManila } from '@/lib/lawyer/dashboardSchedule';
 import { isMissed, useLawyerConsultationActions } from '../useLawyerConsultationActions';
 import { LawyerConsultationCard, type ConsultationCardHandlers } from '../LawyerConsultationCard';
-import { CardPager, ConsultationCardSkeleton } from '../CardPager';
+import { CardPager, ConsultationCardLoader } from '../CardPager';
 import { buildSampleConsultations } from '../sampleConsultations';
 import { CARD_SLIDE, EMBOSS, GROUP, PAGE, RISE, ROLL } from '../motion';
 import { ConsultationsToolbar } from '../consultations/ConsultationsToolbar';
@@ -363,7 +363,7 @@ export function LawyerConsultationsView({
               <AnimatePresence mode="wait" initial={false} custom={slideDir}>
                 {!loaded ? (
                   <motion.div key="loading" exit={{ opacity: 0, transition: { duration: 0.15 } }}>
-                    <ConsultationCardSkeleton />
+                    <ConsultationCardLoader />
                   </motion.div>
                 ) : !current ? (
                   <motion.div

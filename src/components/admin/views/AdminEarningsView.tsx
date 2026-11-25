@@ -10,6 +10,7 @@ import { EarningsChart } from '@/components/lawyer/earnings/EarningsChart';
 import { MetricToggle, MonthPicker } from '@/components/lawyer/earnings/EarningsControls';
 import { MONTHS_FULL, MONTHS_SHORT, earningsNote, metricChange, monthValues, pesoExact, pesoWhole, sum, type ChartMetric } from '@/components/lawyer/earnings/model';
 import { QueueToolbar } from '@/components/admin/verification/QueueToolbar';
+import { InlineLoader, ScreenLoader } from '@/components/shared/loading';
 import { CAPS, ROW_HEIGHT, RefreshGlyph, TableBand, TableEmpty, TablePager, TableRows, ToolbarButton, pageOf, rowClass, useEntrance } from '@/components/admin/table/kit';
 import {
   EARNINGS_SORTS,
@@ -190,7 +191,7 @@ export function AdminEarningsView({ initialData, initialError = null }: { initia
             labelClassName={KPI_LABEL}
             value={data ? <CountUp value={data.monthlyFees[month]} format={formatPeso} /> : error ? '—' : null}
             valueTitle={data ? pesoExact(data.monthlyFees[month]) : undefined}
-            subtitle={chart ? earningsNote(chart, month).replace('No paid sessions this month yet.', 'No fees earned this month yet.') : error ? 'Unavailable right now.' : null}
+            subtitle={chart ? earningsNote(chart, month).replace('No paid sessions yet.', 'No fees earned yet.') : error ? 'Unavailable right now.' : null}
             icon={<BarChartIcon className="h-10 w-10 shrink-0" />}
             onClick={() => scrollTo(chartRef)}
             actionLabel="View the chart"
@@ -211,7 +212,7 @@ export function AdminEarningsView({ initialData, initialError = null }: { initia
             valueTitle={data ? pesoExact(sum(data.monthlyFees)) : undefined}
             subtitle={
               data
-                ? `${plural(sum(data.monthlyTransactions), 'paid consultation')} at ${pesoWhole(data.platformFeeSetting)} each.`
+                ? `${plural(sum(data.monthlyTransactions), 'consultation')} at ${pesoWhole(data.platformFeeSetting)} each.`
                 : error
                   ? 'Unavailable right now.'
                   : null
@@ -227,7 +228,7 @@ export function AdminEarningsView({ initialData, initialError = null }: { initia
             subtitle={
               data
                 ? data.refundedCount === 0
-                  ? 'No paid consultation was cancelled.'
+                  ? 'No paid sessions cancelled.'
                   : `${pesoWhole(data.refundedFees)} in fees not earned.`
                 : error
                   ? 'Unavailable right now.'
@@ -282,7 +283,7 @@ export function AdminEarningsView({ initialData, initialError = null }: { initia
                     {chart && values ? (
                       <CountUp key={metric} value={values[month]} format={formatMetric} delay={0.7} />
                     ) : (
-                      <span className="neu-skeleton-text inline-block h-8 w-40 align-middle" />
+                      <InlineLoader className="text-[20px]" label="Loading figure" />
                     )}
                   </span>
                   {chart && <ChangeChip pct={metricChange(chart, metric, month)} previousMonth={(month + 11) % 12} />}
@@ -315,7 +316,7 @@ export function AdminEarningsView({ initialData, initialError = null }: { initia
               {chart ? (
                 <EarningsChart data={chart} metric={metric} selected={month} onSelect={setPicked} />
               ) : (
-                <div className="neu-skeleton h-[272px] w-full rounded-[18px]" aria-hidden />
+                <ScreenLoader variant="panel" srLabel="Loading chart" className="h-[272px]" />
               )}
             </motion.div>
             <motion.p variants={RISE} className="mt-3 font-inter text-[10.5px] text-[#7D6855]">

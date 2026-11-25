@@ -22,6 +22,8 @@ import {
 import { getDocumentDownloadUrlAction } from '@/app/actions/documentFeatureActions';
 import type { DocumentFolderView } from '@/lib/documents/types';
 import { useLiveRefresh } from '@/components/live/LiveProvider';
+import { ScreenLoader } from '@/components/shared/loading';
+import { NeuButton } from '@/components/shared/neu/NeuButton';
 
 /** The signed-in user's folders (GET /api/live/documents). null: signed out. */
 async function fetchDocumentFolders(role: 'client' | 'lawyer'): Promise<DocumentFolderView[] | null> {
@@ -804,6 +806,178 @@ function ViewportModal({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Empty states: no folders yet, a folder with no documents, and searches with no matches.
+// Each says what is (not) there and offers the next step.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type DocumentsEmptyKind = 'no-folders' | 'no-folder-matches' | 'empty-folder' | 'no-file-matches';
+
+const EMPTY_STEPS = [
+  { title: 'Create a case folder', text: 'One per legal matter keeps things tidy.' },
+  { title: 'Upload your documents', text: 'Contracts, IDs, affidavits, receipts and more.' },
+  { title: 'Share them when you book', text: 'Attach files to a consultation for your lawyer.' },
+];
+
+/** Paper sheets that rise out of an open folder, then settle into a slow float. */
+function EmptyFolderArt({ kind }: { kind: DocumentsEmptyKind }) {
+  const searching = kind === 'no-folder-matches' || kind === 'no-file-matches';
+  return (
+    <div className="relative mx-auto h-28 w-36" aria-hidden="true">
+      <motion.div
+        className="absolute inset-x-0 bottom-0 flex justify-center"
+        initial={{ opacity: 0, y: 16, scale: 0.9 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.1 }}
+      >
+        <Image src="/assets/folder_icon.svg" alt="" width={112} height={90} className="h-auto w-28 drop-shadow-[0_6px_10px_rgba(92,69,53,0.18)]" />
+      </motion.div>
+      {!searching &&
+        [
+          { x: -22, r: -10, delay: 0.35 },
+          { x: 18, r: 8, delay: 0.5 },
+        ].map((sheet, i) => (
+          <motion.span
+            key={i}
+            className="neu-raised-sm absolute left-1/2 top-1 h-14 w-11 rounded-[6px] bg-[#F3E8DA]"
+            style={{ marginLeft: sheet.x - 22 }}
+            initial={{ opacity: 0, y: 34, rotate: 0 }}
+            animate={{ opacity: 1, y: [34, -4, 0], rotate: sheet.r }}
+            transition={{ duration: 0.8, delay: sheet.delay, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <span className="absolute left-2 right-2 top-3 h-[3px] rounded-full bg-[#C8B59E]" />
+            <span className="absolute left-2 right-4 top-[22px] h-[3px] rounded-full bg-[#C8B59E]" />
+            <span className="absolute left-2 right-3 top-[31px] h-[3px] rounded-full bg-[#C8B59E]" />
+          </motion.span>
+        ))}
+      {searching && (
+        <motion.span
+          className="neu-raised-sm absolute right-2 top-0 grid size-12 place-items-center rounded-full bg-[#E5D8CB] text-[#C58B3C]"
+          initial={{ opacity: 0, scale: 0.4, rotate: -30 }}
+          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          transition={{ type: 'spring', stiffness: 380, damping: 16, delay: 0.3 }}
+        >
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+        </motion.span>
+      )}
+    </div>
+  );
+}
+
+function DocumentsEmptyState({
+  kind,
+  role,
+  query,
+  folderName,
+  onCreateFolder,
+  onUpload,
+  onClearSearch,
+}: {
+  kind: DocumentsEmptyKind;
+  role: 'client' | 'lawyer';
+  query: string;
+  folderName?: string;
+  onCreateFolder: () => void;
+  onUpload: () => void;
+  onClearSearch: () => void;
+}) {
+  const copy: Record<DocumentsEmptyKind, { title: string; text: string }> = {
+    'no-folders': {
+      title: role === 'lawyer' ? 'No client documents yet' : 'Your document vault is empty',
+      text:
+        role === 'lawyer'
+          ? 'Documents your clients share for a consultation appear here automatically. You can also create folders of your own.'
+          : 'You have no case folders or documents yet. Keep everything for a legal matter in one place and share it with your lawyer when you book.',
+    },
+    'no-folder-matches': {
+      title: 'No case folders match your search',
+      text: `Nothing is named “${query.trim()}”. Try different words, or clear the search to see all folders.`,
+    },
+    'empty-folder': {
+      title: 'This folder is empty',
+      text: `There are no documents in ${folderName ? `“${folderName}”` : 'this folder'} yet. Upload affidavits, contracts, IDs or filings to keep them together.`,
+    },
+    'no-file-matches': {
+      title: 'No documents match your search',
+      text: `Nothing in ${folderName ? `“${folderName}”` : 'this folder'} matches “${query.trim()}”.`,
+    },
+  };
+  const { title, text } = copy[kind];
+  const searching = kind === 'no-folder-matches' || kind === 'no-file-matches';
+
+  return (
+    <motion.div
+      role="status"
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: EASE_OUT }}
+      className="col-span-full"
+    >
+      <div className="neu-recessed mx-auto max-w-2xl rounded-[28px] px-6 py-9 text-center sm:px-10 sm:py-11">
+        <EmptyFolderArt kind={kind} />
+        <h3 className="mt-5 font-lora text-lg font-bold text-[#34150F] sm:text-xl">{title}</h3>
+        <p className="mx-auto mt-2 max-w-md font-inter text-[12.5px] leading-relaxed text-[#5C4535] sm:text-[13px]">{text}</p>
+
+        {kind === 'no-folders' && role === 'client' && (
+          <motion.ol
+            className="mx-auto mt-6 grid max-w-xl gap-3 text-left sm:grid-cols-3"
+            initial="hidden"
+            animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.35 } } }}
+          >
+            {EMPTY_STEPS.map((step, i) => (
+              <motion.li
+                key={step.title}
+                variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: EASE_OUT } } }}
+                className="neu-raised-sm flex items-start gap-2.5 rounded-2xl bg-[#E5D8CB] px-3.5 py-3"
+              >
+                <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#C58B3C] font-lora text-[11px] font-bold text-white">{i + 1}</span>
+                <span className="min-w-0">
+                  <span className="block font-lora text-[12.5px] font-semibold leading-snug text-[#34150F]">{step.title}</span>
+                  <span className="block font-inter text-[11px] leading-snug text-[#7D6855]">{step.text}</span>
+                </span>
+              </motion.li>
+            ))}
+          </motion.ol>
+        )}
+
+        <motion.div
+          className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.5, ease: EASE_OUT }}
+        >
+          {searching && (
+            <NeuButton variant="secondary" onClick={onClearSearch}>
+              Clear Search
+            </NeuButton>
+          )}
+          {kind === 'no-folders' || kind === 'no-folder-matches' ? (
+            <NeuButton variant="primary" icon={<FolderIcon className="h-4 w-4" />} onClick={onCreateFolder}>
+              Create a Folder
+            </NeuButton>
+          ) : (
+            <NeuButton
+              variant="primary"
+              icon={
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
+                </svg>
+              }
+              onClick={onUpload}
+            >
+              Upload a Document
+            </NeuButton>
+          )}
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
 export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const [loadingDocs, setLoadingDocs] = useState<boolean>(true);
@@ -844,7 +1018,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   }, []);
 
   // Load the signed-in user's own folders and the consultation folders shared with them
-  // (no sample data). The first load shows the skeleton; live refreshes (shared files,
+  // (no sample data). The first load shows the loader; live refreshes (shared files,
   // uploads elsewhere) update silently.
   const docsLoadedRef = useRef(false);
   const loadDocuments = React.useCallback(() => {
@@ -873,6 +1047,18 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const currentFolder = folders.find((f) => f.id === currentFolderId) || null;
 
   // Folder click handler: navigate into folder to see files
+  const openCreateFolder = () => {
+    setModalError(null);
+    setNewFolderName('');
+    setShowNewFolderModal(true);
+  };
+  const openUpload = () => {
+    setModalError(null);
+    selectedFileRef.current = null;
+    setNewFileName('');
+    setShowUploadFileModal(true);
+  };
+
   const handleEnterFolder = (folder: FolderItem) => {
     setNavDirection('forward');
     setCurrentFolderId(folder.id);
@@ -1242,25 +1428,9 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
         </div>
       </div>
 
-      {/* ─── Initial load skeleton, then directional content transitions ─── */}
+      {/* ─── Initial load, then directional content transitions ─── */}
       {loadingDocs && !currentFolder ? (
-        <div className={gridClasses} aria-busy="true">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <div
-              key={i}
-              className="docs-rise flex flex-col items-center justify-center p-3 space-y-3"
-              style={stagger(i, 60, 10)}
-            >
-              <div
-                className="w-full max-w-[8.5rem] sm:max-w-[9.5rem] aspect-[16/13] rounded-2xl neu-skeleton"
-                style={{
-                  boxShadow: '4px 4px 10px rgba(182, 155, 130, 0.25), -4px -4px 10px #FFFFFF',
-                }}
-              />
-              <div className="h-3.5 w-28 rounded neu-skeleton-text" />
-            </div>
-          ))}
-        </div>
+        <ScreenLoader variant="panel" srLabel="Loading your documents" className="min-h-[20rem]" />
       ) : (
         <div key={viewKey} className={`docs-view--${navDirection}`}>
           {/* ─── SCENARIO A: Root Folder Grid View (All Closed by Default) ────────── */}
@@ -1323,26 +1493,21 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                     );
                   })}
 
-                  {/* Empty state when search yields no matches */}
+                  {/* Empty states: no folders yet, or none matching the search */}
                   {filteredFolders.length === 0 && !loadingDocs && (
-                    <div className="docs-rise col-span-full py-16 text-center space-y-2">
-                      <Image src="/assets/folder_icon.svg" alt="" width={72} height={58} className="mx-auto opacity-60" />
-                      <p className="font-lora text-base font-semibold text-[#34150F]">
-                        {searchQuery.trim() ? 'No case folders match your search' : 'No case folders yet'}
-                      </p>
-                      <p className="font-inter text-xs text-[#7D6855]">
-                        {searchQuery.trim()
-                          ? 'Try searching with different terms or click + to create a new folder.'
-                          : role === 'lawyer'
-                            ? 'Documents your clients share with you appear here. Click + to create your own folder.'
-                            : 'Click + to create a folder and upload your documents.'}
-                      </p>
-                    </div>
+                    <DocumentsEmptyState
+                      kind={searchQuery.trim() ? 'no-folder-matches' : 'no-folders'}
+                      role={role}
+                      query={searchQuery}
+                      onCreateFolder={openCreateFolder}
+                      onUpload={openUpload}
+                      onClearSearch={() => setSearchQuery('')}
+                    />
                   )}
 
                   {/* Circular Neumorphic + Button (Uses Established .neu-raised-sm) */}
                   <div
-                    className="docs-rise flex flex-col items-center justify-start px-3 pt-8 pb-3"
+                    className={`docs-rise flex-col items-center justify-start px-3 pt-8 pb-3 ${filteredFolders.length === 0 ? 'hidden' : 'flex'}`}
                     style={stagger(filteredFolders.length)}
                   >
                     <button
@@ -1409,9 +1574,14 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                   })}
 
                   {filteredFolders.length === 0 && !loadingDocs && (
-                    <p className="docs-rise py-10 text-center font-inter text-xs text-[#7D6855]">
-                      {searchQuery.trim() ? 'No case folders match your search.' : 'No case folders yet.'}
-                    </p>
+                    <DocumentsEmptyState
+                      kind={searchQuery.trim() ? 'no-folder-matches' : 'no-folders'}
+                      role={role}
+                      query={searchQuery}
+                      onCreateFolder={openCreateFolder}
+                      onUpload={openUpload}
+                      onClearSearch={() => setSearchQuery('')}
+                    />
                   )}
                 </div>
               )}
@@ -1476,19 +1646,22 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                     </div>
                   ))}
 
-                  {/* Empty state when folder has no files */}
+                  {/* Empty states: an empty folder, or no documents matching the search */}
                   {filteredFiles.length === 0 && (
-                    <div className="docs-rise col-span-full sm:col-span-3 py-12 text-center space-y-2">
-                      <p className="font-lora text-base font-semibold text-[#34150F]">No documents in this case folder yet</p>
-                      <p className="font-inter text-xs text-[#7D6855] max-w-sm mx-auto">
-                        Click the + button or &quot;+ New&quot; on the top left to upload legal affidavits, contracts, and filings.
-                      </p>
-                    </div>
+                    <DocumentsEmptyState
+                      kind={searchQuery.trim() && currentFolder.files.length > 0 ? 'no-file-matches' : 'empty-folder'}
+                      role={role}
+                      query={searchQuery}
+                      folderName={currentFolder.name}
+                      onCreateFolder={openCreateFolder}
+                      onUpload={openUpload}
+                      onClearSearch={() => setSearchQuery('')}
+                    />
                   )}
 
                   {/* Circular Neumorphic + Button to Upload Document */}
                   <div
-                    className="docs-rise flex flex-col items-center justify-start px-3 pt-8 pb-3"
+                    className={`docs-rise flex-col items-center justify-start px-3 pt-8 pb-3 ${filteredFiles.length === 0 ? 'hidden' : 'flex'}`}
                     style={stagger(filteredFiles.length)}
                   >
                     <button
@@ -1571,9 +1744,15 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                   ))}
 
                   {filteredFiles.length === 0 && (
-                    <p className="docs-rise py-10 text-center font-inter text-xs text-[#7D6855]">
-                      No documents to show in this case folder.
-                    </p>
+                    <DocumentsEmptyState
+                      kind={searchQuery.trim() && currentFolder.files.length > 0 ? 'no-file-matches' : 'empty-folder'}
+                      role={role}
+                      query={searchQuery}
+                      folderName={currentFolder.name}
+                      onCreateFolder={openCreateFolder}
+                      onUpload={openUpload}
+                      onClearSearch={() => setSearchQuery('')}
+                    />
                   )}
                 </div>
               )}

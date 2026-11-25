@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { NeuModal, NeuButton, NeuAlert, EmptyState, QrIcon } from '@/components/shared/neu';
-import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
+import { NeuModal, NeuModalSheet, NeuButton, NeuAlert, EmptyState, QrIcon } from '@/components/shared/neu';
+import { SubmissionModal, type SubmissionCopy, type SubmissionPhase } from '@/components/shared/feedback';
+import { DefaultAvatarIcon, ProfilePhoto } from '@/components/shared/ProfilePhoto';
 
 /**
  * Consultation "View Details" modal shared by the client and lawyer portals.
@@ -58,6 +59,18 @@ export interface ConsultationDetailsModalProps {
   summary?: DetailsSummary | null;
   payment?: DetailsPaymentInput | null;
   proof?: { fileName: string; onOpen?: () => void } | null;
+  /**
+   * For dialogs that submit something (the client's proof of payment): the dialog morphs into the
+   * shared submission card while it runs, then shows a check or an X from the real result.
+   */
+  submission?: {
+    phase: SubmissionPhase;
+    error?: string | null;
+    processing: SubmissionCopy;
+    success: SubmissionCopy & { actionLabel?: string };
+    failure: SubmissionCopy & { retryLabel?: string };
+    onRetry: () => void;
+  } | null;
   error?: string | null;
   actions: DetailsModalAction[];
   onClose: () => void;
@@ -292,9 +305,12 @@ function FitStatusRow(props: Omit<StatusRowProps, 'fit'>) {
 }
 
 export function DetailsPersonBanner({ person }: { person: ConsultationDetailsModalProps['person'] }) {
+  // Lays out by its own width (container query), not the window's: side by side from 34rem,
+  // stacked in narrow places such as the booking card's column on small laptops.
   return (
+    <div className="@container min-w-0">
     <div
-      className="neu-raised-highlight rounded-[20px] sm:rounded-[22px] p-4.5 sm:p-5 lg:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-6"
+      className="neu-raised-highlight rounded-[20px] sm:rounded-[22px] p-4.5 sm:p-5 lg:p-6 flex flex-col @[34rem]:flex-row items-start @[34rem]:items-center justify-between gap-4 @[34rem]:gap-6"
       style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
     >
       <div className="flex items-center gap-3.5 sm:gap-4.5 min-w-0">
@@ -302,16 +318,11 @@ export function DetailsPersonBanner({ person }: { person: ConsultationDetailsMod
           <ProfilePhoto
             src={person.photo}
             className="w-full h-full"
-            fallback={
-              <svg className="w-8 h-8 sm:w-10 sm:h-10 text-[#341512]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="8" r="3.8" />
-                <path d="M5 20c0-3.8 3.1-6.5 7-6.5s7 2.7 7 6.5" />
-              </svg>
-            }
+            fallback={<DefaultAvatarIcon className="w-full h-full text-[#341512]" strokeWidth={1.7} />}
           />
         </div>
         <div className="space-y-1 min-w-0">
-          <h4 className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-tight">{person.name}</h4>
+          <h4 className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-tight break-words">{person.name}</h4>
           {person.lines.filter(Boolean).map((line, idx) => (
             <p key={idx} className="font-inter font-light text-[10.5px] sm:text-[11.5px] text-[#5C4535] whitespace-pre-wrap break-words leading-tight">
               {line}
@@ -323,18 +334,19 @@ export function DetailsPersonBanner({ person }: { person: ConsultationDetailsMod
         <button
           type="button"
           onClick={person.onMessage}
-          className="neu-btn-banner px-6 sm:px-7 py-2 sm:py-2.5 rounded-full font-lora text-xs sm:text-sm font-semibold text-[#341512] shrink-0 self-start sm:self-center cursor-pointer"
+          className="neu-btn-banner px-6 sm:px-7 py-2 sm:py-2.5 rounded-full font-lora text-xs sm:text-sm font-semibold text-[#341512] shrink-0 self-start @[34rem]:self-center cursor-pointer"
         >
           Message
         </button>
       ) : person.rate !== null && person.rate !== undefined ? (
-        <div className="sm:text-right shrink-0">
+        <div className="@[34rem]:text-right shrink-0">
           <span className="font-lora text-2xl sm:text-3xl lg:text-[34px] font-bold text-[#341512] leading-none">
             ₱{person.rate.toLocaleString()}
           </span>
           <span className="font-lora text-xs sm:text-sm text-[#341512] ml-1">/per hour</span>
         </div>
       ) : null}
+    </div>
     </div>
   );
 }
@@ -410,7 +422,9 @@ export function DetailsCaseBlock({ titleId, onSeeMore, previewLines, ...props }:
       <h3 id={titleId} className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-snug">
         {props.caseTitle}
       </h3>
-      <div ref={wrapRef} className={`relative mt-1 ${previewLines ? '' : 'flex-1 min-h-0'}`}>
+      {/* lg (bounded): at least two lines are reserved, so the clamped preview never spills past
+          the block onto the buttons below when the card is short on space. */}
+      <div ref={wrapRef} className={`relative mt-1 ${previewLines ? '' : 'flex-1 min-h-0 lg:min-h-[3.25em]'}`}>
         {/* No paragraph gaps in the preview, so every line sits on the line-height grid. */}
         <div
           ref={descRef}
@@ -440,23 +454,19 @@ export function DetailsCaseBlock({ titleId, onSeeMore, previewLines, ...props }:
 }
 
 export function ConsultationDetailsModal(props: ConsultationDetailsModalProps) {
-  return (
-    <NeuModal
-      onClose={props.onClose}
-      size="xl"
-      labelledBy="consultation-details-title"
-      footer={props.actions.map((action) => (
-        <NeuButton
-          key={action.label}
-          variant={BUTTON_VARIANT[action.variant]}
-          onClick={action.onClick}
-          disabled={action.disabled}
-          icon={action.icon === 'video' ? <VideoIcon className="w-4 h-4" /> : undefined}
-        >
-          {action.label}
-        </NeuButton>
-      ))}
+  const footer = props.actions.map((action) => (
+    <NeuButton
+      key={action.label}
+      variant={BUTTON_VARIANT[action.variant]}
+      onClick={action.onClick}
+      disabled={action.disabled}
+      icon={action.icon === 'video' ? <VideoIcon className="w-4 h-4" /> : undefined}
     >
+      {action.label}
+    </NeuButton>
+  ));
+  const body = (
+    <>
         <DetailsStatusRow {...props} />
         <DetailsPersonBanner person={props.person} />
         <DetailsCaseBlock {...props} titleId="consultation-details-title" />
@@ -522,6 +532,43 @@ export function ConsultationDetailsModal(props: ConsultationDetailsModalProps) {
         )}
 
         {props.error && <NeuAlert tone="error">{props.error}</NeuAlert>}
+    </>
+  );
+
+  if (props.submission) {
+    const sub = props.submission;
+    return (
+      <SubmissionModal
+        phase={sub.phase}
+        titleId="consultation-details-title"
+        size="xl"
+        onClose={props.onClose}
+        onRetry={sub.onRetry}
+        error={sub.error}
+        processing={sub.processing}
+        success={sub.success}
+        failure={sub.failure}
+        details={
+          <>
+            <span className="neu-raised-pill bg-[#E5D8CB] rounded-full px-4 py-1.5 font-lora text-[10.5px] font-bold uppercase tracking-wider text-[#5C4535]">
+              {props.dateStr}
+            </span>
+            <span className="neu-raised-pill bg-[#E5D8CB] rounded-full px-4 py-1.5 font-lora text-[10.5px] font-bold text-[#5C4535]">
+              {props.timeSlot}
+            </span>
+          </>
+        }
+      >
+        <NeuModalSheet titleId="consultation-details-sheet" onClose={props.onClose} footer={footer}>
+          {body}
+        </NeuModalSheet>
+      </SubmissionModal>
+    );
+  }
+
+  return (
+    <NeuModal onClose={props.onClose} size="xl" labelledBy="consultation-details-title" footer={footer}>
+      {body}
     </NeuModal>
   );
 }
