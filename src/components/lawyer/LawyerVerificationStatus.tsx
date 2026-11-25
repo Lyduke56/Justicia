@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { VerificationDocumentsPanel } from './VerificationDocumentsPanel';
+import { SUPPORT_EMAIL } from '@/lib/support';
 
 interface LawyerVerificationStatusProps {
   profile: {
@@ -105,6 +107,7 @@ export function LawyerVerificationStatus({ profile, email, fullName }: LawyerVer
   const isRejected = status === 'rejected';
   const needsResubmission = status === 'needs_resubmission';
   const isDraft = status === 'draft' || !profile;
+  const isApproved = status === 'approved';
 
   return (
     <div className="min-h-screen bg-[#EFE5D8] py-10 px-4">
@@ -179,7 +182,7 @@ export function LawyerVerificationStatus({ profile, email, fullName }: LawyerVer
                 <ul className="list-disc list-inside space-y-1">
                   <li>Our admin team will review your Roll of Attorneys number and IBP Chapter</li>
                   <li>You will receive an email notification at <strong>{email}</strong> when a decision is made</li>
-                  <li>If approved, your profile becomes live on "Find a Lawyer" and you can accept clients</li>
+                  <li>If approved, your profile becomes live on &ldquo;Find a Lawyer&rdquo; and you can accept clients</li>
                 </ul>
               </div>
             </div>
@@ -247,6 +250,36 @@ export function LawyerVerificationStatus({ profile, email, fullName }: LawyerVer
             </div>
           )}
 
+          {isApproved && (
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
+              <p className="text-sm font-semibold text-emerald-900">✅ You are a verified Justicia lawyer</p>
+              <p className="text-sm text-emerald-800">
+                Justicia now keeps proof documents on file for every verified lawyer. Please upload the required ones below;
+                your profile stays live while you do.
+              </p>
+              <Link href="/lawyer/dashboard" className="inline-flex text-sm font-semibold text-emerald-900 underline underline-offset-2">
+                Go to your dashboard
+              </Link>
+            </div>
+          )}
+
+          {/* Verification documents (locked while under review) */}
+          {!isDraft && (
+            <>
+              <div className="border-t border-[#D8CAAD]" />
+              <div className="space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#7D6855]">Verification Documents</p>
+                <VerificationDocumentsPanel
+                  intro={
+                    needsResubmission || isRejected
+                      ? 'Replace any document marked “Needs a new file”, then update and resubmit your application.'
+                      : undefined
+                  }
+                />
+              </div>
+            </>
+          )}
+
           {/* Timeline */}
           {profile && (
             <>
@@ -290,8 +323,8 @@ export function LawyerVerificationStatus({ profile, email, fullName }: LawyerVer
         <div className="text-center text-xs text-[#7D6855] space-y-1">
           <p>
             Questions about your application? Contact us at{' '}
-            <a href="mailto:support@justicia.ph" className="text-[#C58B3C] hover:underline font-medium">
-              support@justicia.ph
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-[#C58B3C] hover:underline font-medium">
+              {SUPPORT_EMAIL}
             </a>
           </p>
           <p>

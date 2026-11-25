@@ -4,14 +4,17 @@ import { useEffect, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
-import { reviewLawyerApplicationAction, type ReviewDecision } from '@/app/actions/adminLawyerReview';
+import { postApprovalLawyerAction, reviewLawyerApplicationAction } from '@/app/actions/adminLawyerReview';
+import { allowedPostApprovalActions, allowedReviewDecisions } from '@/lib/lawyer/verification';
+import { AccountStandingPanel } from '../users/AccountStandingPanel';
+import { DossierDocuments } from './DossierDocuments';
 import { refreshAdminTabs } from '@/lib/live/adminRefresh';
 import { ChevronLeftIcon, NeuAlert } from '@/components/shared/neu';
 import { CARVE, DRAW, EASE_OUT, EMBOSS, GROUP, PAGE, RISE } from '@/components/lawyer/motion';
 import { TONE_COLOR, describeActivity, stamp, timeAgo, waitedFor, type ActivityEntry } from '../overview/activity';
 import { ActivityIcon } from '../overview/OverviewIcons';
 import { CAPS, DECISION_GLYPH } from '../verification/ApplicationDossier';
-import { ReviewDecisionModal } from '../verification/ReviewDecisionModal';
+import { ReviewDecisionModal, type DossierDecision } from '../verification/ReviewDecisionModal';
 import { peso, type LawyerQueueItem } from '../verification/model';
 import { DOSSIER_BACK, type DossierOrigin } from './origin';
 
@@ -170,7 +173,7 @@ export function LawyerDossierView({ lawyer, activity, from = 'directory' }: { la
     return () => window.clearInterval(timer);
   }, []);
 
-  const [decision, setDecision] = useState<ReviewDecision | null>(null);
+  const [decision, setDecision] = useState<DossierDecision | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [submitting, startSubmit] = useTransition();
   const [notice, setNotice] = useState<string | null>(null);
@@ -225,11 +228,17 @@ export function LawyerDossierView({ lawyer, activity, from = 'directory' }: { la
     created_at: lawyer.accountCreatedAt ?? '',
   };
 
-  const confirmDecision = (text: string) => {
+  const reviewDecisions = allowedReviewDecisions(lawyer.status);
+  const postApproval = allowedPostApprovalActions(lawyer.status);
+
+  const confirmDecision = (text: string, exception?: string) => {
     if (!decision) return;
     setDecisionError(null);
     startSubmit(async () => {
-      const res = await reviewLawyerApplicationAction(lawyer.userId, decision, text);
+      const res =
+        decision === 'revoke' || decision === 'reverify'
+          ? await postApprovalLawyerAction(lawyer.userId, decision, text)
+          : await reviewLawyerApplicationAction(lawyer.userId, decision, text, { exceptionReason: exception });
       if (res.error) {
         setDecisionError(res.error);
         return;
@@ -402,6 +411,12 @@ export function LawyerDossierView({ lawyer, activity, from = 'directory' }: { la
           </motion.div>
         </motion.section>
 
+        {/* ── Proof documents (private bucket, opened through short-lived links) ── */}
+        <motion.section variants={GROUP} aria-labelledby="dossier-documents" className="flex flex-col gap-5">
+          <SectionTitle id="dossier-documents">Verification Documents</SectionTitle>
+          <DossierDocuments lawyerId={lawyer.userId} applicationStatus={lawyer.status} />
+        </motion.section>
+
         <motion.div variants={DRAW} className="lawyer-dash-groove mx-auto my-1 w-[78%] shrink-0" aria-hidden />
 
         {/* ── Verification + activity, at the end of the dossier ──────────── */}
@@ -419,22 +434,40 @@ export function LawyerDossierView({ lawyer, activity, from = 'directory' }: { la
                   <p className="mt-1 font-inter text-[12.5px] leading-relaxed text-[#3E2A1E]">{note.text}</p>
                 </motion.div>
               )}
-              <motion.div variants={RISE} className="flex flex-wrap gap-2.5 [&>*]:min-w-[170px] [&>*]:flex-1">
-                {lawyer.status !== 'approved' && (
-                  <DecisionButton tone="primary" disabled={submitting} glyph={DECISION_GLYPH.approved} onClick={() => setDecision('approved')}>
-                    Approve lawyer
-                  </DecisionButton>
-                )}
-                {lawyer.status !== 'needs_resubmission' && (
-                  <DecisionButton tone="plain" disabled={submitting} glyph={DECISION_GLYPH.needs_resubmission} onClick={() => setDecision('needs_resubmission')}>
-                    Request information
-                  </DecisionButton>
-                )}
-                {lawyer.status !== 'rejected' && (
-                  <DecisionButton tone="danger" disabled={submitting} glyph={DECISION_GLYPH.rejected} onClick={() => setDecision('rejected')}>
-                    Reject application
-                  </DecisionButton>
-                )}
+              {/* Only the actions that are valid for the current status: pending applications can be
+                  approved, sent back or rejected; verified lawyers only get the separately audited
+                  post-approval actions. */}
+              {(reviewDecisions.length > 0 || postApproval.length > 0) && (
+                <motion.div variants={RISE} className="flex flex-wrap gap-2.5 [&>*]:min-w-[170px] [&>*]:flex-1">
+                  {reviewDecisions.includes('approved') && (
+                    <DecisionButton tone="primary" disabled={submitting} glyph={DECISION_GLYPH.approved} onClick={() => setDecision('approved')}>
+                      Approve lawyer
+                    </DecisionButton>
+                  )}
+                  {reviewDecisions.includes('needs_resubmission') && (
+                    <DecisionButton tone="plain" disabled={submitting} glyph={DECISION_GLYPH.needs_resubmission} onClick={() => setDecision('needs_resubmission')}>
+                      Request information
+                    </DecisionButton>
+                  )}
+                  {reviewDecisions.includes('rejected') && (
+                    <DecisionButton tone="danger" disabled={submitting} glyph={DECISION_GLYPH.rejected} onClick={() => setDecision('rejected')}>
+                      Reject application
+                    </DecisionButton>
+                  )}
+                  {postApproval.includes('reverify') && (
+                    <DecisionButton tone="plain" disabled={submitting} glyph={DECISION_GLYPH.reverify} onClick={() => setDecision('reverify')}>
+                      Request re-verification
+                    </DecisionButton>
+                  )}
+                  {postApproval.includes('revoke') && (
+                    <DecisionButton tone="danger" disabled={submitting} glyph={DECISION_GLYPH.revoke} onClick={() => setDecision('revoke')}>
+                      Revoke verification
+                    </DecisionButton>
+                  )}
+                </motion.div>
+              )}
+              <motion.div variants={RISE} className="neu-recessed rounded-[18px]">
+                <AccountStandingPanel userId={lawyer.userId} onChanged={() => router.refresh()} />
               </motion.div>
               <motion.dl variants={RISE} className="admin-queue-more mt-auto grid grid-cols-2 gap-3 pt-4">
                 <div>

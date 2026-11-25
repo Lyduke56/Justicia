@@ -1,4 +1,10 @@
 -- ============================================================
+-- LOCAL DEVELOPMENT ONLY. Do not run this against the live project.
+-- The live database differs from this file and from supabase/migrations/.
+-- Changes to the live database are made with the numbered scripts in
+-- supabase/manual/ (see supabase/manual/README.md).
+-- ============================================================
+-- ============================================================
 -- Justicia — Complete Unified Database Setup
 -- File: supabase/complete_setup.sql
 -- ============================================================

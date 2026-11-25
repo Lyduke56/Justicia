@@ -28,14 +28,23 @@ export const PUBLIC_ROUTES = [
   '/lawyer/register',     // Lawyer registration flow (account creation + application)
   '/api/ai/chat',         // AI chat endpoint
   '/api/ai/assistant',    // AI assistant endpoint
+  '/terms',               // Terms of Service
+  '/privacy',             // Privacy Policy
+  '/ai-disclaimer',       // AI disclaimer
+  '/api/health',          // Health check (no private data)
+  '/api/cron',            // Vercel Cron jobs (each checks CRON_SECRET itself)
 ];
+
+/** Routes every signed-in role may use (account restore, data export). */
+const SHARED_ACCOUNT_PREFIXES = ['/account', '/api/account'];
 
 /** Route prefixes that require a specific role */
 export const ROLE_ROUTE_PREFIXES: Record<UserRole, string[]> = {
-  // '/api/live' = read-only tab loaders (each loader checks the session user itself).
-  client: ['/client', '/ai-assistant', '/legal-research', '/consultations', '/cases', '/documents', '/messages', '/profile', '/settings', '/api/live'],
-  lawyer: ['/lawyer', '/api/live'],
-  admin: ['/admin', '/api/admin'],
+  // '/api/live' = read-only tab loaders and '/api/messages' = conversation extras
+  // (each route checks the session user and conversation membership itself).
+  client: ['/client', '/ai-assistant', '/legal-research', '/consultations', '/cases', '/documents', '/messages', '/profile', '/settings', '/api/live', '/api/messages', ...SHARED_ACCOUNT_PREFIXES],
+  lawyer: ['/lawyer', '/api/live', '/api/messages', ...SHARED_ACCOUNT_PREFIXES],
+  admin: ['/admin', '/api/admin', ...SHARED_ACCOUNT_PREFIXES],
 };
 
 /**

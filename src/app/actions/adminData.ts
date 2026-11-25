@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { writeAuditLog } from '@/lib/notifications';
-import type { AdminUserAccount, AdminAuditEntry } from '@/types/admin';
+import { syncAuthClaims } from '@/lib/auth/roles';
+import type { AdminUserAccount, AdminAuditEntry, AdminAccountStatus } from '@/types/admin';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 async function requireAdmin() {
   const client = await createClient();
@@ -274,6 +276,14 @@ export async function getAdminUsersData(): Promise<AdminUserAccount[]> {
       throw new Error('Unable to load user accounts.');
     }
 
+    // Account standing lives on profiles (older accounts may not have a profiles row: active).
+    const { data: standings } = await (supabase as unknown as SupabaseClient)
+      .from('profiles')
+      .select('user_id, account_status');
+    const statusById = new Map(
+      ((standings ?? []) as Array<{ user_id: string; account_status: AdminAccountStatus | null }>).map((p) => [p.user_id, p.account_status ?? 'active'])
+    );
+
     return users.map((u) => {
       return {
         id: u.id,
@@ -281,6 +291,7 @@ export async function getAdminUsersData(): Promise<AdminUserAccount[]> {
         email: u.email,
         role: u.role,
         createdAt: u.created_at,
+        accountStatus: statusById.get(u.id) ?? 'active',
       };
     });
   } catch (err) {
@@ -292,7 +303,15 @@ export async function getAdminUsersData(): Promise<AdminUserAccount[]> {
 export async function updateUserRoleAction(userId: string, newRole: 'client' | 'lawyer' | 'admin') {
   try {
     const adminUser = await requireAdmin();
+    if (!['client', 'lawyer', 'admin'].includes(newRole)) return { error: 'Choose a valid role.' };
+    if (!/^[0-9a-f-]{36}$/i.test(userId ?? '')) return { error: 'Account not found.' };
+    if (userId === adminUser.id) {
+      return { error: 'You cannot change your own role. Ask another administrator.' };
+    }
     const supabase = await createServiceClient();
+    const { data: before } = await supabase.from('user_accounts').select('role').eq('id', userId).maybeSingle();
+    if (!before) return { error: 'Account not found.' };
+
     const { error: accErr } = await supabase
       .from('user_accounts')
       .update({ role: newRole })
@@ -300,26 +319,17 @@ export async function updateUserRoleAction(userId: string, newRole: 'client' | '
 
     if (accErr) return { error: accErr.message };
 
-    try {
-      const { data: authUser } = await supabase.auth.admin.getUserById(userId);
-      if (authUser?.user) {
-        await supabase.auth.admin.updateUserById(userId, {
-          user_metadata: {
-            ...authUser.user.user_metadata,
-            role: newRole,
-          },
-        });
-      }
-    } catch (e) {
-      console.warn('Auth sync warn:', e);
-    }
+    // Keep profiles and the server-written role claim (used by the proxy) in step.
+    await (supabase as unknown as SupabaseClient).from('profiles').update({ role: newRole }).eq('user_id', userId);
+    const synced = await syncAuthClaims(supabase as unknown as SupabaseClient, userId, { role: newRole });
+    if (!synced) console.warn('[updateUserRoleAction] role claim not synced for', userId);
 
     await writeAuditLog({
       actorId: adminUser.id,
       action: 'user.role_change',
       targetType: 'user_account',
       targetId: userId,
-      details: { new_role: newRole },
+      details: { previous_role: before.role, new_role: newRole },
     });
 
     revalidatePath('/admin/users');
@@ -327,35 +337,6 @@ export async function updateUserRoleAction(userId: string, newRole: 'client' | '
     return { success: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error updating user role';
-    return { error: msg };
-  }
-}
-
-export async function toggleUserStatusAction(userId: string, newStatus: 'active' | 'suspended') {
-  try {
-    const adminUser = await requireAdmin();
-    const supabase = await createServiceClient();
-    const verificationStatus = newStatus === 'suspended' ? 'rejected' : 'verified';
-    const { error } = await supabase
-      .from('user_accounts')
-      .update({ verification_status: verificationStatus })
-      .eq('id', userId);
-
-    if (error) return { error: error.message };
-
-    await writeAuditLog({
-      actorId: adminUser.id,
-      action: newStatus === 'suspended' ? 'user.suspended' : 'user.reinstated',
-      targetType: 'user_account',
-      targetId: userId,
-      details: { status: newStatus },
-    });
-
-    revalidatePath('/admin/users');
-    revalidatePath('/admin/dashboard');
-    return { success: true };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Error updating user status';
     return { error: msg };
   }
 }

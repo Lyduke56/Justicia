@@ -9,6 +9,7 @@ import type { AdminUserAccount } from '@/types/admin';
 import { stamp } from '../overview/activity';
 import { CAPS } from '../table/kit';
 import { ROLE_META, type UserRole } from './model';
+import { AccountStandingPanel } from './AccountStandingPanel';
 
 /**
  * Manage an account, in the shared neumorphic modal: its details, a role switch (the caramel
@@ -198,6 +199,7 @@ export function UserAccountModal({ user, onClose, onRoleChanged }: { user: Admin
             Send link
           </NeuButton>
         </div>
+        {user.role !== 'admin' && <AccountStandingPanel userId={user.id} onChanged={() => void onRoleChanged()} />}
         {user.role === 'lawyer' && (
           <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5">
             <div className="min-w-0">

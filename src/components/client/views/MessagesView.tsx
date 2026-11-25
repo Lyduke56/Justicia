@@ -540,7 +540,8 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
     markThreadSeenAction(threadId)
       .then((res) => {
         if ('messageId' in res && res.messageId && res.seenAt) patchExtras(threadId, res.messageId, { seenAt: res.seenAt });
-        else seenRequestedRef.current.delete(requestedFor);
+        // With read receipts hidden nothing is recorded; don't ask again for this message.
+        else if (!('hidden' in res && res.hidden)) seenRequestedRef.current.delete(requestedFor);
       })
       .catch(() => seenRequestedRef.current.delete(requestedFor));
   }, [chatOnScreen, activeThreadId, lastTheirs, lastTheirsSeen, patchExtras]);

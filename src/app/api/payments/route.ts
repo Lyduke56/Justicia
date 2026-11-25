@@ -1,25 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { notImplementedResponse } from '@/lib/api/notImplemented';
 
 /**
- * Payments API Route
+ * Payments API (reserved).
  *
- * All payment operations are server-side only. Never expose payment keys to the client.
- * Target: PayMongo (Philippine gateway) or Stripe.
- *
- * TODO: POST /api/payments/intent — create payment intent (calls paymentGateway.ts)
- * TODO: POST /api/payments/confirm — confirm payment after client-side 3DS (calls paymentGateway.ts)
- * TODO: POST /api/payments/webhook — receive webhook from payment provider, update payments table
- *   - Verify webhook signature
- *   - Update payment status
- *   - Trigger consultation confirmation
- *   - Send email receipt
+ * Justicia uses manual proof of payment: the client uploads a receipt and the lawyer verifies it
+ * (submitPaymentProofAction / reviewPaymentAction in src/app/actions/consultationActions.ts).
+ * There is no payment gateway, so this route returns 501 instead of a fake success.
  */
+export const dynamic = 'force-dynamic';
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  const body = await request.json();
-  console.log('[/api/payments] POST stub received:', body);
-  return NextResponse.json({
-    data: null,
-    message: '[STUB] POST /api/payments — payment integration not yet implemented',
-  }, { status: 201 });
-}
+const respond = () => notImplementedResponse('Online payment');
+export { respond as GET, respond as POST, respond as PATCH, respond as DELETE };

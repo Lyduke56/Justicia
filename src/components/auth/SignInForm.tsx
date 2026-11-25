@@ -4,6 +4,7 @@ import React, { useActionState, useRef, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence, useReducedMotion, type Variants } from 'motion/react';
 import { signInAction, type AuthState } from '@/app/actions/auth';
+import { ResendVerificationButton } from './ResendVerificationButton';
 
 // ─── Font Configuration (Adjust font sizes directly here) ─────────────────────
 export const FONT_CONFIG = {
@@ -217,6 +218,15 @@ export function SignInForm({
             className={getInputClass(variant, state?.field === 'email')}
           />
           <FieldError message={state?.field === 'email' ? state.error : undefined} variant={variant} />
+          {state?.resendEmail && (
+            <ResendVerificationButton
+              email={state.resendEmail}
+              className={`mt-1 text-[11px] sm:text-xs font-inter font-semibold underline underline-offset-2 transition-colors cursor-pointer disabled:opacity-60 ${
+                isNeumorphic ? 'text-[#99431E] hover:text-[#34150F]' : 'text-[#c59341] hover:text-[#d6a54f]'
+              }`}
+              messageClassName={`text-[11px] sm:text-xs font-inter ${isNeumorphic ? 'text-[#7A604D]' : 'text-[#8c7a6a]'}`}
+            />
+          )}
         </motion.div>
 
         {/* Password */}

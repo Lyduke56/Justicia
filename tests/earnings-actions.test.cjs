@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 const ts = require('typescript');
+const { extraModule } = require('./support/extraModules.cjs');
 
 const LAWYER = '22222222-2222-4222-8222-000000000001';
 const LAWYER_2 = '22222222-2222-4222-8222-000000000002';
@@ -266,6 +267,8 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
         }),
       };
     }
+    const extra = extraModule(name);
+    if (extra) return extra;
     throw new Error(`unexpected import ${name}`);
   };
   vm.runInNewContext(compiled, {
@@ -308,7 +311,8 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
   const proofForm = (consultationId, name = 'receipt.png') => {
     const fd = new FormData();
     fd.set('consultationId', consultationId);
-    fd.set('file', new File([new Uint8Array([1, 2, 3])], name, { type: 'image/png' }));
+    // A real PNG header: uploads are checked against their extension by content.
+    fd.set('file', new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13])], name, { type: 'image/png' }));
     return fd;
   };
 

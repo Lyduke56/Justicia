@@ -10,6 +10,11 @@ import type { Database } from '@/types/database';
 export async function updateSession(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-pathname', request.nextUrl.pathname);
+  // One id per request, readable by server code (headers()) and returned to the caller for support.
+  const requestId = /^[\w-]{8,64}$/.test(request.headers.get('x-request-id') ?? '')
+    ? request.headers.get('x-request-id')!
+    : crypto.randomUUID();
+  requestHeaders.set('x-request-id', requestId);
 
   let supabaseResponse = NextResponse.next({
     request: {
@@ -47,5 +52,6 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  supabaseResponse.headers.set('x-request-id', requestId);
   return { supabaseResponse, user };
 }

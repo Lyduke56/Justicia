@@ -1,13 +1,20 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { signUpAction } from '@/app/actions/auth';
 import { saveLawyerDraftAction, submitLawyerApplicationAction } from '@/app/actions/lawyerRegistration';
+import type { VerificationDocumentView } from '@/app/actions/lawyerVerificationDocs';
+import { VerificationDocumentsPanel } from './VerificationDocumentsPanel';
+import { REQUIRED_DOCUMENT_TYPES, documentGapMessage } from '@/lib/lawyer/verification';
 
 interface ExistingUser { id: string; email: string; fullName?: string }
 
-const STEPS = ['Account', 'Credentials', 'Profile', 'Review & Submit'] as const;
-type Step = 0 | 1 | 2 | 3;
+const STEPS = ['Account', 'Credentials', 'Documents', 'Profile', 'Review & Submit'] as const;
+type Step = 0 | 1 | 2 | 3 | 4;
+/** Step numbers (the documents step sits between credentials and profile). */
+const PROFILE_STEP = 3;
+const REVIEW_STEP = 4;
 
 const IBP_CHAPTERS = [
   'NCR — Makati','NCR — Manila','NCR — Quezon City','NCR — Pasig','NCR — Taguig',
@@ -91,8 +98,10 @@ export function LawyerRegisterForm({
     feeStandard: draft?.fee_standard_60min != null ? String(draft.fee_standard_60min) : '',
     feeExtended: draft?.fee_extended_120min != null ? String(draft.fee_extended_120min) : '',
   });
-  const [errors, setErrors] = useState<Partial<Record<keyof FormState | 'general', string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState | 'general' | 'documents', string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [documents, setDocuments] = useState<VerificationDocumentView[]>([]);
+  const documentGap = documentGapMessage(documents.map((d) => ({ docType: d.docType, reviewStatus: d.reviewStatus })));
 
   const set = (field: keyof FormState, value: string | string[]) =>
     setForm(f => ({ ...f, [field]: value }));
@@ -117,7 +126,10 @@ export function LawyerRegisterForm({
       if (!form.ibpChapter) e.ibpChapter = 'IBP Chapter is required';
       if (!form.barPasserYear || isNaN(Number(form.barPasserYear))) e.barPasserYear = 'Valid bar passer year required';
     }
-    if (s === 2) {
+    if (s === 2 && documentGap) {
+      e.documents = documentGap;
+    }
+    if (s === PROFILE_STEP) {
       if (!form.about.trim()) e.about = 'Please write a brief bio';
       if (form.practiceAreas.length === 0) e.practiceAreas = 'Select at least one practice area';
     }
@@ -136,20 +148,22 @@ export function LawyerRegisterForm({
       fd.set('email', form.email);
       fd.set('password', form.password);
       fd.set('role', 'client'); // will be upgraded to lawyer server-side on submission
+      fd.set('accept_terms', 'yes'); // agreement text is shown above the button
       const result = await signUpAction(null, fd);
       setIsSubmitting(false);
       if (result?.error) { setErrors({ general: result.error }); return; }
     }
 
-    // Save draft on steps 1 & 2
-    if (step >= 1) {
+    // Save draft on the credentials and profile steps (documents save as they upload)
+    if (step === 1 || step === PROFILE_STEP) {
       setIsSubmitting(true);
       const fd = buildFormData();
-      await saveLawyerDraftAction(null, fd);
+      const saved = await saveLawyerDraftAction(null, fd);
       setIsSubmitting(false);
+      if (saved?.error) { setErrors({ general: saved.error }); return; }
     }
 
-    setStep((s => (s < 3 ? s + 1 : s) as Step)(step));
+    setStep((s => (s < REVIEW_STEP ? s + 1 : s) as Step)(step));
   };
 
   const buildFormData = (): FormData => {
@@ -169,7 +183,8 @@ export function LawyerRegisterForm({
   };
 
   const handleSubmit = async () => {
-    if (!validate(2)) { setStep(2); return; }
+    if (documentGap) { setErrors({ documents: documentGap }); setStep(2); return; }
+    if (!validate(PROFILE_STEP)) { setStep(PROFILE_STEP); return; }
     setIsSubmitting(true);
     const fd = buildFormData();
     const result = await submitLawyerApplicationAction(null, fd);
@@ -283,6 +298,12 @@ export function LawyerRegisterForm({
           {field('password', 'Password', 'password', 'Min 8 characters')}
           {field('confirmPassword', 'Confirm Password', 'password')}
           <p className="text-xs text-[#7D6855]">You will need to verify your email before your application is reviewed.</p>
+          <p className="text-xs text-[#7D6855]">
+            By creating an account you agree to the{' '}
+            <Link href="/terms" target="_blank" className="text-[#C58B3C] hover:underline">Terms of Service</Link>,{' '}
+            <Link href="/privacy" target="_blank" className="text-[#C58B3C] hover:underline">Privacy Policy</Link> and{' '}
+            <Link href="/ai-disclaimer" target="_blank" className="text-[#C58B3C] hover:underline">AI Disclaimer</Link>.
+          </p>
         </div>
       )}
 
@@ -306,18 +327,27 @@ export function LawyerRegisterForm({
             {errors.ibpChapter && <p className="text-xs text-red-600">{errors.ibpChapter}</p>}
           </div>
           {field('barPasserYear', 'Bar Passer Year', 'number', 'e.g. 2018')}
-          <div className="p-4 rounded-xl bg-[#F5EDE2] border border-[#E8DCCB] space-y-2">
-            <p className="text-sm font-medium text-[#34150F]">Verification Documents</p>
-            <p className="text-xs text-[#7D6855]">
-              Document upload will be available after your account is created and email is verified. 
-              You can submit your application now and upload documents from your lawyer dashboard.
-            </p>
-          </div>
+          <p className="text-xs text-[#7D6855]">Next, you will upload proof of your bar admission, IBP membership and a government ID.</p>
         </div>
       )}
 
-      {/* ─── Step 2: Profile ──────────────────────────────────────────────── */}
+      {/* ─── Step 2: Documents ────────────────────────────────────────────── */}
       {step === 2 && (
+        <div className="space-y-4">
+          <h2 className="font-cormorant text-2xl font-bold text-[#34150F]">Verification Documents</h2>
+          <VerificationDocumentsPanel
+            intro="Upload clear scans or photos. Items marked * are required before you can submit; each file saves as soon as it uploads."
+            onDocumentsChange={(next) => {
+              setDocuments(next);
+              setErrors((e) => ({ ...e, documents: undefined }));
+            }}
+          />
+          {errors.documents && <p className="text-xs text-red-600">{errors.documents}</p>}
+        </div>
+      )}
+
+      {/* ─── Step 3: Profile ──────────────────────────────────────────────── */}
+      {step === PROFILE_STEP && (
         <div className="space-y-4">
           <h2 className="font-cormorant text-2xl font-bold text-[#34150F]">Profile Information</h2>
 
@@ -394,8 +424,8 @@ export function LawyerRegisterForm({
         </div>
       )}
 
-      {/* ─── Step 3: Review & Submit ───────────────────────────────────────── */}
-      {step === 3 && (
+      {/* ─── Step 4: Review & Submit ───────────────────────────────────────── */}
+      {step === REVIEW_STEP && (
         <div className="space-y-4">
           <h2 className="font-cormorant text-2xl font-bold text-[#34150F]">Review & Submit</h2>
           <div className="space-y-3 text-sm">
@@ -407,6 +437,10 @@ export function LawyerRegisterForm({
             <ReviewRow label="Practice Areas" value={form.practiceAreas.join(', ') || 'None'} />
             <ReviewRow label="Languages" value={form.languages.join(', ') || 'None'} />
             <ReviewRow label="Standard Rate" value={form.feeStandard ? `₱${form.feeStandard}/hr` : 'Not set'} />
+            <ReviewRow
+              label="Documents"
+              value={documentGap || `All ${REQUIRED_DOCUMENT_TYPES.length} required documents uploaded${documents.length > REQUIRED_DOCUMENT_TYPES.length ? ' (plus MCLE)' : ''}`}
+            />
           </div>
           <div className="p-4 rounded-xl bg-[#F5EDE2] border border-[#E8DCCB] text-xs text-[#7D6855] space-y-1">
             <p>By submitting, you confirm that all information is accurate and that you are a licensed member of the Integrated Bar of the Philippines.</p>
@@ -427,7 +461,7 @@ export function LawyerRegisterForm({
           </button>
         )}
         <div className="ml-auto">
-          {step < 3 ? (
+          {step < REVIEW_STEP ? (
             <button
               type="button"
               onClick={nextStep}

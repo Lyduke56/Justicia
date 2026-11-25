@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { classifyLegalIssue, retrieveLegalChunks } from '@/lib/ai/retrieval';
 import { chatCompletion } from '@/lib/ai/llmClient';
+import { aiRequestGuard } from '@/lib/security/aiGuard';
 
 
 interface AssistantRequest {
@@ -30,7 +31,15 @@ const DISCLAIMER =
 
 export async function POST(request: NextRequest): Promise<NextResponse<AssistantResponse>> {
   try {
+    const refused = await aiRequestGuard(request);
+    if (refused) {
+      return NextResponse.json(
+        { text: '', citations: [], disclaimer: DISCLAIMER, escalate: false, category: 'unknown' },
+        { status: refused.status, headers: refused.headers }
+      );
+    }
     const body = (await request.json()) as AssistantRequest;
+    if (typeof body?.message === 'string' && body.message.length > 8000) body.message = body.message.slice(0, 8000);
 
     if (!body.message || typeof body.message !== 'string') {
       return NextResponse.json(

@@ -53,7 +53,12 @@ export function clientLines(c: LawyerConsultation): string[] {
     c.client.age != null || c.client.sex
       ? `Age: ${c.client.age ?? 'Not provided'}  |  Sex: ${c.client.sex ?? 'Not provided'}`
       : '';
-  return [ageSex, c.client.address ?? modeLine, `${c.client.email}  |  ${c.client.phone ?? 'No phone on file'}`];
+  return [
+    ageSex,
+    c.client.address ?? modeLine,
+    `${c.client.email}  |  ${c.client.phone ?? 'No phone on file'}`,
+    c.client.contactPreference ?? '',
+  ];
 }
 
 export function canMessage(c: LawyerConsultation): boolean {

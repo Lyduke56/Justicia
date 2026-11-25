@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase/server';
+import { requireRole, UUID_RE } from '@/lib/auth/guards';
 import { formatAttorneyName } from '@/lib/utils/attorneyName';
 import { LawyerDossierView, type DossierLawyer } from '@/components/admin/dossier/LawyerDossierView';
 import { dossierOrigin } from '@/components/admin/dossier/origin';
@@ -19,6 +20,14 @@ interface Props {
 export default async function AdminLawyerDetailPage({ params, searchParams }: Props) {
   const { lawyerId } = await params;
   const { from } = await searchParams;
+  // The admin layout does not stop this page from rendering, so the page checks access itself
+  // before reading anything with the service-role client.
+  try {
+    await requireRole('admin');
+  } catch {
+    notFound();
+  }
+  if (!UUID_RE.test(lawyerId)) notFound();
   const serviceSupabase = await createServiceClient();
 
   // 1. Fetch lawyer profile

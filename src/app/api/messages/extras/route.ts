@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getMessagingSession, loadThreadExtras, resolvePair } from '@/lib/messaging/server';
+import { accountPreferences } from '@/lib/account/preferences';
 
 /**
  * GET /api/messages/extras?threadId=…
@@ -18,7 +19,8 @@ export async function GET(request: NextRequest) {
   if (!pair) return NextResponse.json({ data: { messages: {} } });
 
   try {
-    const data = await loadThreadExtras(session.db, pair, session.user.id);
+    const { hideReadReceipts } = accountPreferences(session.user.user_metadata).messaging;
+    const data = await loadThreadExtras(session.db, pair, session.user.id, { hideReadReceipts });
     return NextResponse.json({ data }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     console.error('[api/messages/extras]', err);

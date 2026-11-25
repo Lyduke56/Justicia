@@ -43,6 +43,20 @@ const supabase = createClient(supabaseUrl, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
+/**
+ * One account per email: refuse to create an auth user when another account (any role or status,
+ * including a profile row left behind by a deleted auth user) already holds the address.
+ */
+async function emailHeldElsewhere(email) {
+  const pattern = email.trim().toLowerCase().replace(/[\\%_]/g, (c) => '\\' + c);
+  for (const table of ['user_accounts', 'profiles']) {
+    const { data, error } = await supabase.from(table).select('email').ilike('email', pattern).limit(1);
+    if (error) throw new Error(`${table} lookup failed: ${error.message}`);
+    if (data && data.length > 0) return true;
+  }
+  return false;
+}
+
 const ADMIN_EMAIL = 'admin@justicia.ph';
 const ADMIN_PASSWORD = 'Password123!';
 const ADMIN_NAME = 'System Administrator';
@@ -60,11 +74,17 @@ async function seedAdmin() {
   let authUser = userList?.users?.find(u => u.email === ADMIN_EMAIL);
 
   if (!authUser) {
+    if (await emailHeldElsewhere(ADMIN_EMAIL)) {
+      console.error(`${ADMIN_EMAIL} is already used by another account record. Not creating a duplicate.`);
+      process.exit(1);
+    }
     const { data: newUser, error: createErr } = await supabase.auth.admin.createUser({
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       email_confirm: true,
-      user_metadata: { full_name: ADMIN_NAME, role: 'admin' },
+      user_metadata: { full_name: ADMIN_NAME },
+      // Server-written role claim read by the proxy (users cannot edit app_metadata).
+      app_metadata: { role: 'admin' },
     });
 
     if (createErr) {
@@ -77,7 +97,8 @@ async function seedAdmin() {
     // Ensure password and metadata
     await supabase.auth.admin.updateUserById(authUser.id, {
       password: ADMIN_PASSWORD,
-      user_metadata: { full_name: ADMIN_NAME, role: 'admin' },
+      user_metadata: { ...authUser.user_metadata, full_name: ADMIN_NAME },
+      app_metadata: { ...authUser.app_metadata, role: 'admin' },
     });
     console.log(`ℹ️ Auth user ${ADMIN_EMAIL} already exists — updated credentials.`);
   }
