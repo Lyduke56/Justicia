@@ -23,6 +23,8 @@ export type LiveScope =
   | 'documents'
   | 'notifications'
   | 'reviews'
+  /** Someone's profile photo changed (top bars, Messages and consultation cards re-read it). */
+  | 'profile'
   /** The account's sessions changed (signed out everywhere, suspended): open tabs re-check. */
   | 'session';
 

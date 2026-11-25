@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { NeuModal, NeuButton, NeuAlert, EmptyState, QrIcon } from '@/components/shared/neu';
+import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
 
 /**
  * Consultation "View Details" modal shared by the client and lawyer portals.
@@ -48,7 +49,8 @@ export interface ConsultationDetailsModalProps {
   timeSlot: string;
   statusLabel: string;
   statusTone: DetailsStatusTone;
-  person: { name: string; lines: string[]; rate?: number | null; onMessage?: () => void };
+  /** `photo`: the person's profile photo (the person icon shows without one). */
+  person: { name: string; lines: string[]; rate?: number | null; onMessage?: () => void; photo?: string | null };
   docket: string;
   caseTitle: string;
   caseDescription: string;
@@ -296,11 +298,17 @@ export function DetailsPersonBanner({ person }: { person: ConsultationDetailsMod
       style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
     >
       <div className="flex items-center gap-3.5 sm:gap-4.5 min-w-0">
-        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-[3px] sm:border-[3.5px] border-[#341512] flex items-center justify-center shrink-0 select-none">
-          <svg className="w-8 h-8 sm:w-10 sm:h-10 text-[#341512]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="12" cy="8" r="3.8" />
-            <path d="M5 20c0-3.8 3.1-6.5 7-6.5s7 2.7 7 6.5" />
-          </svg>
+        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-[3px] sm:border-[3.5px] border-[#341512] flex items-center justify-center shrink-0 select-none overflow-hidden">
+          <ProfilePhoto
+            src={person.photo}
+            className="w-full h-full"
+            fallback={
+              <svg className="w-8 h-8 sm:w-10 sm:h-10 text-[#341512]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="8" r="3.8" />
+                <path d="M5 20c0-3.8 3.1-6.5 7-6.5s7 2.7 7 6.5" />
+              </svg>
+            }
+          />
         </div>
         <div className="space-y-1 min-w-0">
           <h4 className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-tight">{person.name}</h4>

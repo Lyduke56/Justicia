@@ -285,6 +285,28 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
 
   const as = (userId) => { state.userId = userId; return exports; };
 
+  // Consultation extras (attendance, cancellation requests): the real actions, guards and
+  // helpers on the same database double and clock.
+  const realModule = (file, requireFn) => {
+    const mod = {};
+    vm.runInNewContext(compile(file), { exports: mod, Date: clock.Date, console: { error: sink('error'), warn: sink('warn'), log() {} }, require: requireFn });
+    return mod;
+  };
+  const extrasLib = realModule('src/lib/consultations/extras.ts', (n) => { throw new Error(`unexpected import ${n}`); });
+  const extrasRequire = (name) => {
+    if (name === '@/lib/consultations/extras' || name === './extras') return extrasLib;
+    if (name === 'react') return { cache: (fn) => fn };
+    if (name === '@supabase/supabase-js') return { createClient: () => ({}) };
+    if (name === '@/lib/utils/attorneyName') return realModule('src/lib/utils/attorneyName.ts', () => undefined);
+    if (name === '@/lib/auth/guards') return guards;
+    if (name === '@/lib/consultations/extrasServer') return extrasServer;
+    return sandboxRequire(name);
+  };
+  const guards = realModule('src/lib/auth/guards.ts', extrasRequire);
+  const extrasServer = realModule('src/lib/consultations/extrasServer.ts', extrasRequire);
+  const extrasExports = realModule('src/app/actions/consultationExtrasActions.ts', extrasRequire);
+  const asX = (userId) => { state.userId = userId; return extrasExports; };
+
   /** Inserts a consultation the way bookConsultationAction stores it. */
   function seedConsultation({ client = CLIENT, lawyer = LAWYER, status = 'pending', start, end, fee = 1000, extraMeta = {}, practiceArea = null }) {
     const id = uuid();
@@ -334,7 +356,7 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
     return res.data;
   }
 
-  return { state, clock, as, seedConsultation, proofForm, ledger, consultation, payAndConfirm, earnings };
+  return { state, clock, as, asX, extrasServer, seedConsultation, proofForm, ledger, consultation, payAndConfirm, earnings };
 }
 
 const NOV_25_10AM = '2026-11-25T10:00:00+08:00';
@@ -544,13 +566,35 @@ test('a released payout is preserved when the sale is re-synced', async () => {
 
 // ═══ 3. Refunds ═════════════════════════════════════════════════════════════
 
-test('client cancelling a paid booking refunds the sale and removes it from earnings', async () => {
+test('a paid booking is cancelled only when the lawyer accepts the client’s request; the sale is refunded', async () => {
   const f = fixture();
   const id = f.seedConsultation({ start: NOV_25_10AM });
   await f.payAndConfirm(id);
   assert.equal((await f.earnings()).monthlyEarnings[10], 1000);
 
-  assert.equal((await f.as(CLIENT).cancelConsultationAction(id)).success, true);
+  // Direct cancellation of a paid booking is refused (the attorney has to approve it).
+  const direct = await f.as(CLIENT).cancelConsultationAction(id);
+  assert.notEqual(direct.success, true);
+  assert.match(direct.error, /approve/);
+  assert.equal(f.consultation(id).status, 'confirmed');
+
+  const asked = await f.asX(CLIENT).requestCancellationAction(id, 'Family emergency, I cannot attend');
+  assert.equal(asked.success, true, asked.error);
+  assert.equal(f.consultation(id).status, 'confirmed', 'still booked while the request is open');
+  assert.ok(f.state.tables.notifications.some((n) => n.user_id === LAWYER && n.type === 'consultation_cancellation_requested'));
+  assert.notEqual((await f.asX(CLIENT).requestCancellationAction(id, 'Asking a second time')).success, true, 'one open request at a time');
+  assert.notEqual((await f.asX(LAWYER).requestCancellationAction(id, 'Lawyer cannot request')).success, true);
+
+  const accepted = await f.asX(LAWYER).respondToCancellationRequestAction(id, 'accept');
+  assert.equal(accepted.success, true, accepted.error);
+  assert.equal(f.consultation(id).status, 'cancelled');
+  assert.equal(f.consultation(id).cancelled_by, CLIENT);
+  const meta = JSON.parse(f.consultation(id).concern_summary);
+  assert.equal(meta.cancellationReason, 'Family emergency, I cannot attend');
+  assert.equal(meta.refundStatus, 'pending');
+  assert.equal(meta.cancellationRequest, null);
+  assert.equal(meta.cancellationRequestHistory.at(-1).status, 'accepted');
+  assert.ok(f.state.tables.notifications.some((n) => n.user_id === CLIENT && n.type === 'consultation_cancelled'));
   assert.equal(f.ledger(id)[0].status, 'refunded');
   assert.equal(f.ledger(id)[0].payout_status, 'not_applicable');
   const data = await f.earnings();
@@ -558,6 +602,77 @@ test('client cancelling a paid booking refunds the sale and removes it from earn
   assert.equal(data.transactions.length, 0);
   assert.equal(data.inquiries[0].status, 'cancelled');
   assert.equal(data.monthlyConsultations[10], 0);
+});
+
+test('declined or withdrawn cancellation requests keep the paid booking; requests lapse at the start', async () => {
+  const f = fixture();
+  const id = f.seedConsultation({ start: NOV_25_10AM });
+  await f.payAndConfirm(id);
+
+  await f.asX(CLIENT).requestCancellationAction(id, 'Schedule conflict at work');
+  assert.notEqual((await f.asX(LAWYER).respondToCancellationRequestAction(id, 'decline', 'no')).success, true, 'decline needs a reason');
+  assert.equal((await f.asX(LAWYER).respondToCancellationRequestAction(id, 'decline', 'Too close to the session')).success, true);
+  assert.equal(f.consultation(id).status, 'confirmed');
+  assert.equal(f.ledger(id)[0].status, 'paid');
+  let view = f.extrasServer.buildExtras(f.consultation(id), CLIENT, f.clock.now);
+  assert.equal(view.cancellation.pending, null);
+  assert.equal(view.cancellation.last.status, 'declined');
+  assert.equal(view.cancellation.last.responseReason, 'Too close to the session');
+  assert.equal(view.cancellation.canRequest, true);
+
+  await f.asX(CLIENT).requestCancellationAction(id, 'Asking again with more detail');
+  assert.equal((await f.asX(CLIENT).withdrawCancellationRequestAction(id)).success, true);
+  assert.equal(f.consultation(id).status, 'confirmed');
+  assert.equal(f.extrasServer.buildExtras(f.consultation(id), LAWYER, f.clock.now).cancellation.last.status, 'withdrawn');
+
+  // An unanswered request lapses when the session starts; nobody can act on it afterwards.
+  await f.asX(CLIENT).requestCancellationAction(id, 'Third time, still need to cancel');
+  f.clock.set('2026-11-25T10:05:00+08:00');
+  view = f.extrasServer.buildExtras(f.consultation(id), CLIENT, f.clock.now);
+  assert.equal(view.cancellation.pending, null);
+  assert.equal(view.cancellation.last.status, 'expired');
+  assert.equal(view.cancellation.canRequest, false);
+  assert.notEqual((await f.asX(LAWYER).respondToCancellationRequestAction(id, 'accept')).success, true);
+  assert.equal(f.consultation(id).status, 'confirmed');
+});
+
+test('join window: the client joins from 1 hour before the start; a session nobody joined is missed', async () => {
+  const f = fixture({ now: '2026-11-26T07:00:00+08:00' });
+  const id = f.seedConsultation({ start: '2026-11-26T10:00:00+08:00' });
+  await f.payAndConfirm(id);
+
+  const early = await f.asX(CLIENT).recordMeetingJoinAction(id);
+  assert.notEqual(early.success, true);
+  assert.match(early.error, /1 hour before/);
+  const lawyerEarly = await f.asX(LAWYER).recordMeetingJoinAction(id);
+  assert.equal(lawyerEarly.success, true, 'the lawyer may open the meeting any time');
+  assert.equal(lawyerEarly.recorded, false, '…but it only counts inside the window');
+
+  f.clock.set('2026-11-26T09:05:00+08:00');
+  const client = await f.asX(CLIENT).recordMeetingJoinAction(id);
+  assert.equal(client.success, true, client.error);
+  assert.equal(client.recorded, true);
+  assert.equal((await f.asX(CLIENT).recordMeetingJoinAction(id)).recorded, false, 'only the first join is kept');
+
+  // Lawyer never joined: once the session ends, it is missed for both views, naming the lawyer.
+  f.clock.set('2026-11-26T11:01:00+08:00');
+  const asClient = f.extrasServer.buildExtras(f.consultation(id), CLIENT, f.clock.now);
+  assert.deepEqual(JSON.parse(JSON.stringify(asClient.attendance.missed)), { client: false, lawyer: true });
+  assert.equal(f.extrasServer.buildExtras(f.consultation(id), LAWYER, f.clock.now).side, 'lawyer');
+  assert.notEqual((await f.asX(CLIENT).recordMeetingJoinAction(id)).success, true, 'joining closes at the end');
+  assert.notEqual((await f.asX(CLIENT_2).recordMeetingJoinAction(id)).success, true, 'strangers cannot join');
+});
+
+test('sessions before attendance tracking began, or that both sides joined, are never missed', async () => {
+  const f = fixture({ now: '2026-11-26T12:00:00+08:00' });
+  const old = f.seedConsultation({ status: 'confirmed', start: '2026-11-25T09:00:00+08:00' });
+  const both = f.seedConsultation({
+    status: 'confirmed',
+    start: '2026-11-26T09:00:00+08:00',
+    extraMeta: { meetingJoins: { client: '2026-11-26T00:55:00Z', lawyer: '2026-11-26T01:00:00Z' } },
+  });
+  assert.equal(f.extrasServer.buildExtras(f.consultation(old), CLIENT, f.clock.now).attendance.missed, null);
+  assert.equal(f.extrasServer.buildExtras(f.consultation(both), CLIENT, f.clock.now).attendance.missed, null);
 });
 
 test('lawyer cancelling a paid booking refunds the sale', async () => {
@@ -769,9 +884,14 @@ test('every step of the payment flow signals both people with the right scopes',
   assert.ok(signalsFor(f.state, LAWYER).includes('payments'), 'the lawyer’s own Earnings tab refreshes too');
 
   f.state.signals = [];
-  await f.as(CLIENT).cancelConsultationAction(id);
+  await f.asX(CLIENT).requestCancellationAction(id, 'Family emergency, I cannot attend');
+  assert.ok(signalsFor(f.state, LAWYER).includes('notifications'), 'the lawyer hears about the request');
+  assert.ok(signalsFor(f.state, LAWYER).includes('consultations'));
+
+  f.state.signals = [];
+  await f.asX(LAWYER).respondToCancellationRequestAction(id, 'accept');
   assert.ok(signalsFor(f.state, LAWYER).includes('payments'), 'refund updates the lawyer’s earnings live');
-  assert.ok(signalsFor(f.state, LAWYER).includes('notifications'));
+  assert.ok(signalsFor(f.state, CLIENT).includes('notifications'));
 });
 
 test('failed or rejected actions send no signals', async () => {

@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react';
 import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
-import { signOutAction } from '@/app/actions/auth';
+import { SignOutConfirmModal } from '@/components/shared/SignOutConfirmModal';
 import { GearIcon, LogoutIcon } from './ClientIcons';
 
 /**
@@ -107,8 +107,9 @@ function SidebarBody({
   settingsActive,
   onSelect,
   onSettings,
+  onSignOut,
   pillId,
-}: Omit<ClientSidebarProps, 'mobileOpen' | 'onCloseMobile' | 'ariaLabel'> & { pillId: string }) {
+}: Omit<ClientSidebarProps, 'mobileOpen' | 'onCloseMobile' | 'ariaLabel'> & { pillId: string; onSignOut: () => void }) {
   return (
     <>
       <motion.nav
@@ -145,9 +146,7 @@ function SidebarBody({
           onClick={onSettings}
           pillId={pillId}
         />
-        <form action={signOutAction}>
-          <SidebarRow icon={LogoutIcon} label="Logout" type="submit" tone="danger" pillId={pillId} />
-        </form>
+        <SidebarRow icon={LogoutIcon} label="Logout" onClick={onSignOut} tone="danger" pillId={pillId} />
       </motion.div>
     </>
   );
@@ -156,6 +155,7 @@ function SidebarBody({
 // ─── Component ────────────────────────────────────────────────────────────────
 export function ClientSidebar(props: ClientSidebarProps) {
   const { mobileOpen, onCloseMobile, onSelect, onSettings, ariaLabel = 'Client portal navigation', ...rest } = props;
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   // Esc closes the mobile drawer.
   useEffect(() => {
@@ -172,7 +172,7 @@ export function ClientSidebar(props: ClientSidebarProps) {
         className="client-sidebar hidden w-64 shrink-0 flex-col justify-between overflow-y-auto border-r border-[#341512]/10 px-4 pb-8 pt-10 md:flex"
         aria-label={ariaLabel}
       >
-        <SidebarBody {...rest} onSelect={onSelect} onSettings={onSettings} pillId="client-side-pill" />
+        <SidebarBody {...rest} onSelect={onSelect} onSettings={onSettings} onSignOut={() => setSignOutOpen(true)} pillId="client-side-pill" />
       </aside>
 
       {/* ── Mobile drawer ── */}
@@ -216,12 +216,15 @@ export function ClientSidebar(props: ClientSidebarProps) {
                   pillId="client-side-pill-mobile"
                   onSelect={(key) => { onSelect(key); onCloseMobile(); }}
                   onSettings={() => { onSettings(); onCloseMobile(); }}
+                  onSignOut={() => { onCloseMobile(); setSignOutOpen(true); }}
                 />
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
+      <SignOutConfirmModal open={signOutOpen} onClose={() => setSignOutOpen(false)} />
     </MotionConfig>
   );
 }

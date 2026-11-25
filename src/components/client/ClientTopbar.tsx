@@ -3,7 +3,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react';
 import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
-import { signOutAction } from '@/app/actions/auth';
+import { SignOutConfirmModal } from '@/components/shared/SignOutConfirmModal';
+import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
+import { useMyAvatar } from '@/components/account/avatarStore';
 import type { LiveResources } from '@/lib/live/fetchLive';
 import {
   BellIcon,
@@ -35,7 +37,7 @@ type Notification = LiveResources['notifications'][number];
 type MenuKey = 'notifications' | 'user' | null;
 
 interface ClientTopbarProps {
-  user: { fullName: string; email?: string };
+  user: { fullName: string; email?: string; avatarUrl?: string | null };
   /** Extra identity line under the email in the account card (e.g. a lawyer's roll number). */
   accountDetail?: string;
   /** localStorage key for the "notifications seen" timestamp; separate per portal. */
@@ -256,6 +258,8 @@ export function ClientTopbar({
   onToggleMobileMenu,
 }: ClientTopbarProps) {
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
+  const myAvatar = useMyAvatar(user.avatarUrl);
+  const [signOutOpen, setSignOutOpen] = useState(false);
   // Notifications load client-side after mount, so reading storage here can't cause a hydration mismatch.
   const [seenAt, setSeenAt] = useState(() => (typeof window === 'undefined' ? 0 : readSeenAt(seenKey)));
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
@@ -485,7 +489,7 @@ export function ClientTopbar({
               expanded={openMenu === 'user'}
               onClick={() => toggle('user')}
             >
-              <UserCircleIcon className="h-[30px] w-[30px] [stroke-width:2]" />
+              <ProfilePhoto src={myAvatar} className="h-[30px] w-[30px] ring-2 ring-[#E5D8CB]" fallback={<UserCircleIcon className="h-[30px] w-[30px] [stroke-width:2]" />} />
             </NavIconButton>
 
             <AnimatePresence>
@@ -495,7 +499,7 @@ export function ClientTopbar({
                   <motion.div variants={ITEM} className="client-neu-well flex items-center gap-3 rounded-[18px] p-3">
                     <span className="client-avatar-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-full">
                       <span className="client-avatar flex h-9 w-9 items-center justify-center rounded-full font-lora text-[13px] font-semibold leading-none">
-                        {initials(user.fullName)}
+                        {myAvatar ? <ProfilePhoto src={myAvatar} className="h-9 w-9" fallback={initials(user.fullName)} /> : initials(user.fullName)}
                       </span>
                     </span>
                     <div className="min-w-0">
@@ -522,18 +526,26 @@ export function ClientTopbar({
 
                   <motion.div variants={ITEM} className="client-neu-groove mx-2" aria-hidden />
 
-                  <motion.form variants={ITEM} action={signOutAction} className="pt-2">
-                    <button type="submit" role="menuitem" className="client-neu-item" data-tone="danger">
+                  <motion.div variants={ITEM} className="pt-2">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { close(); setSignOutOpen(true); }}
+                      className="client-neu-item"
+                      data-tone="danger"
+                    >
                       <span className="client-neu-chip"><LogoutIcon className="h-[17px] w-[17px] [stroke-width:2.1]" /></span>
                       <span className="flex-1">Sign Out</span>
                     </button>
-                  </motion.form>
+                  </motion.div>
                 </Popover>
               )}
             </AnimatePresence>
           </div>
         </div>
       </header>
+
+      <SignOutConfirmModal open={signOutOpen} onClose={() => setSignOutOpen(false)} />
     </MotionConfig>
   );
 }

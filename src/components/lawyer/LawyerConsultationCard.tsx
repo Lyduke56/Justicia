@@ -9,7 +9,9 @@ import {
   DetailsStatusRow,
 } from '@/components/shared/ConsultationDetailsModal';
 import { NeuAlert, NeuButton, VideoIcon } from '@/components/shared/neu';
-import { DETAIL_STATUS_LABELS, canMessage, clientLines, detailStatusTone, isSample } from './useLawyerConsultationActions';
+import { canMessage, clientLines, isSample, statusLabelOf, statusToneOf } from './useLawyerConsultationActions';
+import { joinState, type ConsultationExtras } from '@/lib/consultations/extras';
+import { usePeopleAvatars } from '@/components/account/avatarStore';
 import { CARD_ITEM, CARD_POP } from './motion';
 
 /**
@@ -34,6 +36,8 @@ export interface ConsultationCardHandlers {
   onApprove?: (c: LawyerConsultation) => void;
   onDecline?: (c: LawyerConsultation) => void;
   onReschedule?: (c: LawyerConsultation) => void;
+  /** Open the client's cancellation request (accept / decline). */
+  onReviewCancellation?: (c: LawyerConsultation) => void;
 }
 
 const BTN_BASE =
@@ -48,13 +52,28 @@ export function LawyerConsultationCard({
   c,
   previewLines = 3,
   fill = false,
+  extras = null,
+  now = 0,
   ...h
-}: { c: LawyerConsultation; previewLines?: number; fill?: boolean } & ConsultationCardHandlers) {
+}: {
+  c: LawyerConsultation;
+  previewLines?: number;
+  fill?: boolean;
+  /** Attendance and cancellation request (useConsultationExtras). */
+  extras?: ConsultationExtras | null;
+  /** Current time for the session window (epoch ms). */
+  now?: number;
+} & ConsultationCardHandlers) {
   const sample = isSample(c);
+  const clientPhoto = usePeopleAvatars(sample ? [] : [c.clientId])[c.clientId] ?? null;
   // Samples show the button too (it does nothing), but never on a closed consultation.
   const messageable = canMessage(c) || (sample && c.status !== 'declined' && c.status !== 'cancelled');
   const shared = c.attachedFiles.length;
   const pendingReschedule = c.reschedule?.pending ?? null;
+  const ax = c.status === 'confirmed' ? extras : null;
+  // Once the session is over (or missed) there is nothing left to cancel or join.
+  const sessionOver = !!ax?.attendance.missed || (!!now && joinState(ax?.attendance, now) === 'ended');
+  const cancelRequest = !sessionOver ? ax?.cancellation.pending ?? null : null;
 
   return (
     <div className={`flex flex-col gap-4 sm:gap-5 ${fill ? 'xl:min-h-0 xl:flex-1' : ''}`}>
@@ -63,12 +82,27 @@ export function LawyerConsultationCard({
           fit
           dateStr={c.dateTag}
           timeSlot={c.timeTag}
-          statusLabel={DETAIL_STATUS_LABELS[c.status]}
-          statusTone={detailStatusTone(c.status)}
+          statusLabel={statusLabelOf(c, ax)}
+          statusTone={statusToneOf(c, ax)}
         />
       </motion.div>
 
       <AnimatePresence initial={false}>
+        {cancelRequest && h.onReviewCancellation && (
+          <NeuAlert
+            key="cancellation"
+            tone="warning"
+            className="shrink-0"
+            title={`${c.client.name} asked to cancel`}
+            action={
+              <NeuButton size="sm" variant="secondary" onClick={() => h.onReviewCancellation?.(c)}>
+                Review
+              </NeuButton>
+            }
+          >
+            Reason: {cancelRequest.reason}
+          </NeuAlert>
+        )}
         {pendingReschedule && h.onReschedule && (
           <NeuAlert
             key="reschedule"
@@ -92,7 +126,7 @@ export function LawyerConsultationCard({
 
       <motion.div variants={CARD_ITEM} className="shrink-0">
         <DetailsPersonBanner
-          person={{ name: c.client.name, lines: clientLines(c), onMessage: messageable ? () => h.onMessage(c) : undefined }}
+          person={{ name: c.client.name, lines: clientLines(c), onMessage: messageable ? () => h.onMessage(c) : undefined, photo: clientPhoto }}
         />
       </motion.div>
 
@@ -124,7 +158,7 @@ export function LawyerConsultationCard({
               Decline
             </button>
           )}
-          {c.status === 'confirmed' && (
+          {c.status === 'confirmed' && !sessionOver && (
             <button type="button" onClick={() => h.onCancel(c)} disabled={sample} title={sample ? SAMPLE_TITLE : undefined} className={OUTLINE}>
               Cancel
             </button>
@@ -137,7 +171,7 @@ export function LawyerConsultationCard({
               Approve
             </button>
           )}
-          {c.status === 'confirmed' && (
+          {c.status === 'confirmed' && !sessionOver && (
             <button
               type="button"
               onClick={() => h.onJoin(c)}

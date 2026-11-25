@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { changeAccountPasswordAction, type PersonalAccount } from '@/app/actions/accountActions';
 import { ResendVerificationButton } from '@/components/auth/ResendVerificationButton';
 import { LEGAL_DOCUMENTS } from '@/lib/legal';
+import { SignOutConfirmModal } from '@/components/shared/SignOutConfirmModal';
 import { accountInputClass, accountButtonClass } from './PersonalProfileCard';
 import {
   NOTIFICATION_ROWS,
@@ -14,7 +15,6 @@ import {
   useDataExport,
   useDeleteAccount,
   usePreferenceToggles,
-  useSignOutEverywhere,
 } from './useAccountControls';
 
 const cardClass = 'rounded-2xl p-6 bg-[#EFE5D8] shadow-[5px_5px_12px_rgba(0,0,0,0.06),-5px_-5px_12px_rgba(255,255,255,0.85)] border border-[#E8DCCB]/60 space-y-4';
@@ -23,7 +23,7 @@ const dangerButtonClass = 'rounded-lg bg-[#9A3B2E] px-4 py-2 text-xs font-medium
 
 export function AccountSettings({ account }: { account: PersonalAccount }) {
   const prefs = usePreferenceToggles(account);
-  const signOutAll = useSignOutEverywhere();
+  const [signOutAllOpen, setSignOutAllOpen] = useState(false);
   const consent = useConsent();
   const dataExport = useDataExport();
   const deletion = useDeleteAccount();
@@ -77,9 +77,8 @@ export function AccountSettings({ account }: { account: PersonalAccount }) {
       </div>}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E5D7C5] pt-3 text-xs text-[#5C4535]">
         <span>Sign out on every device and browser, including this one.</span>
-        <button type="button" disabled={signOutAll.pending} onClick={signOutAll.run} className={quietButtonClass}>{signOutAll.pending ? 'Signing out…' : 'Sign out everywhere'}</button>
+        <button type="button" onClick={() => setSignOutAllOpen(true)} className={quietButtonClass}>Sign out everywhere</button>
       </div>
-      {signOutAll.error && <p role="alert" className="text-xs text-red-700">{signOutAll.error}</p>}
       {!passwordOpen ? <button type="button" onClick={() => { setPasswordOpen(true); setPasswordMessage(''); }} className={accountButtonClass}>Change password</button> : <form onSubmit={(event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
@@ -136,5 +135,6 @@ export function AccountSettings({ account }: { account: PersonalAccount }) {
         </form>}
       </div>
     </div>
+    <SignOutConfirmModal open={signOutAllOpen} onClose={() => setSignOutAllOpen(false)} everywhere />
   </div>;
 }

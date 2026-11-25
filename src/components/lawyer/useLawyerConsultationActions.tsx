@@ -16,6 +16,10 @@ import {
 } from '@/components/shared/ConsultationDetailsModal';
 import { ConsultationDecisionModal, type DecisionMode } from '@/components/lawyer/ConsultationDecisionModal';
 import { RescheduleModal, type RescheduleModalMode } from '@/components/shared/RescheduleModal';
+import { CancellationRequestModal } from '@/components/shared/CancellationRequestModal';
+import { useConsultationExtras } from '@/components/consultations/useConsultationExtras';
+import { usePeopleAvatars } from '@/components/account/avatarStore';
+import { joinState, missedSummary, type ConsultationExtras } from '@/lib/consultations/extras';
 
 /**
  * Lawyer-side consultation actions with their modals: View Details, approve / decline,
@@ -45,6 +49,17 @@ export function detailStatusTone(status: LawyerConsultation['status']): DetailsS
 }
 
 export const isSample = (c: Pick<LawyerConsultation, 'id'>) => c.id.startsWith('demo-');
+
+/** A confirmed session that ended without one side joining (see useConsultationExtras). */
+export const isMissed = (c: Pick<LawyerConsultation, 'status'>, extras: ConsultationExtras | null | undefined) =>
+  c.status === 'confirmed' && !!extras?.attendance.missed;
+
+/** Status pill text, with missed consultations called out. */
+export const statusLabelOf = (c: Pick<LawyerConsultation, 'status'>, extras: ConsultationExtras | null | undefined) =>
+  isMissed(c, extras) ? 'MISSED CONSULTATION' : DETAIL_STATUS_LABELS[c.status];
+
+export const statusToneOf = (c: Pick<LawyerConsultation, 'status'>, extras: ConsultationExtras | null | undefined): DetailsStatusTone =>
+  isMissed(c, extras) ? 'red' : detailStatusTone(c.status);
 
 /** Lines under the client's name: age / sex, address (or how they meet), contact. */
 export function clientLines(c: LawyerConsultation): string[] {
@@ -80,6 +95,11 @@ export function useLawyerConsultationActions({
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [reschedule, setReschedule] = useState<{ mode: RescheduleModalMode; id: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [cancelReviewId, setCancelReviewId] = useState<string | null>(null);
+  // Attendance (missed consultations) and clients' cancellation requests.
+  const { extrasFor, now, joinMeeting, reload: reloadExtras } = useConsultationExtras();
+  // Clients' profile photos (View Details), kept live.
+  const clientPhotos = usePeopleAvatars(consultations.map((c) => c.clientId));
 
   const find = useCallback((id: string | null) => (id ? consultations.find((c) => c.id === id) ?? null : null), [consultations]);
 
@@ -102,9 +122,19 @@ export function useLawyerConsultationActions({
     [router]
   );
 
-  const joinMeet = useCallback((c: LawyerConsultation) => {
-    if (isSample(c) || !c.meetingLink) return;
-    window.open(c.meetingLink, '_blank', 'noopener,noreferrer');
+  /** Opens the Meet link and records the join (it counts toward attendance inside the join window). */
+  const joinMeet = useCallback(
+    (c: LawyerConsultation) => {
+      if (isSample(c) || !c.meetingLink) return;
+      joinMeeting(c.id, c.meetingLink);
+    },
+    [joinMeeting]
+  );
+
+  const openCancellationReview = useCallback((c: LawyerConsultation) => {
+    if (isSample(c)) return;
+    setDetailsId(null);
+    setCancelReviewId(c.id);
   }, []);
 
   const openReschedule = useCallback((c: LawyerConsultation) => {
@@ -158,12 +188,24 @@ export function useLawyerConsultationActions({
     const paid = c.status === 'confirmed' || c.status === 'completed';
     const hasSummary = paid || c.status === 'pending_payment' || c.status === 'payment_review';
     const pd = c.paymentDetails;
+    const ax = c.status === 'confirmed' ? extrasFor(c.id) : null;
+    const missed = ax?.attendance.missed ?? null;
+    const sessionOver = !!missed || joinState(ax?.attendance, now) === 'ended';
+    const cancelPending = ax?.cancellation.pending ?? null;
 
     let detailNotice: ConsultationDetailsModalProps['notice'] = null;
     if (c.declineReason) detailNotice = { tone: 'red', title: 'Reason for Declining', text: c.declineReason };
     else if (c.cancellationReason) detailNotice = { tone: 'red', title: 'Reason for Cancellation', text: c.cancellationReason };
     else if (c.status === 'pending_payment' && pd.state === 'rejected' && pd.rejectionReason) {
       detailNotice = { tone: 'amber', title: 'You declined the previous proof of payment', text: pd.rejectionReason };
+    } else if (missed) {
+      detailNotice = { tone: 'red', title: 'Missed consultation', text: missedSummary(missed, 'lawyer', c.client.name) };
+    } else if (cancelPending) {
+      detailNotice = {
+        tone: 'amber',
+        title: `${c.client.name} asked to cancel`,
+        text: `Accept to cancel this paid consultation (the payment is marked for a refund), or decline to keep it booked.\nReason: ${cancelPending.reason}`,
+      };
     } else if (c.reschedule?.pending) {
       const p = c.reschedule.pending;
       detailNotice = p.byMe
@@ -197,7 +239,12 @@ export function useLawyerConsultationActions({
         { label: 'Decline', variant: 'outline', onClick: () => openDecision('decline_payment', c.id) },
         { label: 'Confirm Payment', variant: 'caramel', onClick: () => openDecision('confirm_payment', c.id) },
       ];
-    } else if (c.status === 'confirmed') {
+    } else if (c.status === 'confirmed' && cancelPending && !sessionOver) {
+      actions = [
+        { label: 'Close', variant: 'outline', onClick: close },
+        { label: 'Review Cancellation', variant: 'caramel', onClick: () => openCancellationReview(c) },
+      ];
+    } else if (c.status === 'confirmed' && !sessionOver) {
       actions = [
         { label: 'Cancel', variant: 'outline', onClick: () => openDecision('cancel', c.id) },
         {
@@ -215,10 +262,11 @@ export function useLawyerConsultationActions({
     return {
       dateStr: c.dateTag,
       timeSlot: c.timeTag,
-      statusLabel: DETAIL_STATUS_LABELS[c.status],
-      statusTone: detailStatusTone(c.status),
+      statusLabel: statusLabelOf(c, ax),
+      statusTone: statusToneOf(c, ax),
       person: {
         name: c.client.name,
+        photo: isSample(c) ? null : clientPhotos[c.clientId] ?? null,
         lines: clientLines(c),
         onMessage: canMessage(c) ? () => openMessages(c) : undefined,
       },
@@ -253,6 +301,7 @@ export function useLawyerConsultationActions({
   const detailsTarget = find(detailsId);
   const decisionTarget = find(decision?.id ?? null);
   const rescheduleTarget = find(reschedule?.id ?? null);
+  const cancelReviewTarget = find(cancelReviewId);
 
   const modals = (
     <>
@@ -289,6 +338,23 @@ export function useLawyerConsultationActions({
           }}
         />
       )}
+
+      <CancellationRequestModal
+        open={!!cancelReviewTarget}
+        mode="respond"
+        consultationId={cancelReviewTarget?.id ?? ''}
+        counterpartName={cancelReviewTarget?.client.name ?? ''}
+        dateLong={cancelReviewTarget?.dateLong ?? ''}
+        timeRange={cancelReviewTarget?.timeRange ?? ''}
+        requestReason={cancelReviewTarget ? extrasFor(cancelReviewTarget.id)?.cancellation.pending?.reason : null}
+        onClose={() => setCancelReviewId(null)}
+        onDone={(message) => {
+          setCancelReviewId(null);
+          setNotice(message);
+          void reloadExtras();
+          void reload();
+        }}
+      />
     </>
   );
 
@@ -298,10 +364,14 @@ export function useLawyerConsultationActions({
     openMessages,
     joinMeet,
     openReschedule,
+    openCancellationReview,
+    /** Attendance and cancellation requests by consultation id. */
+    extrasFor,
+    now,
     notice,
     clearNotice: () => setNotice(null),
     /** True while any of the modals is open (e.g. to pause keyboard shortcuts). */
-    anyOpen: detailsId !== null || decision !== null || reschedule !== null,
+    anyOpen: detailsId !== null || decision !== null || reschedule !== null || cancelReviewId !== null,
     modals,
   };
 }

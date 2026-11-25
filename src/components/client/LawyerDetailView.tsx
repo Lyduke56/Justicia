@@ -52,6 +52,7 @@ import {
   type BookingConfirmPhase,
 } from './BookingConfirmModal';
 import { NeuModal, NeuButton, NeuAlert, EmptyState, StarIcon as NeuStarIcon } from '@/components/shared/neu';
+import { useMyAvatar } from '@/components/account/avatarStore';
 
 /** A My Documents file attached to the booking (shared with the lawyer by document ID). */
 interface BookingAttachment {
@@ -856,6 +857,9 @@ export function LawyerDetailView({
   details: detailsProp,
 }: LawyerDetailViewProps) {
   const isOwner = mode === 'owner';
+  // The owner sees a photo change at once (shared with the top bar); visitors see the saved photo.
+  const myAvatar = useMyAvatar(lawyer.photoUrl ?? null);
+  const photoUrl = isOwner ? myAvatar : lawyer.photoUrl;
 
   // Real (database) lawyers opened without server-loaded details — e.g. inline from the Find Lawyer
   // list — load their persisted About / Cases data here. Mock/demo lawyers keep the placeholder content.
@@ -1686,9 +1690,9 @@ export function LawyerDetailView({
               transition={{ type: 'spring', stiffness: 220, damping: 18, delay: 0.35 }}
               className="shrink-0"
             >
-              {lawyer.photoUrl ? (
+              {photoUrl ? (
                 <img
-                  src={lawyer.photoUrl}
+                  src={photoUrl}
                   alt={lawyer.fullName}
                   className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-full"
                 />

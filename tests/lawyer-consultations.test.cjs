@@ -61,7 +61,18 @@ test('tabs pick the right statuses', () => {
   assert.deepEqual(tab('upcoming'), ['confirmed-later', 'confirmed-past', 'confirmed-soon', 'review', 'unpaid']);
   assert.deepEqual(tab('completed'), ['done-new', 'done-old']);
   assert.deepEqual(tab('cancelled'), ['cancelled', 'declined']);
-  assert.deepEqual(JSON.parse(JSON.stringify(model.TABS.map((t) => t.key))), ['all', 'pending', 'upcoming', 'completed', 'cancelled']);
+  assert.deepEqual(tab('missed'), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(model.TABS.map((t) => t.key))), ['all', 'pending', 'upcoming', 'completed', 'missed', 'cancelled']);
+});
+
+test('missed consultations leave Upcoming for the Missed tab', () => {
+  const missed = (x) => x.id === 'confirmed-past';
+  const tab = (t) => ids(model.visibleConsultations(ALL, t, '', 'soonest', TODAY, missed)).sort();
+  assert.deepEqual(tab('missed'), ['confirmed-past']);
+  assert.deepEqual(tab('upcoming'), ['confirmed-later', 'confirmed-soon', 'review', 'unpaid']);
+  assert.equal(model.visibleConsultations(ALL, 'all', '', 'action', TODAY, missed).length, ALL.length);
+  // Only confirmed sessions can be missed.
+  assert.equal(model.matchesTab(ALL[0], 'missed', true), false);
 });
 
 test('"needs action first": requests and payments to review, then upcoming, then the rest (latest first)', () => {

@@ -6,6 +6,7 @@ import { useLiveRefresh } from '@/components/live/LiveProvider';
 import { fetchLive, type LiveResources } from '@/lib/live/fetchLive';
 import { useRouter, usePathname } from 'next/navigation';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
+import { useMyAvatarSync } from '@/components/account/avatarStore';
 import {
   AIAssistantIcon,
   FindLawyerIcon,
@@ -46,6 +47,8 @@ interface ClientShellProps {
     id: string;
     email?: string;
     fullName: string;
+    /** Profile photo (null shows the person icon). */
+    avatarUrl?: string | null;
   };
   children?: React.ReactNode;
 }
@@ -81,6 +84,7 @@ function pathnameToView(pathname: string): ViewKey {
 // ─── Component ────────────────────────────────────────────────────────────────
 export function ClientShell({ user, children }: ClientShellProps) {
   useInactivityLogout();
+  useMyAvatarSync(user.avatarUrl);
 
   const router   = useRouter();
   const pathname = usePathname();

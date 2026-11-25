@@ -1,7 +1,9 @@
 import React from 'react';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { readAvatarUrl } from '@/lib/account/avatar';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { ClientShell } from '@/components/client/ClientShell';
 import { LiveProvider } from '@/components/live/LiveProvider';
 import { liveTopicFor } from '@/lib/realtime/live';
@@ -62,6 +64,16 @@ export default async function ClientLayout({
     }
   }
 
+  // Profile photo for the top bar and account menu (the icon shows without one).
+  let avatarUrl: string | null = null;
+  if (user) {
+    try {
+      avatarUrl = await readAvatarUrl((await createServiceClient()) as unknown as SupabaseClient, user.id);
+    } catch {
+      avatarUrl = null;
+    }
+  }
+
   return (
     <LiveProvider topic={user ? liveTopicFor(user.id) : null}>
       <ClientShell
@@ -69,6 +81,7 @@ export default async function ClientLayout({
           id: userId,
           email,
           fullName,
+          avatarUrl,
         }}
       >
         {children}

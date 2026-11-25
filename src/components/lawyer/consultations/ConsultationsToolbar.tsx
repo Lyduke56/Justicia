@@ -126,12 +126,12 @@ export function ConsultationsToolbar({ tab, counts, onTab, query, onQuery, sort,
 
   return (
     <div className="flex flex-col gap-3.5">
-      {/* Tabs: a row that scrolls sideways on phones, five equal columns from md */}
+      {/* Tabs: a row that scrolls sideways on phones, six equal columns from md */}
       <motion.div
         variants={RISE}
         role="tablist"
         aria-label="Consultation status"
-        className="lawyer-consult-tabs -mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 py-1.5 md:grid md:grid-cols-5 md:overflow-visible"
+        className="lawyer-consult-tabs -mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 py-1.5 md:grid md:grid-cols-6 md:overflow-visible"
       >
         {TABS.map((t) => {
           const active = t.key === tab;

@@ -12,6 +12,9 @@ import { NeuAlert, NeuButton, EXTRUDE, CheckCircleIcon, InfoIcon, Spinner } from
 import { EASE_OUT } from '@/components/shared/neu/motion';
 import { ResendVerificationButton } from '@/components/auth/ResendVerificationButton';
 import { LEGAL_DOCUMENTS } from '@/lib/legal';
+import { SignOutConfirmModal } from '@/components/shared/SignOutConfirmModal';
+import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
+import { useMyAvatar } from './avatarStore';
 import {
   NOTIFICATION_ROWS,
   PRIVACY_ROWS,
@@ -20,7 +23,6 @@ import {
   useDataExport,
   useDeleteAccount,
   usePreferenceToggles,
-  useSignOutEverywhere,
 } from './useAccountControls';
 
 /**
@@ -256,13 +258,13 @@ export function initialsOf(name: string) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function ClientAccountSettings({ account }: { account: PersonalAccount }) {
-
+  const myAvatar = useMyAvatar();
   // Notification categories and messaging privacy (saved immediately; reverted if the save fails)
   const prefs = usePreferenceToggles(account);
   const { saving, savedTick } = prefs;
   const preferenceError = prefs.error;
   const setPreferenceError = prefs.setError;
-  const signOutAll = useSignOutEverywhere();
+  const [signOutAllOpen, setSignOutAllOpen] = useState(false);
   const consent = useConsent();
   const dataExport = useDataExport();
   const deletion = useDeleteAccount();
@@ -360,9 +362,9 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
             <div className="flex lg:flex-col items-center lg:items-start gap-4">
               <span
                 aria-hidden="true"
-                className="neu-btn-banner size-14 sm:size-16 shrink-0 rounded-full flex items-center justify-center font-lora text-lg sm:text-xl font-bold text-[#341512]"
+                className="neu-btn-banner size-14 sm:size-16 shrink-0 overflow-hidden rounded-full flex items-center justify-center font-lora text-lg sm:text-xl font-bold text-[#341512]"
               >
-                {initialsOf(account.fullName)}
+                {myAvatar ? <ProfilePhoto src={myAvatar} className="size-full" fallback={initialsOf(account.fullName)} /> : initialsOf(account.fullName)}
               </span>
               <div className="min-w-0">
                 <p className="font-lora text-base sm:text-lg font-bold text-[#341512] leading-tight break-words">
@@ -514,7 +516,7 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                   title="Sign out everywhere"
                   description="Ends your session on every device and browser, including this one. Use it if you signed in on a shared or lost device."
                   control={
-                    <NeuButton size="sm" variant="secondary" loading={signOutAll.pending} onClick={signOutAll.run}>
+                    <NeuButton size="sm" variant="secondary" onClick={() => setSignOutAllOpen(true)}>
                       Sign out all
                     </NeuButton>
                   }
@@ -654,11 +656,6 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                 {passwordMessage && (
                   <NeuAlert key="pw-ok" tone="success" onDismiss={() => setPasswordMessage('')}>
                     {passwordMessage}
-                  </NeuAlert>
-                )}
-                {signOutAll.error && (
-                  <NeuAlert key="signout-error" tone="error">
-                    {signOutAll.error}
                   </NeuAlert>
                 )}
               </AnimatePresence>
@@ -803,6 +800,7 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
           </motion.div>
         </div>
       </motion.div>
+      <SignOutConfirmModal open={signOutAllOpen} onClose={() => setSignOutAllOpen(false)} everywhere />
     </MotionConfig>
   );
 }
