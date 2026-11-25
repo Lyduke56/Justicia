@@ -42,16 +42,21 @@ export default async function LawyerRegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#EFE5D8] py-10 px-4">
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="font-cormorant text-4xl font-bold text-[#34150F]">
+    <div className="min-h-screen bg-[#E5D8CB] py-10 sm:py-14 px-4">
+      <div className="max-w-3xl mx-auto space-y-8">
+        <header className="text-center space-y-3">
+          <p className="inline-flex items-center gap-3 font-inter text-[10.5px] font-semibold uppercase tracking-[0.26em] text-[#C58B3C]">
+            <span className="h-px w-8 bg-[#C58B3C]/60" aria-hidden="true" />
+            For Philippine Lawyers
+            <span className="h-px w-8 bg-[#C58B3C]/60" aria-hidden="true" />
+          </p>
+          <h1 className="font-lora text-3xl sm:text-4xl font-semibold text-[#34150F] leading-tight">
             Register as a Verified Lawyer
           </h1>
-          <p className="text-sm text-[#7D6855] max-w-xl mx-auto">
+          <p className="font-inter text-[13.5px] leading-relaxed text-[#5C4535] max-w-xl mx-auto">
             Join Justicia&rsquo;s network of licensed Philippine lawyers. Your profile will be reviewed by our team before going live.
           </p>
-        </div>
+        </header>
         <LawyerRegisterForm
           existingUser={user ? { id: user.id, email: user.email ?? '', fullName: user.user_metadata?.full_name ?? '' } : null}
           emailUnconfirmed={emailUnconfirmed}

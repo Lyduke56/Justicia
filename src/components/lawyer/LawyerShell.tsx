@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import { useMyAvatarSync } from '@/components/account/avatarStore';
+import { ScreenTransitionOverlay, useScreenTransition } from '@/components/shared/loading';
 import {
   DashboardGridIcon,
   EarningsPayoutsIcon,
@@ -105,6 +106,8 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
   const [activeView, setActiveView] = useState<LawyerViewKey>(() => pathnameToView(pathname));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [liveLawyerNotifs, setLiveLawyerNotifs] = useState<LiveResources['notifications']>([]);
+  // Global loading screen over the content area while the shell switches screens.
+  const { loading: screenLoading, start: startScreenTransition } = useScreenTransition(pathname);
 
   const loadNotifications = useCallback(
     () =>
@@ -146,29 +149,33 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
     (key: LawyerViewKey) => {
       const item = LAWYER_NAV_ITEMS.find((n) => n.key === key);
       const href = item?.href ?? (key === 'settings' ? '/lawyer/settings' : key === 'account' ? '/lawyer/account' : '/lawyer/dashboard');
+      startScreenTransition(href);
       setActiveView(key);
       pendingPathRef.current = href;
       router.push(href, { scroll: false });
       setMobileMenuOpen(false);
     },
-    [router]
+    [router, startScreenTransition]
   );
 
   const navigateToDashboard = useCallback(() => {
+    startScreenTransition('/lawyer/dashboard');
     setActiveView('dashboard');
     pendingPathRef.current = '/lawyer/dashboard';
     router.push('/lawyer/dashboard', { scroll: false });
-  }, [router]);
+  }, [router, startScreenTransition]);
 
   const handleNotificationClick = useCallback(
     (n: LiveResources['notifications'][number]) => {
       if (n.type === 'meeting_starting' || n.type === 'new_message') {
         const thread = n.metadata?.threadId;
+        const href = thread ? `/lawyer/messages?thread=${thread}` : '/lawyer/messages';
+        startScreenTransition(href);
         setActiveView('messages');
-        router.push(thread ? `/lawyer/messages?thread=${thread}` : '/lawyer/messages', { scroll: false });
+        router.push(href, { scroll: false });
       } else if (n.type?.includes('consultation')) navigate('consultations');
     },
-    [router, navigate]
+    [router, navigate, startScreenTransition]
   );
 
   const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
@@ -226,16 +233,23 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
           ariaLabel="Lawyer practice navigation"
         />
 
-        {/* Main Content Viewport */}
-        <main className={`flex-1 overflow-y-auto bg-[#E5D8CB] ${activeView === 'documents' ? 'lawyer-designed-view' : ''}`} id="lawyer-main-content">
-          <KeepAliveViews
-            activeKey={keepAliveKey}
-            views={keepAliveViews}
-            fallback={children ?? <LawyerDashboardView />}
-            fallbackKey={pathname}
-            scrollContainerId="lawyer-main-content"
-          />
-        </main>
+        {/* Main Content Viewport; the wrapper positions the screen-transition loader over it. */}
+        <div className="relative flex min-w-0 flex-1" data-screen-loading={screenLoading || undefined}>
+          <main
+            className={`flex-1 min-w-0 overflow-y-auto bg-[#E5D8CB] ${activeView === 'documents' ? 'lawyer-designed-view' : ''}`}
+            id="lawyer-main-content"
+            aria-busy={screenLoading || undefined}
+          >
+            <KeepAliveViews
+              activeKey={keepAliveKey}
+              views={keepAliveViews}
+              fallback={children ?? <LawyerDashboardView />}
+              fallbackKey={pathname}
+              scrollContainerId="lawyer-main-content"
+            />
+          </main>
+          <ScreenTransitionOverlay show={screenLoading} />
+        </div>
       </div>
     </div>
   );

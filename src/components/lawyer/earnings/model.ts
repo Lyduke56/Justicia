@@ -67,7 +67,7 @@ export function earningsNote(data: LawyerEarningsData, month: number): string {
   const { pct, previousMonth } = monthChange(data, month);
   const prev = MONTHS_FULL[previousMonth];
   if (month > data.currentMonth) return `${MONTHS_FULL[month]} hasn't started yet.`;
-  if (pct === null) return data.monthlyEarnings[month] > 0 ? `Nothing earned in ${prev} to compare.` : 'No paid sessions this month yet.';
+  if (pct === null) return data.monthlyEarnings[month] > 0 ? `Up from ₱0 in ${prev}.` : 'No paid sessions yet.';
   if (pct > 0) return `Up ${pct}% from ${prev}.`;
   if (pct < 0) return `Down ${-pct}% from ${prev}.`;
   return `Same as ${prev}.`;

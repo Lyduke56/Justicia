@@ -31,7 +31,8 @@ import type {
   DetailsSummary,
 } from '@/components/shared/ConsultationDetailsModal';
 import type { ViewKey } from '@/components/client/ClientShell';
-import { ConsultationsSkeleton } from '@/components/skeletons';
+import { ScreenLoader } from '@/components/shared/loading';
+import { useSubmission } from '@/components/shared/feedback';
 import { RescheduleModal, type RescheduleModalMode } from '@/components/shared/RescheduleModal';
 import { CancellationRequestModal, type CancellationModalMode } from '@/components/shared/CancellationRequestModal';
 import { useConsultationExtras } from '@/components/consultations/useConsultationExtras';
@@ -186,6 +187,9 @@ function BannerShowcase({ children, sheenKey }: { children: React.ReactNode; she
     </motion.div>
   );
 }
+
+/** Above this many consultations the pager shows a counter instead of dots. */
+const MAX_PAGER_DOTS = 12;
 
 export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const router = useRouter();
@@ -406,7 +410,9 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
 
   // ─── View Details / Payment modal ─────────────────────────────────────────
   const [paymentFile, setPaymentFile] = useState<File | null>(null);
-  const [submittingPayment, setSubmittingPayment] = useState<boolean>(false);
+  // Proof-of-payment upload: the details dialog morphs into the submission card while it runs.
+  const paymentSubmission = useSubmission();
+  const submittingPayment = paymentSubmission.processing;
   const [detailsError, setDetailsError] = useState<string | null>(null);
   // The QR to pay each booking with: the attorney's own payment QR, else the platform QR.
   const [paymentChannels, setPaymentChannels] = useState<Record<string, PaymentChannel>>({});
@@ -429,6 +435,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
     setShowDetailsModal(false);
     setPaymentFile(null);
     setDetailsError(null);
+    paymentSubmission.reset();
   };
 
   const openProof = async (documentId: string) => {
@@ -443,25 +450,23 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
 
   const handleSubmitPayment = async (appointment: Appointment) => {
     if (!paymentFile || submittingPayment) return;
-    setSubmittingPayment(true);
+    const file = paymentFile;
     setDetailsError(null);
-    try {
+    const result = await paymentSubmission.run(async () => {
       const fd = new FormData();
       fd.append('consultationId', appointment.id);
-      fd.append('file', paymentFile);
+      fd.append('file', file);
       const res = await submitPaymentProofAction(fd);
       if (!('consultation' in res) || !res.consultation) {
-        setDetailsError(('error' in res && res.error) || 'We could not submit your payment.');
-        return;
+        return { ok: false, error: ('error' in res && res.error) || 'We could not submit your payment.' };
       }
       const updated = res.consultation;
       setDbAppointments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
       setPaymentFile(null);
-    } catch {
-      setDetailsError('We could not submit your payment. Please try again.');
-    } finally {
-      setSubmittingPayment(false);
-    }
+      return { ok: true };
+    });
+    // Shown in the details sheet if they go back to it with "Review Payment".
+    if (result && !result.ok) setDetailsError(result.error);
   };
 
   const buildDetailsProps = (a: Appointment): ConsultationDetailsModalProps => {
@@ -661,6 +666,17 @@ Reason: ${last.responseReason}` : ''}`,
       error: detailsError,
       actions,
       onClose: closeDetails,
+      submission: {
+        phase: paymentSubmission.phase,
+        error: paymentSubmission.error,
+        onRetry: paymentSubmission.reset,
+        processing: { title: 'Submitting your payment', message: `Sending your proof of payment to ${a.lawyerName}.` },
+        success: {
+          title: 'Payment submitted',
+          message: `${a.lawyerName} will check your payment and confirm the appointment. The Google Meet link is shared once it's confirmed.`,
+        },
+        failure: { title: "We couldn't submit your payment", retryLabel: 'Review Payment' },
+      },
     };
   };
 
@@ -692,7 +708,7 @@ Reason: ${last.responseReason}` : ''}`,
   });
 
   if (loadingAppointments) {
-    return <ConsultationsSkeleton />;
+    return <ScreenLoader variant="page" />;
   }
 
   // Same data the View Details modal renders, so the booking card's top section matches it.
@@ -742,7 +758,7 @@ Reason: ${last.responseReason}` : ''}`,
               height and the reminders card takes the rest, scrolling inside if it overflows. */}
           <motion.div
             variants={PAGE_STAGGER}
-            className="w-full lg:w-[310px] xl:w-[360px] lg:shrink-0 flex flex-col gap-5 lg:h-[calc(100dvh-10rem)]"
+            className="w-full lg:w-[310px] xl:w-[360px] lg:shrink-0 flex flex-col gap-5 lg:h-[calc(100dvh-10rem)] lg:min-h-[34rem]"
           >
             {/* 1. Calendar */}
             <motion.div
@@ -990,7 +1006,7 @@ Reason: ${last.responseReason}` : ''}`,
               card and its pagination are both visible; the description absorbs the leftover space. */}
           <motion.div
             variants={PAGE_STAGGER}
-            className="w-full flex-1 min-w-0 flex flex-col gap-4 sm:gap-5 lg:h-[calc(100dvh-10rem)]"
+            className="w-full flex-1 min-w-0 flex flex-col gap-4 sm:gap-5 lg:h-[calc(100dvh-10rem)] lg:min-h-[34rem]"
           >
             <motion.div
               variants={EXTRUDE}
@@ -1010,7 +1026,7 @@ Reason: ${last.responseReason}` : ''}`,
                   dragConstraints={{ left: 0, right: 0 }}
                   dragElastic={0.22}
                   onDragEnd={handleCardDragEnd}
-                  className="flex flex-col gap-4 sm:gap-5 lg:flex-1 lg:min-h-0 touch-pan-y"
+                  className="flex flex-col gap-4 sm:gap-5 lg:flex-1 lg:min-h-0 min-w-0 touch-pan-y lg:overflow-y-auto lg:overflow-x-hidden neu-scrollbar-discrete lg:-mr-2 lg:pr-2"
                 >
                   {/* Top section mirrors the View Details modal (shared components) */}
                   <motion.div variants={CARD_POP} className="shrink-0">
@@ -1089,12 +1105,12 @@ Reason: ${last.responseReason}` : ''}`,
                     )}
                   </AnimatePresence>
 
-                  <motion.div variants={CARD_ITEM} className="shrink-0">
+                  <motion.div variants={CARD_ITEM} className="shrink-0 min-w-0">
                     <BannerShowcase sheenKey={currentAppointment.id}>
                       <DetailsPersonBanner person={cardDetails!.person} />
                     </BannerShowcase>
                   </motion.div>
-                  <motion.div variants={CARD_ITEM} className="flex-1 min-h-0 flex flex-col">
+                  <motion.div variants={CARD_ITEM} className="flex-1 min-h-0 min-w-0 flex flex-col">
                     <DetailsCaseBlock {...cardDetails!} onSeeMore={openDetails} />
                   </motion.div>
 
@@ -1156,7 +1172,13 @@ Reason: ${last.responseReason}` : ''}`,
                 <ChevronLeftIcon className="w-4 h-4" />
               </motion.button>
 
-              <div className="flex items-center gap-2.5" role="tablist" aria-label="Consultations">
+              {/* Long lists show "3 / 24" instead of dots, so the pager never runs past the column. */}
+              {allAppointments.length > MAX_PAGER_DOTS ? (
+                <span className="min-w-[4.5rem] text-center font-inter text-xs font-semibold tabular-nums text-[#5C4535]">
+                  {activeAppointmentIndex + 1} / {allAppointments.length}
+                </span>
+              ) : (
+              <div className="flex min-w-0 flex-wrap items-center justify-center gap-2.5" role="tablist" aria-label="Consultations">
                 {allAppointments.map((a, idx) => {
                   const isActive = idx === activeAppointmentIndex;
                   return (
@@ -1183,6 +1205,7 @@ Reason: ${last.responseReason}` : ''}`,
                   );
                 })}
               </div>
+              )}
 
               <motion.button
                 type="button"

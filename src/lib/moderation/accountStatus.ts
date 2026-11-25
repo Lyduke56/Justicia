@@ -17,6 +17,7 @@ import { after } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emitLive, type LiveScope } from '@/lib/realtime/live';
 import { sendEmail } from '@/lib/integrations/email';
+import { renderEmailHtml } from '@/lib/email/layout';
 import { SUPPORT_EMAIL } from '@/lib/support';
 import type { AccountStatus } from './constants';
 
@@ -43,10 +44,6 @@ export function formatManilaDateTime(iso: string): string {
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   const min = String(d.getUTCMinutes()).padStart(2, '0');
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()} at ${h12}:${min} ${h24 < 12 ? 'AM' : 'PM'} (PHT)`;
-}
-
-function escapeHtml(text: string): string {
-  return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
 /** Broadcast a refresh to the users' open tabs after the response is sent. */
@@ -387,14 +384,8 @@ async function emailAccount(db: Db, userId: string, subject: string, heading: st
     await sendEmail({
       to: email,
       subject,
-      html: `
-        <div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;background:#fdf8f2;padding:40px;border-radius:8px;">
-          <h1 style="color:#34150F;font-size:22px;margin-bottom:8px;">${escapeHtml(heading)}</h1>
-          <p style="color:#5C4535;line-height:1.6;">Dear ${escapeHtml(name)},</p>
-          ${paragraphs.map((p) => `<p style="color:#5C4535;line-height:1.6;">${escapeHtml(p)}</p>`).join('')}
-          <hr style="border:1px solid #E8DCCB;margin:24px 0;" />
-          <p style="color:#A69584;font-size:12px;">Justicia — AI-Powered Philippine Legal Assistance</p>
-        </div>`,
+      // The shared layout escapes the name and every paragraph.
+      html: renderEmailHtml({ preheader: heading, heading, greeting: `Dear ${name},`, paragraphs }),
       text: [heading, `Dear ${name},`, ...paragraphs].join('\n\n'),
     });
   } catch (err) {

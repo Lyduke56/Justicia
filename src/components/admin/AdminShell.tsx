@@ -11,6 +11,7 @@ import { SignOutConfirmModal } from '@/components/shared/SignOutConfirmModal';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import { useMyAvatar, useMyAvatarSync } from '@/components/account/avatarStore';
 import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
+import { ScreenTransitionOverlay, useScreenTransition } from '@/components/shared/loading';
 import { HomeIcon, UserCircleIcon, GearIcon, ShieldCheckIcon, ScaleIcon, UserGroupIcon, DocumentTextIcon, LogoutIcon, FlagIcon, EarningsIcon } from './AdminIcons';
 
 const navigation = [
@@ -30,6 +31,8 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
   useMyAvatarSync(user.avatarUrl);
   const myAvatar = useMyAvatar(user.avatarUrl);
   const pathname = usePathname();
+  // Global loading screen over the content area while the shell switches screens.
+  const { loading: screenLoading, start: startScreenTransition } = useScreenTransition(pathname);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
@@ -64,6 +67,7 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
   }, [accountOpen]);
 
   const navigateTab = (event: { preventDefault: () => void }, href: string) => {
+    startScreenTransition(href);
     if (!Object.hasOwn(adminTabViews, href)) return;
     event.preventDefault();
     if (href !== pathname) window.history.pushState(null, '', href);
@@ -93,8 +97,8 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
         </button>
         {accountOpen && <div id="admin-account-menu" className="admin-account-menu absolute right-0 top-full z-50 mt-3 w-60 max-w-[calc(100vw-32px)] p-3 text-xs">
           <div className="border-b border-[#CBB6A1] px-3 py-2"><p className="truncate font-semibold">{user.fullName}</p><p className="truncate text-[#A69584]">{user.email}</p></div>
-          <Link href="/admin/profile" onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><UserCircleIcon className="h-4 w-4 text-[#C58B3C]" />My profile</Link>
-          <Link href="/admin/settings" onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><GearIcon className="h-4 w-4 text-[#C58B3C]" />Settings</Link>
+          <Link href="/admin/profile" onNavigate={() => startScreenTransition('/admin/profile')} onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><UserCircleIcon className="h-4 w-4 text-[#C58B3C]" />My profile</Link>
+          <Link href="/admin/settings" onNavigate={(event) => navigateTab(event, '/admin/settings')} onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><GearIcon className="h-4 w-4 text-[#C58B3C]" />Settings</Link>
           <div className="border-t border-[#CBB6A1] pt-1"><button type="button" onClick={openSignOut} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><LogoutIcon className="h-4 w-4 text-[#C58B3C]" />Sign out</button></div>
         </div>}
       </div>
@@ -114,7 +118,11 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
           <div className="space-y-2 border-t border-[#C8B59E] pt-4"><Link href="/admin/settings" onNavigate={(event) => navigateTab(event, "/admin/settings")} onClick={() => setMobileOpen(false)} aria-current={settingsActive ? 'page' : undefined} className={navClass(settingsActive)}><GearIcon className="h-5 w-5 text-[#5C4535]" />Settings</Link><div><button type="button" onClick={openSignOut} className={`${navClass(false)} text-left`}><LogoutIcon className="h-5 w-5 text-[#5C4535]" />Sign out</button></div></div>
         </aside>
       </div>}
-      <main id="admin-main-content" className="admin-content min-w-0 flex-1 overflow-y-auto bg-[#EFE5D8]"><KeepAliveViews activeKey={Object.hasOwn(adminTabViews, pathname) ? pathname : null} views={adminTabViews} fallback={children} fallbackKey={pathname} scrollContainerId="admin-main-content" /></main>
+      {/* The wrapper positions the screen-transition loader over the content area only. */}
+      <div className="relative flex min-w-0 flex-1" data-screen-loading={screenLoading || undefined}>
+        <main id="admin-main-content" aria-busy={screenLoading || undefined} className="admin-content min-w-0 flex-1 overflow-y-auto bg-[#EFE5D8]"><KeepAliveViews activeKey={Object.hasOwn(adminTabViews, pathname) ? pathname : null} views={adminTabViews} fallback={children} fallbackKey={pathname} scrollContainerId="admin-main-content" /></main>
+        <ScreenTransitionOverlay show={screenLoading} background="#EFE5D8" />
+      </div>
     </div>
     <SignOutConfirmModal open={signOutOpen} onClose={() => setSignOutOpen(false)} />
   </div>;

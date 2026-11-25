@@ -6,6 +6,7 @@
 
 import { Resend } from 'resend';
 import { createServiceClient } from '@/lib/supabase/server';
+import { renderEmailHtml } from '@/lib/email/layout';
 
 let _resend: Resend | null = null;
 
@@ -127,50 +128,42 @@ export async function sendBulkEmail(
 }
 
 // ─── Email Templates ──────────────────────────────────────────────────────────
+// All in the shared Justicia layout (lib/email/layout.ts); names and reasons are escaped.
 
 export function emailTemplateApproved(lawyerName: string): string {
-  return `
-    <div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;background:#fdf8f2;padding:40px;border-radius:8px;">
-      <h1 style="color:#34150F;font-size:24px;margin-bottom:8px;">Congratulations, ${lawyerName}!</h1>
-      <p style="color:#5C4535;line-height:1.6;">
-        Your Justicia lawyer profile has been <strong style="color:#2d7a2d;">approved</strong>. 
-        You are now listed on the Find a Lawyer directory and clients can book consultations with you.
-      </p>
-      <p style="color:#5C4535;line-height:1.6;">Log in to your Justicia account to update your availability and profile details.</p>
-      <hr style="border:1px solid #E8DCCB;margin:24px 0;" />
-      <p style="color:#A69584;font-size:12px;">Justicia — AI-Powered Philippine Legal Assistance</p>
-    </div>
-  `;
+  return renderEmailHtml({
+    preheader: 'Your Justicia lawyer profile is approved and now listed on Find a Lawyer.',
+    heading: `Congratulations, ${lawyerName}!`,
+    paragraphs: [
+      'Your Justicia lawyer profile has been **approved**. You are now listed on the Find a Lawyer directory and clients can book consultations with you.',
+    ],
+    steps: ['Sign in to your Justicia account.', 'Review your profile details and consultation fees.', 'Set your availability so clients can book you.'],
+    action: { label: 'Open My Dashboard', url: `${appUrl()}/lawyer/dashboard` },
+  });
 }
 
 export function emailTemplateRejected(lawyerName: string, reason: string): string {
-  return `
-    <div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;background:#fdf8f2;padding:40px;border-radius:8px;">
-      <h1 style="color:#34150F;font-size:24px;margin-bottom:8px;">Application Update — ${lawyerName}</h1>
-      <p style="color:#5C4535;line-height:1.6;">We have reviewed your Justicia lawyer profile application and are unable to approve it at this time.</p>
-      <div style="background:#fff5f5;border-left:4px solid #c0392b;padding:16px;margin:20px 0;border-radius:4px;">
-        <strong style="color:#c0392b;">Reason:</strong>
-        <p style="color:#5C4535;margin:8px 0 0;">${reason}</p>
-      </div>
-      <p style="color:#5C4535;line-height:1.6;">You may resubmit your application after addressing the issues noted above.</p>
-      <hr style="border:1px solid #E8DCCB;margin:24px 0;" />
-      <p style="color:#A69584;font-size:12px;">Justicia — AI-Powered Philippine Legal Assistance</p>
-    </div>
-  `;
+  return renderEmailHtml({
+    preheader: 'An update on your Justicia lawyer application.',
+    heading: `Application update — ${lawyerName}`,
+    paragraphs: ['We have reviewed your Justicia lawyer profile application and are unable to approve it at this time.'],
+    callout: { tone: 'error', title: 'Reason', body: reason },
+    closing: ['You may resubmit your application after addressing the issues noted above.'],
+    action: { label: 'View Application Status', url: `${appUrl()}/lawyer/verification` },
+  });
 }
 
 export function emailTemplateNeedsResubmission(lawyerName: string, message: string): string {
-  return `
-    <div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;background:#fdf8f2;padding:40px;border-radius:8px;">
-      <h1 style="color:#34150F;font-size:24px;margin-bottom:8px;">Additional Information Required — ${lawyerName}</h1>
-      <p style="color:#5C4535;line-height:1.6;">Our review team needs additional information before we can complete your profile verification.</p>
-      <div style="background:#fffbf0;border-left:4px solid #C58B3C;padding:16px;margin:20px 0;border-radius:4px;">
-        <strong style="color:#C58B3C;">Message from reviewer:</strong>
-        <p style="color:#5C4535;margin:8px 0 0;">${message}</p>
-      </div>
-      <p style="color:#5C4535;line-height:1.6;">Please log in to your Justicia account to update your application.</p>
-      <hr style="border:1px solid #E8DCCB;margin:24px 0;" />
-      <p style="color:#A69584;font-size:12px;">Justicia — AI-Powered Philippine Legal Assistance</p>
-    </div>
-  `;
+  return renderEmailHtml({
+    preheader: 'The Justicia review team needs a little more information.',
+    heading: `Additional information required — ${lawyerName}`,
+    paragraphs: ['Our review team needs additional information before we can complete your profile verification.'],
+    callout: { tone: 'warning', title: 'Message from reviewer', body: message },
+    closing: ['Please sign in to your Justicia account to update your application.'],
+    action: { label: 'Update My Application', url: `${appUrl()}/lawyer/register` },
+  });
+}
+
+function appUrl(): string {
+  return (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://justicia.ph').replace(/\/$/, '');
 }

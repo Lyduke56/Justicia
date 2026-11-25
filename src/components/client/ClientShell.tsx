@@ -7,6 +7,7 @@ import { fetchLive, type LiveResources } from '@/lib/live/fetchLive';
 import { useRouter, usePathname } from 'next/navigation';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import { useMyAvatarSync } from '@/components/account/avatarStore';
+import { ScreenTransitionOverlay, useScreenTransition } from '@/components/shared/loading';
 import {
   AIAssistantIcon,
   FindLawyerIcon,
@@ -93,6 +94,8 @@ export function ClientShell({ user, children }: ClientShellProps) {
   const [activeView, setActiveView] = useState<ViewKey>(() => pathnameToView(pathname));
   const [mobileMenuOpen,    setMobileMenuOpen]    = useState(false);
   const [liveNotifs, setLiveNotifs] = useState<LiveResources['notifications']>([]);
+  // Global loading screen over the content area while the shell switches screens.
+  const { loading: screenLoading, start: startScreenTransition } = useScreenTransition(pathname);
 
   const loadNotifications = useCallback(
     () =>
@@ -134,28 +137,39 @@ export function ClientShell({ user, children }: ClientShellProps) {
     (key: ViewKey) => {
       const item = NAV_ITEMS.find((n) => n.key === key);
       const href = item?.href ?? '/client/dashboard';
+      startScreenTransition(href);
       setActiveView(key);
       pendingPathRef.current = href;
       router.push(href, { scroll: false });
       setMobileMenuOpen(false);
     },
-    [router]
+    [router, startScreenTransition]
   );
 
   const navigateToDashboard = useCallback(() => {
+    startScreenTransition('/client/dashboard');
     setActiveView('dashboard');
     pendingPathRef.current = '/client/dashboard';
     router.push('/client/dashboard', { scroll: false });
-  }, [router]);
+  }, [router, startScreenTransition]);
+
+  /** Route pages outside the sidebar (settings, profile, a message thread …). */
+  const goTo = useCallback(
+    (href: string) => {
+      startScreenTransition(href);
+      router.push(href, { scroll: false });
+    },
+    [router, startScreenTransition]
+  );
 
   const handleNotificationClick = useCallback(
     (n: LiveResources['notifications'][number]) => {
       if (n.type === 'meeting_starting' || n.type === 'new_message') {
         const thread = n.metadata?.threadId;
-        router.push(thread ? `/client/messages?thread=${thread}` : '/client/messages', { scroll: false });
+        goTo(thread ? `/client/messages?thread=${thread}` : '/client/messages');
       } else if (n.type?.includes('consultation')) navigate('consultations');
     },
-    [router, navigate]
+    [goTo, navigate]
   );
 
   const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
@@ -206,8 +220,8 @@ export function ClientShell({ user, children }: ClientShellProps) {
         settingsActive={settingsActive}
         notifications={liveNotifs}
         onHome={navigateToDashboard}
-        onSettings={() => router.push('/client/settings')}
-        onProfile={() => router.push('/client/profile')}
+        onSettings={() => goTo('/client/settings')}
+        onProfile={() => goTo('/client/profile')}
         onNotificationClick={handleNotificationClick}
         mobileMenuOpen={mobileMenuOpen}
         onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}
@@ -226,24 +240,29 @@ export function ClientShell({ user, children }: ClientShellProps) {
           activeKey={settingsActive ? null : activeView}
           settingsActive={settingsActive}
           onSelect={(key) => navigate(key as ViewKey)}
-          onSettings={() => router.push('/client/settings')}
+          onSettings={() => goTo('/client/settings')}
           mobileOpen={mobileMenuOpen}
           onCloseMobile={closeMobileMenu}
         />
 
         {/* ── Main Content Viewport (ONLY scrollable zone) ─────────────────────── */}
-        <main
-          className="flex-1 overflow-y-auto bg-[#E5D8CB]"
-          id="client-main-content"
-        >
-          <KeepAliveViews
-            activeKey={keepAliveKey}
-            views={keepAliveViews}
-            fallback={renderRouteView()}
-            fallbackKey={`${activeView}:${pathname}`}
-            scrollContainerId="client-main-content"
-          />
-        </main>
+        {/* The wrapper positions the screen-transition loader over the content area only. */}
+        <div className="relative flex min-w-0 flex-1" data-screen-loading={screenLoading || undefined}>
+          <main
+            className="flex-1 min-w-0 overflow-y-auto bg-[#E5D8CB]"
+            id="client-main-content"
+            aria-busy={screenLoading || undefined}
+          >
+            <KeepAliveViews
+              activeKey={keepAliveKey}
+              views={keepAliveViews}
+              fallback={renderRouteView()}
+              fallbackKey={`${activeView}:${pathname}`}
+              scrollContainerId="client-main-content"
+            />
+          </main>
+          <ScreenTransitionOverlay show={screenLoading} />
+        </div>
       </div>
     </div>
   );

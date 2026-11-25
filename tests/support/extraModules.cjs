@@ -49,6 +49,8 @@ function extraModule(name) {
       return loadReal('src/lib/auth/roles.ts');
     case '@/lib/auth/email':
       return loadReal('src/lib/auth/email.ts');
+    case '@/lib/email/layout':
+      return loadReal('src/lib/email/layout.ts');
     case '@/lib/support':
       return { SUPPORT_EMAIL: 'support@justicia.ph', DELETION_GRACE_DAYS: 7 };
     case '@/lib/auth/demo':

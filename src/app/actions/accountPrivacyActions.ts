@@ -18,6 +18,7 @@ import { ensureProfileRow } from '@/lib/moderation/accountStatus';
 import { readConsent, recordConsent, LEGAL_VERSION, type ConsentStatus } from '@/lib/legal';
 import { deletionDueAt, restoreAccount, scheduleDeletion, upcomingConsultationCount } from '@/lib/account/deletion';
 import { sendEmail } from '@/lib/integrations/email';
+import { renderEmailHtml } from '@/lib/email/layout';
 import { DELETION_GRACE_DAYS, SUPPORT_EMAIL } from '@/lib/support';
 import { getDashboardForRole } from '@/lib/utils/rbac';
 
@@ -103,15 +104,19 @@ export async function requestAccountDeletionAction(input: { password: string; co
 
     if (user.email) {
       const when = manilaDate(dueAt);
+      const deletionEmail = {
+        preheader: `Your Justicia account will be erased on ${when} (PHT) unless you restore it.`,
+        heading: 'Account scheduled for deletion',
+        paragraphs: [
+          `You asked us to delete your Justicia account. Your personal data will be erased on **${when} (PHT)**.`,
+          'Changed your mind? Sign in before then and choose **Restore my account**.',
+        ],
+        footerNote: `If you did not ask for this, sign in and restore your account, then change your password, or write to ${SUPPORT_EMAIL}.`,
+      };
       await sendEmail({
         to: user.email,
         subject: 'Your Justicia account is scheduled for deletion',
-        html: `<div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;background:#fdf8f2;padding:40px;border-radius:8px;">
-          <h1 style="color:#34150F;font-size:22px;">Account scheduled for deletion</h1>
-          <p style="color:#5C4535;line-height:1.6;">You asked us to delete your Justicia account. Your personal data will be erased on <strong>${when} (PHT)</strong>.</p>
-          <p style="color:#5C4535;line-height:1.6;">Changed your mind? Sign in before then and choose <strong>Restore my account</strong>.</p>
-          <p style="color:#A69584;font-size:12px;">If you did not ask for this, sign in and restore your account, then change your password, or write to ${SUPPORT_EMAIL}.</p>
-        </div>`,
+        html: renderEmailHtml(deletionEmail),
         text: `You asked us to delete your Justicia account. Your personal data will be erased on ${when} (PHT). Sign in before then and choose "Restore my account" to keep it.`,
       }).catch(() => undefined);
     }

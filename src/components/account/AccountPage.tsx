@@ -5,6 +5,7 @@ import { getLawyerProfileSummary } from '@/lib/account/lawyerSummary';
 import { PersonalProfileCard } from './PersonalProfileCard';
 import { AccountSettings } from './AccountSettings';
 import { ClientAccountSettings } from './ClientAccountSettings';
+import { ClientProfileView } from './ClientProfileView';
 import { PaymentQrCard } from './PaymentQrCard';
 
 /** Reuses the existing client page layout without changing either portal's shell. */
@@ -24,6 +25,10 @@ export async function AccountPage({ mode }: { mode: 'profile' | 'settings' }) {
   }
   // Every role can change their photo here; it shows in the top bar, Messages and consultations.
   const avatarUrl = result.success ? await getMyAvatarUrl() : null;
+  // The client profile uses the same redesigned layout as client settings.
+  if (mode === 'profile' && result.success && role === 'client') {
+    return <ClientProfileView account={result.account} extras={extras && extras.success ? extras : null} avatarUrl={avatarUrl} />;
+  }
   return <div className="p-6 sm:p-10 lg:p-12 max-w-4xl mx-auto space-y-8">
     <div>
       <h1 className="font-cormorant text-4xl sm:text-5xl font-medium text-[#34150F]">

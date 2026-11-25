@@ -59,9 +59,9 @@ test('month comparison: change from the month before, nothing to compare when it
   assert.equal(model.earningsNote(d, 10), 'Up 18% from October.');
   assert.equal(model.monthChange(d, 2).pct, null);
   assert.equal(model.monthChange(d, 3).pct, -100);
-  assert.equal(model.earningsNote(d, 4), 'No paid sessions this month yet.');
+  assert.equal(model.earningsNote(d, 4), 'No paid sessions yet.');
   assert.equal(model.earningsNote(d, 1), 'Down 100% from January.');
-  assert.equal(model.earningsNote(d, 2), 'Nothing earned in February to compare.');
+  assert.equal(model.earningsNote(d, 2), 'Up from ₱0 in February.');
   assert.equal(model.earningsNote(d, 11), "December hasn't started yet.");
   // January compares with last December
   assert.equal(model.monthChange(data({ previousDecemberEarnings: 200 }), 0).pct, -50);

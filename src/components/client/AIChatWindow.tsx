@@ -1,5 +1,6 @@
 'use client';
 
+import { Markdown } from '@/components/shared/Markdown';
 import Link from 'next/link';
 
 /**
@@ -51,7 +52,7 @@ export function AIChatWindow({ messages, onSend, isLoading = false }: AIChatWind
                   : 'bg-muted text-foreground'
               }`}
             >
-              {msg.content}
+              {msg.role === 'assistant' ? <Markdown content={msg.content} /> : msg.content}
               {/* TODO: Render CitationChip components for citations */}
               {msg.escalate && (
                 <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 p-2 text-xs text-amber-800">

@@ -233,7 +233,7 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
   const shownActivity = activity.slice(0, activityCount);
   const appsNotShown = Math.max(0, pendingLawyersCount - shownApps.length);
 
-  // ── KPI notes (a skeleton line until the extras load; a plain note if they fail) ──
+  // ── KPI notes (the inline loader until the extras load; a plain note if they fail) ──
   const waiting = (() => {
     if (pendingLawyersCount === 0) return 'The queue is clear.';
     if (extra?.oldestPendingAt) return `Oldest has waited ${waitedFor(extra.oldestPendingAt, now)}.`;
@@ -241,13 +241,13 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
   })();
   const approved = extra
     ? extra.approvedLast30Days === 0
-      ? 'None approved in the last 30 days.'
-      : `${extra.approvedLast30Days} approved in the last 30 days.`
+      ? 'None approved in 30 days.'
+      : `${extra.approvedLast30Days} approved in 30 days.`
     : extraFailed
-      ? 'Visible in the lawyer directory.'
+      ? 'Listed in the directory.'
       : null;
   const users = extra
-    ? `${plural(extra.users.client, 'client')} and ${plural(extra.users.lawyer, 'lawyer')}.`
+    ? `${plural(extra.users.client, 'client')} · ${plural(extra.users.lawyer, 'lawyer')}`
     : extraFailed
       ? 'Across all roles.'
       : null;
@@ -260,7 +260,7 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
         ? `${reports.underReview} under review, ${reports.open} not started.`
         : `${plural(reports.open, 'report')} not yet reviewed.`
     : extra || extraFailed
-      ? 'Reports are unavailable right now.'
+      ? 'Unavailable right now.'
       : null;
 
   return (

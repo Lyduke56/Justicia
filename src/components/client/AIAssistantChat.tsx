@@ -1,5 +1,6 @@
 'use client';
 
+import { Markdown } from '@/components/shared/Markdown';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, useReducedMotion, type Variants } from 'motion/react';
@@ -515,15 +516,17 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
                 </div>
               )}
 
-              {/* Message Content */}
-              <div
-                className={`whitespace-pre-wrap leading-relaxed ${msg.role === 'user'
-                  ? 'font-inter text-sm sm:text-[14.5px]'
-                  : 'font-lora text-sm sm:text-[15px] text-[#34150F] font-normal'
-                  }`}
-              >
-                {msg.content}
-              </div>
+              {/* Message Content: the user's text as typed; the assistant's Markdown rendered. */}
+              {msg.role === 'user' ? (
+                <div className="whitespace-pre-wrap leading-relaxed font-inter text-sm sm:text-[14.5px] [overflow-wrap:anywhere]">
+                  {msg.content}
+                </div>
+              ) : (
+                <Markdown
+                  content={msg.content}
+                  className="leading-relaxed font-lora text-sm sm:text-[15px] text-[#34150F] font-normal"
+                />
+              )}
 
               {/* Legal Citations & Authorities Chips */}
               {msg.citations && msg.citations.length > 0 && (

@@ -3,6 +3,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@/components/shared/neu';
+import { ScreenLoader } from '@/components/shared/loading';
 
 /**
  * Pager under a consultation card (same as the client's booking card): raised arrows and a row
@@ -83,24 +84,7 @@ export function CardPager({ items, index, onGo, layoutId, className = '' }: Card
   );
 }
 
-/** Loading placeholder with the same footprint as a consultation card. */
-export function ConsultationCardSkeleton() {
-  return (
-    <div className="flex flex-col gap-5" aria-hidden>
-      <div className="flex flex-wrap justify-between gap-3">
-        <div className="flex gap-3">
-          <span className="neu-skeleton h-8 w-44 rounded-full" />
-          <span className="neu-skeleton h-8 w-40 rounded-full" />
-        </div>
-        <span className="neu-skeleton h-8 w-44 rounded-full" />
-      </div>
-      <span className="neu-skeleton-plate h-24 rounded-[22px]" />
-      <div className="space-y-2.5">
-        <span className="neu-skeleton-text block h-2.5 w-28" />
-        <span className="neu-skeleton-text block h-4 w-2/3" />
-        <span className="neu-skeleton-text block h-3 w-full" />
-        <span className="neu-skeleton-text block h-3 w-5/6" />
-      </div>
-    </div>
-  );
+/** Loading state for the consultation card area, about the height of a card so nothing jumps. */
+export function ConsultationCardLoader() {
+  return <ScreenLoader variant="panel" srLabel="Loading consultations" className="min-h-[18rem]" />;
 }

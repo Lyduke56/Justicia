@@ -1,4 +1,15 @@
-export { NeuModal, type NeuModalProps, type NeuModalSize, type NeuTone } from './NeuModal';
+export {
+  NeuModal,
+  NeuModalSheet,
+  NeuModalHeader,
+  NeuModalBody,
+  NeuModalFooter,
+  NEU_MODAL_SIZES,
+  type NeuModalProps,
+  type NeuModalSheetProps,
+  type NeuModalSize,
+  type NeuTone,
+} from './NeuModal';
 export { NeuButton, type NeuButtonProps, type NeuButtonVariant } from './NeuButton';
 export { NeuAlert, type NeuAlertProps, type NeuAlertTone } from './NeuAlert';
 export { EmptyState, type EmptyStateProps } from './EmptyState';

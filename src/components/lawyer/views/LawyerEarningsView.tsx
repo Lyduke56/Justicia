@@ -22,6 +22,7 @@ import { EarningsChart } from '../earnings/EarningsChart';
 import { MetricToggle, MonthPicker } from '../earnings/EarningsControls';
 import { InquiriesPanel } from '../earnings/InquiriesPanel';
 import { buildSampleEarnings } from '../earnings/sampleEarnings';
+import { InlineLoader, ScreenLoader } from '@/components/shared/loading';
 import { printEarningsReport, downloadEarningsCsv } from '../earnings/report';
 import {
   MONTHS_FULL,
@@ -165,8 +166,8 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
                 ? isCurrentMonth
                   ? data.todayScheduled === 0
                     ? 'Nothing scheduled for today.'
-                    : `${plural(data.todayScheduled, 'consultation')} scheduled today.`
-                  : `Paid sessions held in ${monthName}.`
+                    : `${plural(data.todayScheduled, 'session')} scheduled today.`
+                  : `Paid sessions in ${monthName}.`
                 : null
             }
             icon={<CalendarClockIcon className="h-10 w-10 shrink-0" />}
@@ -180,7 +181,7 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
               data
                 ? data.pendingRequests === 0
                   ? 'You are all caught up.'
-                  : `${plural(data.pendingClients, 'client')} awaiting your approval.`
+                  : `${plural(data.pendingClients, 'client')} awaiting approval.`
                 : null
             }
             icon={<BriefcaseClockIcon className="h-10 w-10 shrink-0" />}
@@ -192,7 +193,7 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
             value={data ? <CountUp value={data.completedSessions} format={formatCount} /> : null}
             subtitle={
               data
-                ? `${plural(data.reviewCount, 'review')}${data.responseRate != null ? `, ${data.responseRate}% response rate` : ''}.`
+                ? `${plural(data.reviewCount, 'review')}${data.responseRate != null ? ` · ${data.responseRate}% response rate` : ''}`
                 : null
             }
             icon={<ChecklistIcon className="h-10 w-10 shrink-0" />}
@@ -259,7 +260,7 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
                     {data && values ? (
                       <CountUp key={metric} value={values[month]} format={formatMetric} delay={0.7} />
                     ) : (
-                      <span className="neu-skeleton-text inline-block h-8 w-40 align-middle" />
+                      <InlineLoader className="text-[20px]" label="Loading figure" />
                     )}
                   </span>
                   {data && <ChangeChip pct={metricChange(data, metric, month)} previousMonth={(month + 11) % 12} />}
@@ -292,7 +293,7 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
               {data ? (
                 <EarningsChart data={data} metric={metric} selected={month} onSelect={setPicked} />
               ) : (
-                <div className="neu-skeleton h-[272px] w-full rounded-[18px]" aria-hidden />
+                <ScreenLoader variant="panel" srLabel="Loading chart" className="h-[272px]" />
               )}
             </motion.div>
             <motion.p variants={RISE} className="mt-3 font-inter text-[10.5px] text-[#7D6855]">

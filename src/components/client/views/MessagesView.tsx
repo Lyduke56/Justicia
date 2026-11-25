@@ -39,6 +39,7 @@ import {
   VideoIcon,
 } from '@/components/shared/neu';
 import { EASE_OUT } from '@/components/shared/neu/motion';
+import { ScreenLoader } from '@/components/shared/loading';
 import {
   ACCEPT_DOCUMENTS,
   ACCEPT_MEDIA,
@@ -1023,17 +1024,7 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
       {/* List — the negative margin + padding leaves room for the selected row's shadow */}
       <div className="flex-1 min-h-0 overflow-y-auto neu-scrollbar-discrete -mx-3 px-3 py-1">
         {!threadsLoaded ? (
-          <div className="space-y-3" aria-busy="true" aria-label="Loading conversations">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3.5 p-3.5">
-                <div className="size-11 rounded-full neu-skeleton shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3 w-2/3 rounded neu-skeleton-text" />
-                  <div className="h-2.5 w-full rounded neu-skeleton-text" />
-                </div>
-              </div>
-            ))}
-          </div>
+          <ScreenLoader variant="panel" srLabel="Loading conversations" className="h-full" />
         ) : threads.length === 0 ? (
           <EmptyState
             size="sm"

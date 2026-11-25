@@ -170,6 +170,40 @@ export const QrIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const LinkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10 13a5 5 0 007.07 0l3-3a5 5 0 00-7.07-7.07l-1.5 1.5" />
+    <path d="M14 11a5 5 0 00-7.07 0l-3 3a5 5 0 007.07 7.07l1.5-1.5" />
+  </Svg>
+);
+
+export const ClipboardIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="6" y="4" width="12" height="17" rx="2" />
+    <path d="M9 4.5V3.5a1 1 0 011-1h4a1 1 0 011 1v1M9 11h6M9 15h4" />
+  </Svg>
+);
+
+export const WalletIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M19 7V5.5A1.5 1.5 0 0017.5 4H5a2 2 0 000 4h14a1 1 0 011 1v9a2 2 0 01-2 2H5a2 2 0 01-2-2V6" />
+    <path d="M16.5 14h.01" />
+  </Svg>
+);
+
+export const ExternalLinkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h4" />
+  </Svg>
+);
+
+export const UserIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="8" r="3.8" />
+    <path d="M5 20c0-3.8 3.1-6.5 7-6.5s7 2.7 7 6.5" />
+  </Svg>
+);
+
 export function Spinner({ className = 'w-4 h-4' }: IconProps) {
   return (
     <svg className={`${className} animate-spin`} viewBox="0 0 24 24" fill="none" aria-hidden="true">
