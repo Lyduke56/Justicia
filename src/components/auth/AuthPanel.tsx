@@ -53,11 +53,11 @@ export function AuthPanelHeader({
           {icon}
         </motion.div>
       )}
-      <h2 id={titleId} className="font-lora text-[26px] sm:text-[30px] font-semibold leading-tight text-[#34150F]">
+      <h2 id={titleId} className="text-balance font-lora text-[27px] sm:text-[31px] font-semibold leading-tight tracking-[-0.01em] text-[#34150F]">
         {title}
       </h2>
       {subtitle && (
-        <p className="mt-2 max-w-[34ch] font-inter text-[13px] leading-relaxed text-[#5C4535]">{subtitle}</p>
+        <p className="mt-2 max-w-[36ch] text-balance font-inter text-[13.5px] leading-relaxed text-[#5C4535]">{subtitle}</p>
       )}
     </div>
   );
@@ -156,7 +156,7 @@ export function AuthDialog({ open, onClose, labelledBy, onExitComplete, children
               >
                 <CloseIcon className="w-3.5 h-3.5" />
               </motion.button>
-              <div className="max-h-[calc(100dvh-3rem)] overflow-y-auto neu-scrollbar-discrete px-7 pb-8 pt-9 sm:px-10 sm:pb-10 sm:pt-10">
+              <div className="max-h-[calc(100dvh-3rem)] overflow-y-auto neu-scrollbar-discrete px-6 pb-8 pt-9 sm:px-10 sm:pb-9 sm:pt-11">
                 {children}
               </div>
             </motion.div>

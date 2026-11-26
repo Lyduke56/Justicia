@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import type { EarningsInquiry, EarningsInquiryStatus } from '@/app/actions/consultationActions';
 import { CalendarIcon, EmptyState, SearchIcon } from '@/components/shared/neu';
-import { ScreenLoader } from '@/components/shared/loading';
+import { PanelLoader } from '@/components/shared/loading';
 import { EMBOSS, GROUP, POPOVER, RISE, ROLL, ROW, ROWS, SWAP } from '../motion';
 import { ALL_AREAS, INQUIRY_TABS, MONTHS_SHORT, areasOf, inquiryCounts, visibleInquiries, type InquiryTab } from './model';
 
@@ -291,7 +291,7 @@ export function InquiriesPanel({ inquiries, loading }: { inquiries: EarningsInqu
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={contentKey} variants={SWAP} initial="enter" animate="center" exit="exit">
             {!inquiries ? (
-              <ScreenLoader variant="panel" srLabel="Loading inquiries" className="min-h-[14rem]" />
+              <PanelLoader srLabel="Loading inquiries" className="min-h-[14rem]" />
             ) : list.length === 0 ? (
               <EmptyState
                 icon={<CalendarIcon />}

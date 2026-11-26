@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition, type KeyboardEvent, type ReactNode } from 'react';
+import { EmptyMedallion } from '@/components/shared/neu/EmptyMedallion';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import { refreshAdminTabs } from '@/lib/live/adminRefresh';
@@ -498,12 +499,16 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: { lawyers: 
                     exit={{ opacity: 0, y: -8 }}
                     className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center"
                   >
-                    <span className="client-neu-well grid h-14 w-14 place-items-center rounded-full text-[#A8742E]">
-                      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                        <path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3Z" />
-                        <path d="m8.8 12 2.2 2.2 4.4-4.4" />
-                      </svg>
-                    </span>
+                    <EmptyMedallion
+                      size="md"
+                      className="mb-1"
+                      icon={
+                        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3Z" />
+                          <path d="m8.8 12 2.2 2.2 4.4-4.4" />
+                        </svg>
+                      }
+                    />
                     <p className="font-lora text-[16px] font-semibold text-[#341512]">{emptyTitle}</p>
                     <p className="max-w-[320px] font-inter text-[12px] leading-relaxed text-[#7D6855]">{query.trim() ? 'Clear the search to see every application in this tab.' : tabMeta.hint}</p>
                     <div className="mt-2 flex flex-wrap justify-center gap-2.5">

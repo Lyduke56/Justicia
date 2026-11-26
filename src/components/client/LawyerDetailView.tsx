@@ -54,7 +54,7 @@ import {
 import { NeuModal, NeuButton, NeuAlert, EmptyState, StarIcon as NeuStarIcon } from '@/components/shared/neu';
 import { useMyAvatar } from '@/components/account/avatarStore';
 import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
-import { ScreenLoader } from '@/components/shared/loading';
+import { PanelLoader } from '@/components/shared/loading';
 
 /** A My Documents file attached to the booking (shared with the lawyer by document ID). */
 interface BookingAttachment {
@@ -1014,6 +1014,24 @@ export function LawyerDetailView({
     }
   }, [activeTab, lawyer.userId]);
 
+  // Banner avatar: a quarter taller than the info column beside it (name → specializations),
+  // centred on it, so the photo leads the banner. CSS can't size a square from a sibling's height,
+  // so the column is measured.
+  const [bannerInfoEl, setBannerInfoEl] = useState<HTMLDivElement | null>(null);
+  const [bannerAvatarSize, setBannerAvatarSize] = useState<number | null>(null);
+  useEffect(() => {
+    if (!bannerInfoEl) return;
+    const measure = () => {
+      // Capped so a long, wrapping specializations line can't balloon the avatar.
+      const next = Math.min(Math.round(bannerInfoEl.getBoundingClientRect().height * 1.25), 168);
+      setBannerAvatarSize((prev) => (prev !== null && Math.abs(prev - next) <= 1 ? prev : next));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(bannerInfoEl);
+    return () => ro.disconnect();
+  }, [bannerInfoEl]);
+
   const bioRef = useRef<HTMLDivElement>(null);
   const [showBioFade, setShowBioFade] = useState(false);
 
@@ -1350,6 +1368,11 @@ export function LawyerDetailView({
     setBookingStatus('idle');
   };
 
+  const savedNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (savedNoticeTimer.current) clearTimeout(savedNoticeTimer.current);
+  }, []);
+
   const handleSaveDraft = () => {
     const draft: BookingDraft = {
       year: currentYear,
@@ -1367,7 +1390,9 @@ export function LawyerDetailView({
       localStorage.setItem(bookingDraftKey(lawyer.userId), JSON.stringify(draft));
       setBookingError(null);
       setBookingStatus('saved');
-      setTimeout(() => setBookingStatus((s) => (s === 'saved' ? 'idle' : s)), 4000);
+      // One timer: saving again restarts the 5s window instead of an older timer cutting it short.
+      if (savedNoticeTimer.current) clearTimeout(savedNoticeTimer.current);
+      savedNoticeTimer.current = setTimeout(() => setBookingStatus((s) => (s === 'saved' ? 'idle' : s)), 5000);
     } catch {
       setBookingError('Your browser blocked saving the draft. Please check your storage settings and try again.');
     }
@@ -1674,21 +1699,26 @@ export function LawyerDetailView({
             />
           </div>
 
-          <div className="flex items-center gap-4 sm:gap-6">
-            {/* Avatar */}
+          <div className="flex items-center gap-3.5 sm:gap-4">
+            {/* Avatar — from sm up, a quarter taller than the info column and centred on it, with
+                the details close beside it. Phones keep a fixed size (the column is too narrow
+                there for a tall avatar to leave the text room). */}
             <motion.div
               initial={{ opacity: 0, scale: 0.6, rotate: -8 }}
               animate={{ opacity: 1, scale: 1, rotate: 0 }}
               transition={{ type: 'spring', stiffness: 220, damping: 18, delay: 0.35 }}
               className="shrink-0"
             >
-              <div className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center overflow-hidden rounded-full text-[#341512]/80">
-                <ProfilePhoto src={photoUrl} alt={lawyer.fullName} className="w-full h-full" />
+              <div
+                style={{ '--banner-avatar-size': bannerAvatarSize ? `${bannerAvatarSize}px` : undefined } as React.CSSProperties}
+                className="size-[72px] sm:size-[var(--banner-avatar-size,6.5rem)] flex items-center justify-center overflow-hidden rounded-full text-[#341512]/80"
+              >
+                <ProfilePhoto src={photoUrl} alt={lawyer.fullName} className="w-full h-full" ringed />
               </div>
             </motion.div>
 
             {/* Lawyer Info */}
-            <div className="space-y-1">
+            <div ref={setBannerInfoEl} className="space-y-1">
               {/* The name slides up out of a mask — the one "signature" moment on the page */}
               <div className="overflow-hidden pb-1 -mb-1">
                 <motion.h1
@@ -1728,23 +1758,10 @@ export function LawyerDetailView({
                     ? ''
                     : 'Labor & Employment • Corporate • Civil Law'}
               </motion.p>
-              {isLive && (
-                <motion.div {...enter(0.86)} className="flex flex-wrap items-center gap-2 pt-1.5">
-                  <span className="neu-inset-banner inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 font-inter text-[10.5px] font-bold text-[#5C4535]">
-                    <span aria-hidden="true" className={`size-1.5 rounded-full ${lawyer.isAvailable ? 'bg-[#1F7A3A]' : 'bg-[#9A8270]'}`} />
-                    {lawyer.isAvailable ? 'Accepting consultations' : 'Not taking new bookings'}
-                  </span>
-                  {lawyer.languages && lawyer.languages.length > 0 && (
-                    <span className="neu-inset-banner inline-flex h-6 items-center rounded-full px-2.5 font-inter text-[10.5px] font-bold text-[#5C4535]">
-                      Speaks {lawyer.languages.join(', ')}
-                    </span>
-                  )}
-                </motion.div>
-              )}
             </div>
           </div>
 
-          {/* Rate on the right side, with a shortcut to booking for clients */}
+          {/* Rate on the right side */}
           <motion.div {...enter(0.75)} className="flex flex-col items-start md:items-end gap-3 shrink-0 self-start md:self-center">
             <div className="flex items-baseline gap-1">
               {standardFee != null ? (
@@ -1758,11 +1775,6 @@ export function LawyerDetailView({
                 <span className="font-inter text-xs sm:text-sm italic text-[#341512]/60">Rate not set yet</span>
               )}
             </div>
-            {!isOwner && activeTab !== 'booking' && (
-              <NeuButton size="sm" variant="primary" onClick={() => changeTab('booking')} className="relative z-10">
-                Book a Consultation
-              </NeuButton>
-            )}
           </motion.div>
         </motion.div>
 
@@ -1935,7 +1947,7 @@ export function LawyerDetailView({
                   </NeuAlert>
                 )}
                 {detailsLoading ? (
-                  <ScreenLoader variant="panel" label="Loading profile details..." className="min-h-[16rem]" />
+                  <PanelLoader label="Loading profile details..." className="min-h-[16rem]" />
                 ) : (
                 <>
                 {/* Professional Background Section */}
@@ -2154,7 +2166,7 @@ export function LawyerDetailView({
                         className="space-y-4 pt-1"
                       >
                         {reviewsLoading && reviewsList.length === 0 && (
-                          <ScreenLoader variant="panel" label="Loading reviews..." />
+                          <PanelLoader label="Loading reviews..." />
                         )}
 
                         {pagedReviews.map((rev) => {
@@ -2305,27 +2317,6 @@ export function LawyerDetailView({
                 exit="exit"
                 className="space-y-8"
               >
-                {/* Confirmation Feedback */}
-                <AnimatePresence initial={false}>
-                  {bookingStatus === 'saved' && (
-                    <Collapse key="draft-saved" gap={32}>
-                      <div className="p-4 rounded-2xl bg-amber-100/90 border border-amber-300 text-amber-900 text-xs sm:text-sm flex items-center justify-between">
-                        <span className="inline-flex items-center gap-2">
-                          <AnimatedCheck className="w-4 h-4" delay={0.15} />
-                          Consultation draft details saved. You can complete your submission anytime.
-                        </span>
-                        <Key
-                          aria-label="Dismiss"
-                          onClick={() => setBookingStatus('idle')}
-                          className="w-6 h-6 rounded-full flex items-center justify-center font-bold cursor-pointer"
-                        >
-                          <CloseIcon />
-                        </Key>
-                      </div>
-                    </Collapse>
-                  )}
-                </AnimatePresence>
-
                 {/* Calendar & Time Slots Grid */}
                 <Reveal>
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
@@ -2645,7 +2636,7 @@ export function LawyerDetailView({
                           value={description}
                           onChange={(e) => setDescription(e.target.value)}
                           placeholder="Provide concise facts, key contract dates, and specific legal queries for counsel to review..."
-                          className="neu-input select-text w-full rounded-[20px] p-4 sm:p-5 text-xs sm:text-sm text-[#341512] placeholder:text-[#341512]/40 font-inter resize-none h-36 sm:h-40 transition-shadow duration-300"
+                          className="neu-input neu-scrollbar-discrete select-text w-full rounded-[20px] p-4 sm:p-5 text-xs sm:text-sm text-[#341512] placeholder:text-[#341512]/40 font-inter resize-none h-36 sm:h-40 transition-shadow duration-300"
                         />
                       </div>
 
@@ -2741,49 +2732,75 @@ export function LawyerDetailView({
                           </AnimatePresence>
                         </motion.label>
 
-                        {/* Attached Files List: files slide in and collapse out */}
-                        <div className="pt-1">
-                          <AnimatePresence initial={false}>
-                            {attachedFiles.map((file) => (
-                              <motion.div
-                                key={file.id}
-                                layout="position"
-                                initial={{ opacity: 0, height: 0, x: -16 }}
-                                animate={{ opacity: 1, height: 'auto', x: 0 }}
-                                exit={{ opacity: 0, height: 0, x: 16 }}
-                                transition={{ duration: 0.28, ease: EASE_OUT }}
-                                className="overflow-hidden"
-                              >
-                                <div className="pb-1.5">
-                                  <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#E5D8CB]/60 text-xs text-[#341512]">
-                                    <div className="flex items-center gap-1.5 truncate">
-                                      <motion.span
-                                        initial={{ rotate: -35, scale: 0.6 }}
-                                        animate={{ rotate: 0, scale: 1 }}
-                                        transition={{ type: 'spring', stiffness: 400, damping: 12, delay: 0.1 }}
-                                        className="inline-flex"
-                                      >
-                                        <PaperclipIcon className="w-3.5 h-3.5 text-[#C58B3C] shrink-0" />
-                                      </motion.span>
-                                      <span className="truncate">{file.name}</span>
-                                      <span className="text-[10px] text-[#341512]/60 shrink-0">{file.size}</span>
-                                    </div>
-                                    <Key
-                                      aria-label={`Remove ${file.name}`}
-                                      onClick={() => setAttachedFiles((prev) => prev.filter((f) => f.id !== file.id))}
-                                      className="w-5 h-5 rounded-full flex items-center justify-center text-red-700 hover:text-red-900 ml-2 cursor-pointer transition-colors"
-                                    >
-                                      <CloseIcon className="w-2.5 h-2.5" />
-                                    </Key>
-                                  </div>
+                        {/* Attached files: one raised card per file with its type, size and an
+                            "Attached" status; cards pop in and out. Removing only takes the file
+                            off this booking (it stays in My Documents). */}
+                        <AnimatePresence initial={false}>
+                          {attachedFiles.length > 0 && (
+                            // Extra room around the list so Collapse's overflow clip doesn't cut the cards' shadows.
+                            <Collapse key="attached-files" gap={8} className="-mx-4 px-4 pt-2 pb-4">
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-2 px-1 font-inter text-[11.5px] sm:text-xs text-[#7A6756]">
+                                  <PaperclipIcon className="w-3.5 h-3.5 text-[#C58B3C] shrink-0" />
+                                  <span>
+                                    {attachedFiles.length} {attachedFiles.length === 1 ? 'file' : 'files'} attached to this booking
+                                  </span>
                                 </div>
-                              </motion.div>
-                            ))}
-                          </AnimatePresence>
-                        </div>
+                                <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <AnimatePresence initial={false} mode="popLayout">
+                                    {attachedFiles.map((file) => {
+                                      const ext = (file.name.includes('.') ? file.name.split('.').pop() ?? '' : '').slice(0, 4).toUpperCase() || 'FILE';
+                                      return (
+                                        <motion.li
+                                          key={file.id}
+                                          layout
+                                          initial={{ opacity: 0, scale: 0.94, y: 6 }}
+                                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                                          exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.16 } }}
+                                          transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                                          className="neu-raised-sm rounded-2xl pl-3 pr-2 py-2.5 flex items-center gap-3 min-w-0"
+                                        >
+                                          <span
+                                            aria-hidden="true"
+                                            className="neu-recessed size-10 shrink-0 rounded-xl grid place-items-center font-inter text-[9.5px] font-bold tracking-[0.06em] text-[#A8742E]"
+                                          >
+                                            {ext}
+                                          </span>
+                                          <div className="min-w-0 flex-1">
+                                            <p className="truncate font-inter text-xs sm:text-[13px] font-medium text-[#341512]" title={file.name}>
+                                              {file.name}
+                                            </p>
+                                            <p className="mt-0.5 flex items-center gap-1.5 font-inter text-[11px] text-[#7A6756]">
+                                              <span>{file.size}</span>
+                                              <span aria-hidden="true">•</span>
+                                              <span className="inline-flex items-center gap-1 font-medium text-[#1F7A3A]">
+                                                <AnimatedCheck className="w-3 h-3" delay={0.15} />
+                                                Attached
+                                              </span>
+                                            </p>
+                                          </div>
+                                          <Key
+                                            aria-label={`Remove ${file.name} from this booking`}
+                                            title="Remove from this booking"
+                                            onClick={() => setAttachedFiles((prev) => prev.filter((f) => f.id !== file.id))}
+                                            className="size-8 shrink-0 rounded-full flex items-center justify-center text-[#9A8270] hover:text-[#B42318] hover:bg-[#B42318]/[0.07] transition-colors cursor-pointer"
+                                          >
+                                            <CloseIcon className="w-3 h-3" />
+                                          </Key>
+                                        </motion.li>
+                                      );
+                                    })}
+                                  </AnimatePresence>
+                                </ul>
+                              </div>
+                            </Collapse>
+                          )}
+                        </AnimatePresence>
 
-                        <div className="text-center py-2">
-                          <span className="font-lora text-xs sm:text-sm font-semibold tracking-wider text-[#341512]/70 uppercase">OR</span>
+                        <div className="flex items-center gap-4 py-2" aria-hidden="true">
+                          <span className="h-px flex-1 bg-[#C8B59E]/70" />
+                          <span className="font-lora text-xs sm:text-sm font-semibold tracking-wider text-[#341512]/60 uppercase">or</span>
+                          <span className="h-px flex-1 bg-[#C8B59E]/70" />
                         </div>
 
                         <Key
@@ -2802,64 +2819,56 @@ export function LawyerDetailView({
                         )}
                       </AnimatePresence>
 
-                      {/* Privilege Agreement Checkbox */}
-                      <motion.label animate={termsShake} className="flex items-start gap-3 cursor-pointer pt-3 select-none">
-                        <motion.div
-                          role="checkbox"
-                          aria-checked={agreedToTerms}
-                          tabIndex={0}
-                          onClick={() => {
-                            setAgreedToTerms(!agreedToTerms);
-                            if (invalidField === 'terms') setInvalidField(null);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === ' ' || e.key === 'Enter') {
-                              e.preventDefault();
-                              setAgreedToTerms(!agreedToTerms);
+                      {/* Privilege Agreement Checkbox — same build as the Sign Up terms box: a real
+                          checkbox (so clicking the box, the text, Space or Tab all just work) with a
+                          <label> for the text. It shakes and rings red if submitted unticked. */}
+                      <motion.div animate={termsShake} className="flex items-start gap-3 pt-3">
+                        <span className="relative mt-0.5 grid size-5 shrink-0 place-items-center">
+                          <input
+                            id="booking-privilege-agreement"
+                            type="checkbox"
+                            checked={agreedToTerms}
+                            onChange={(e) => {
+                              setAgreedToTerms(e.target.checked);
                               if (invalidField === 'terms') setInvalidField(null);
-                            }
-                          }}
-                          whileHover={{ scale: 1.12 }}
-                          whileTap={{ scale: 0.82, y: 1 }}
-                          animate={{
-                            backgroundColor: agreedToTerms ? 'rgba(211,151,88,0.22)' : 'rgba(211,151,88,0)',
-                            borderColor: invalidField === 'terms' ? 'rgb(251,113,133)' : 'rgba(52,21,18,0.6)',
-                          }}
-                          transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                          className="mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 cursor-pointer"
-                        >
-                          <AnimatePresence initial={false}>
-                            {agreedToTerms && (
-                              <motion.span
-                                key="tick"
-                                initial={{ scale: 0.4, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0.4, opacity: 0 }}
-                                transition={{ duration: 0.15 }}
-                                className="flex text-[#D39758]"
-                              >
-                                <AnimatedCheck className="w-3 h-3" />
-                              </motion.span>
-                            )}
-                          </AnimatePresence>
-                        </motion.div>
-                        <input
-                          type="checkbox"
-                          checked={agreedToTerms}
-                          onChange={(e) => setAgreedToTerms(e.target.checked)}
-                          className="sr-only"
-                          tabIndex={-1}
-                        />
-                        <span className="font-inter text-xs text-[#341512]/80 leading-relaxed">
-                          I agree that this intake form and attached records will be reviewed strictly under confidential attorney-client privilege prior to the scheduled consultation session.
+                            }}
+                            aria-invalid={invalidField === 'terms' || undefined}
+                            className={`peer absolute inset-0 size-full cursor-pointer appearance-none rounded-[6px] neu-pressed transition-colors checked:bg-[#431407]! focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C58B3C]/70 ${
+                              invalidField === 'terms' ? 'outline-2 outline-offset-2 outline-[#B42318]/60' : ''
+                            }`}
+                          />
+                          <svg
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            className="pointer-events-none relative h-3 w-3 opacity-0 transition-opacity peer-checked:opacity-100"
+                            aria-hidden="true"
+                          >
+                            <path d="M2 6l3 3 5-5" stroke="#F3E6D6" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
                         </span>
-                      </motion.label>
+                        <label
+                          htmlFor="booking-privilege-agreement"
+                          className="cursor-pointer select-none font-inter text-xs text-[#341512]/80 leading-relaxed"
+                        >
+                          I agree that this intake form and attached records will be reviewed strictly under confidential attorney-client privilege prior to the scheduled consultation session.
+                        </label>
+                      </motion.div>
                     </div>
                   </div>
                 </Reveal>
 
-                {/* Action Buttons Row */}
+                {/* Action Buttons Row — the "draft saved" confirmation appears right above the
+                    buttons, in the system's notice style, where the click happened. */}
                 <Reveal>
+                  <AnimatePresence initial={false}>
+                    {bookingStatus === 'saved' && (
+                      <Collapse key="draft-saved" gap={16} className="-mx-1 px-1 pt-1">
+                        <NeuAlert tone="success" title="Draft saved" onDismiss={() => setBookingStatus('idle')} className="mb-4">
+                          Your booking details are saved on this device. You can come back and submit anytime.
+                        </NeuAlert>
+                      </Collapse>
+                    )}
+                  </AnimatePresence>
                   <div className="flex items-center justify-end gap-3 pt-1">
                     <Key
                       onClick={handleClearInputs}
@@ -3114,7 +3123,7 @@ export function LawyerDetailView({
                 </div>
 
                 {loadingDocPicker ? (
-                  <ScreenLoader variant="panel" srLabel="Loading your folders" className="py-6!" />
+                  <PanelLoader srLabel="Loading your folders" className="py-6!" />
                 ) : docPickerFolders.length === 0 ? (
                   <EmptyState size="sm" icon={<FolderIcon />} title="No folders yet" description="Create one with “+ Folder” above." />
                 ) : (

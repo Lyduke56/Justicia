@@ -3,7 +3,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@/components/shared/neu';
-import { ScreenLoader } from '@/components/shared/loading';
+import { PanelLoader } from '@/components/shared/loading';
 
 /**
  * Pager under a consultation card (same as the client's booking card): raised arrows and a row
@@ -86,5 +86,5 @@ export function CardPager({ items, index, onGo, layoutId, className = '' }: Card
 
 /** Loading state for the consultation card area, about the height of a card so nothing jumps. */
 export function ConsultationCardLoader() {
-  return <ScreenLoader variant="panel" srLabel="Loading consultations" className="min-h-[18rem]" />;
+  return <PanelLoader srLabel="Loading consultations" className="min-h-[18rem]" />;
 }

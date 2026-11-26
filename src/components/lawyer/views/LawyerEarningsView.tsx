@@ -22,7 +22,7 @@ import { EarningsChart } from '../earnings/EarningsChart';
 import { MetricToggle, MonthPicker } from '../earnings/EarningsControls';
 import { InquiriesPanel } from '../earnings/InquiriesPanel';
 import { buildSampleEarnings } from '../earnings/sampleEarnings';
-import { InlineLoader, ScreenLoader } from '@/components/shared/loading';
+import { InlineLoader, PanelLoader } from '@/components/shared/loading';
 import { printEarningsReport, downloadEarningsCsv } from '../earnings/report';
 import {
   MONTHS_FULL,
@@ -293,7 +293,7 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
               {data ? (
                 <EarningsChart data={data} metric={metric} selected={month} onSelect={setPicked} />
               ) : (
-                <ScreenLoader variant="panel" srLabel="Loading chart" className="h-[272px]" />
+                <PanelLoader srLabel="Loading chart" className="h-[272px]" />
               )}
             </motion.div>
             <motion.p variants={RISE} className="mt-3 font-inter text-[10.5px] text-[#7D6855]">

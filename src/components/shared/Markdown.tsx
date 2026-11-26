@@ -80,7 +80,7 @@ function renderBlocks(blocks: Block[], key = '', tight = false): React.ReactNode
         return tight ? (
           <React.Fragment key={k}>{renderInline(block.children, `${k}-`)}</React.Fragment>
         ) : (
-          <p key={k} className="my-2.5 first:mt-0 last:mb-0">
+          <p key={k} className="my-3 first:mt-0 last:mb-0">
             {renderInline(block.children, `${k}-`)}
           </p>
         );
@@ -98,25 +98,42 @@ function renderBlocks(blocks: Block[], key = '', tight = false): React.ReactNode
           </div>
         );
       case 'list': {
-        const ListTag = block.ordered ? 'ol' : 'ul';
+        if (block.ordered) {
+          // Numbers sit in small caramel badges (a CSS counter, so `start` still works and the
+          // list stays a real <ol> for screen readers).
+          return (
+            <ol
+              key={k}
+              start={block.start !== 1 ? block.start : undefined}
+              style={{ counterReset: `md-item ${block.start - 1}` }}
+              className="my-3 first:mt-0 last:mb-0 list-none space-y-2.5 pl-0"
+            >
+              {block.items.map((item, j) => {
+                // A single paragraph renders inline (tight list); richer items keep their blocks.
+                const isTight = item.length === 1 && item[0].type === 'paragraph';
+                return (
+                  <li
+                    key={`${k}-${j}`}
+                    className="relative pl-9 [counter-increment:md-item] before:absolute before:left-0 before:top-[0.2em] before:grid before:size-[2.05em] before:place-items-center before:rounded-full before:bg-[#D39758]/20 before:font-inter before:text-[0.72em] before:font-bold before:text-[#8A5A22] before:content-[counter(md-item)]"
+                  >
+                    {renderBlocks(item, `${k}-${j}-`, isTight)}
+                  </li>
+                );
+              })}
+            </ol>
+          );
+        }
         return (
-          <ListTag
-            key={k}
-            start={block.ordered && block.start !== 1 ? block.start : undefined}
-            className={`my-2.5 first:mt-0 last:mb-0 space-y-1.5 pl-5 ${
-              block.ordered ? 'list-decimal marker:font-semibold' : 'list-disc'
-            } marker:text-[#C58B3C]`}
-          >
+          <ul key={k} className="my-3 first:mt-0 last:mb-0 list-disc space-y-2 pl-5 marker:text-[#C58B3C]">
             {block.items.map((item, j) => {
-              // A single paragraph renders inline (tight list); richer items keep their blocks.
               const isTight = item.length === 1 && item[0].type === 'paragraph';
               return (
-                <li key={`${k}-${j}`} className="pl-1">
+                <li key={`${k}-${j}`} className="pl-1.5">
                   {renderBlocks(item, `${k}-${j}-`, isTight)}
                 </li>
               );
             })}
-          </ListTag>
+          </ul>
         );
       }
       case 'quote':

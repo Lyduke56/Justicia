@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react';
+import { AnimatePresence, MotionConfig, motion, useReducedMotion, type Variants } from 'motion/react';
 import { EASE_OUT } from '@/components/shared/neu/motion';
 import {
   ChevronRightIcon,
@@ -22,8 +22,9 @@ import {
 import { getDocumentDownloadUrlAction } from '@/app/actions/documentFeatureActions';
 import type { DocumentFolderView } from '@/lib/documents/types';
 import { useLiveRefresh } from '@/components/live/LiveProvider';
-import { ScreenLoader } from '@/components/shared/loading';
+import { PanelLoader } from '@/components/shared/loading';
 import { NeuButton } from '@/components/shared/neu/NeuButton';
+import { EmptyMedallion } from '@/components/shared/neu/EmptyMedallion';
 
 /** The signed-in user's folders (GET /api/live/documents). null: signed out. */
 async function fetchDocumentFolders(role: 'client' | 'lawyer'): Promise<DocumentFolderView[] | null> {
@@ -819,51 +820,92 @@ const EMPTY_STEPS = [
   { title: 'Share them when you book', text: 'Attach files to a consultation for your lawyer.' },
 ];
 
-/** Paper sheets that rise out of an open folder, then settle into a slow float. */
+/** Folder colours, from public/assets/folder_icon.svg (back panel + front panel). */
+const FOLDER_BACK = '#341512';
+const FOLDER_FRONT = '#69504A';
+
+/** Two sheets inside the folder, peeking out at an angle (x offset and tilt in the 160×130 box). */
+const SHEETS = [
+  { x: 34, rotate: -9, delay: 0.3, float: 0 },
+  { x: 76, rotate: 7, delay: 0.45, float: 0.6 },
+];
+
+/**
+ * An open case folder drawn in layers (back panel, then the paper, then a lower front panel), so
+ * the sheets genuinely rise out of the folder and settle into a slow float. The paper uses a
+ * tight dark shadow that reads on the brown folder; the folder sits on a soft ground shadow.
+ * Searches show the empty folder with a magnifier medallion instead of paper.
+ */
 function EmptyFolderArt({ kind }: { kind: DocumentsEmptyKind }) {
+  const reduce = useReducedMotion();
   const searching = kind === 'no-folder-matches' || kind === 'no-file-matches';
   return (
-    <div className="relative mx-auto h-28 w-36" aria-hidden="true">
-      <motion.div
-        className="absolute inset-x-0 bottom-0 flex justify-center"
-        initial={{ opacity: 0, y: 16, scale: 0.9 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.1 }}
-      >
-        <Image src="/assets/folder_icon.svg" alt="" width={112} height={90} className="h-auto w-28 drop-shadow-[0_6px_10px_rgba(92,69,53,0.18)]" />
-      </motion.div>
+    <motion.div
+      className="relative mx-auto h-[130px] w-[160px] origin-bottom scale-[0.88]"
+      aria-hidden="true"
+      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={reduce ? { duration: 0.2 } : { type: 'spring', stiffness: 240, damping: 22, delay: 0.05 }}
+    >
+      {/* Ground shadow. */}
+      <span className="absolute bottom-[2px] left-1/2 h-3 w-[78%] -translate-x-1/2 rounded-[50%] bg-[#341512]/20 blur-[6px]" />
+
+      {/* Back panel (with the tab). */}
+      <svg viewBox="0 0 160 130" className="absolute inset-0 size-full">
+        <path
+          d="M11.2 11H58l14.5 14.5h75.7a7.2 7.2 0 0 1 7.2 7.2v79.8a7.2 7.2 0 0 1-7.2 7.2H11.2A7.2 7.2 0 0 1 4 112.5V18.2A7.2 7.2 0 0 1 11.2 11Z"
+          fill={FOLDER_BACK}
+        />
+      </svg>
+
+      {/* Paper, between the panels. */}
       {!searching &&
-        [
-          { x: -22, r: -10, delay: 0.35 },
-          { x: 18, r: 8, delay: 0.5 },
-        ].map((sheet, i) => (
-          <motion.span
+        SHEETS.map((sheet, i) => (
+          <motion.div
             key={i}
-            className="neu-raised-sm absolute left-1/2 top-1 h-14 w-11 rounded-[6px] bg-[#F3E8DA]"
-            style={{ marginLeft: sheet.x - 22 }}
-            initial={{ opacity: 0, y: 34, rotate: 0 }}
-            animate={{ opacity: 1, y: [34, -4, 0], rotate: sheet.r }}
-            transition={{ duration: 0.8, delay: sheet.delay, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute top-[2px] h-[64px] w-[50px]"
+            style={{ left: sheet.x }}
+            initial={reduce ? { opacity: 0, rotate: sheet.rotate } : { opacity: 0, y: 40, rotate: 0 }}
+            animate={{ opacity: 1, y: 0, rotate: sheet.rotate }}
+            transition={reduce ? { duration: 0.2 } : { type: 'spring', stiffness: 170, damping: 16, delay: sheet.delay }}
           >
-            <span className="absolute left-2 right-2 top-3 h-[3px] rounded-full bg-[#C8B59E]" />
-            <span className="absolute left-2 right-4 top-[22px] h-[3px] rounded-full bg-[#C8B59E]" />
-            <span className="absolute left-2 right-3 top-[31px] h-[3px] rounded-full bg-[#C8B59E]" />
-          </motion.span>
+            <motion.div
+              className="size-full rounded-[5px] border border-[#DCC8AF] bg-[#F6ECDF] shadow-[0_2px_4px_rgba(52,21,18,0.35)]"
+              animate={reduce ? undefined : { y: [0, -3, 0] }}
+              transition={reduce ? undefined : { duration: 3.4, ease: 'easeInOut', repeat: Infinity, delay: 1.2 + sheet.float }}
+            >
+              <span className="absolute left-[7px] right-[9px] top-[10px] h-[3px] rounded-full bg-[#CDB79C]" />
+              <span className="absolute left-[7px] right-[14px] top-[18px] h-[3px] rounded-full bg-[#D8C5AD]" />
+              <span className="absolute left-[7px] right-[11px] top-[26px] h-[3px] rounded-full bg-[#D8C5AD]" />
+            </motion.div>
+          </motion.div>
         ))}
+
+      {/* Front panel: lower than the back, so the paper shows above it. */}
+      <svg viewBox="0 0 160 130" className="absolute inset-0 size-full">
+        <path d="M11.2 50h137a7.2 7.2 0 0 1 7.2 7.2v51.7a7.2 7.2 0 0 1-7.2 7.2h-137A7.2 7.2 0 0 1 4 108.9V57.2A7.2 7.2 0 0 1 11.2 50Z" fill={FOLDER_FRONT} />
+      </svg>
+
       {searching && (
-        <motion.span
-          className="neu-raised-sm absolute right-2 top-0 grid size-12 place-items-center rounded-full bg-[#E5D8CB] text-[#C58B3C]"
-          initial={{ opacity: 0, scale: 0.4, rotate: -30 }}
+        <motion.div
+          className="absolute -right-4 -top-3"
+          initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.5, rotate: -25 }}
           animate={{ opacity: 1, scale: 1, rotate: 0 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 16, delay: 0.3 }}
+          transition={reduce ? { duration: 0.2 } : { type: 'spring', stiffness: 360, damping: 16, delay: 0.3 }}
         >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
-        </motion.span>
+          <EmptyMedallion
+            size="sm"
+            className="bg-[#E5D8CB]"
+            icon={
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+            }
+          />
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -1430,7 +1472,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
 
       {/* ─── Initial load, then directional content transitions ─── */}
       {loadingDocs && !currentFolder ? (
-        <ScreenLoader variant="panel" srLabel="Loading your documents" className="min-h-[20rem]" />
+        <PanelLoader srLabel="Loading your documents" className="min-h-[20rem]" />
       ) : (
         <div key={viewKey} className={`docs-view--${navDirection}`}>
           {/* ─── SCENARIO A: Root Folder Grid View (All Closed by Default) ────────── */}

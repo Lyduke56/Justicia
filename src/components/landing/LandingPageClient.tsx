@@ -8,10 +8,12 @@ import { AboutSection } from './AboutSection';
 import { FeaturesSection } from './FeaturesSection';
 import { Footer } from './Footer';
 import { SignInModal } from '@/components/auth/SignInModal';
+import { RoleSelectModal } from '@/components/auth/RoleSelect';
 import { SpotlightProvider, GlobalCursorSpotlight } from './LibrarySpotlight';
 
 export function LandingPageClient() {
   const [signInOpen, setSignInOpen] = useState(false);
+  const [signUpOpen, setSignUpOpen] = useState(false);
 
   return (
     <SpotlightProvider>
@@ -20,7 +22,7 @@ export function LandingPageClient() {
         <GlobalCursorSpotlight />
 
         {/* Top Navigation Bar */}
-        <Navbar onOpenSignIn={() => setSignInOpen(true)} />
+        <Navbar onOpenSignIn={() => setSignInOpen(true)} onOpenSignUp={() => setSignUpOpen(true)} />
 
         {/* Hero Section */}
         <HeroSection />
@@ -55,6 +57,16 @@ export function LandingPageClient() {
 
         {/* Sign In Modal */}
         <SignInModal isOpen={signInOpen} onClose={() => setSignInOpen(false)} />
+
+        {/* Sign Up: choose an account type first, then on to /register?role=… */}
+        <RoleSelectModal
+          open={signUpOpen}
+          onClose={() => setSignUpOpen(false)}
+          onSignIn={() => {
+            setSignUpOpen(false);
+            setSignInOpen(true);
+          }}
+        />
       </div>
     </SpotlightProvider>
   );

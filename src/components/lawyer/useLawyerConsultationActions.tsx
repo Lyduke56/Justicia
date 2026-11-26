@@ -156,6 +156,10 @@ export function useLawyerConsultationActions({
   const openMessages = useCallback(
     (c: LawyerConsultation) => {
       if (!canMessage(c)) return;
+      // Close View Details first: the shell keeps this screen mounted and the modal is portalled
+      // to <body>, so it would otherwise stay open over the Messages screen.
+      setDetailsId(null);
+      setDetailsError(null);
       router.push(`/lawyer/messages?thread=${c.id}`);
     },
     [router]

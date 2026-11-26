@@ -28,7 +28,7 @@ export function LawyerCard({ lawyer }: LawyerCardProps) {
       <div className="flex items-center gap-2">
         {/* Profile photo, or the default profile icon - height aligns with IBP Verified capsule & Specializations line */}
         <div className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] shrink-0 flex items-center justify-center overflow-hidden rounded-full text-[#4A3528] group-hover:text-[#C58B3C] transition-colors">
-          <ProfilePhoto src={lawyer.photoUrl} alt={lawyer.name} className="w-full h-full" />
+          <ProfilePhoto src={lawyer.photoUrl} alt={lawyer.name} className="w-full h-full" ringed />
         </div>
 
         {/* Lawyer Details - height matches profile icon; justify-between aligns top and bottom */}

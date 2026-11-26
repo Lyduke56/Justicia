@@ -1,8 +1,9 @@
 import React from 'react';
+import { EmptyMedallion } from './EmptyMedallion';
 
 /**
- * Shared empty / no-results state, modelled on the Find a Lawyer "No Verified Counsel Found"
- * card: recessed icon well, Lora title, Inter description, optional raised action.
+ * Shared empty / no-results state: the EmptyMedallion (pressed-in well, raised disc with the
+ * caramel icon, a slow orbiting bead), a Lora title, an Inter description and optional actions.
  *  - variant "card":  stands alone on the page inside a raised parchment card
  *  - variant "plain": sits inside an existing container (lists, modals, panels)
  */
@@ -28,30 +29,27 @@ export function EmptyState({
   const compact = size === 'sm';
   const content = (
     <>
-      <div
-        className={`neu-recessed mx-auto rounded-full flex items-center justify-center text-[#C58B3C] ${compact ? 'size-12' : 'size-14 sm:size-16'}`}
-      >
-        <span className={`neu-float flex ${compact ? '[&>svg]:w-5 [&>svg]:h-5' : '[&>svg]:w-7 [&>svg]:h-7'}`}>{icon}</span>
-      </div>
-      <div className="space-y-1.5">
-        <h3 className={`font-lora font-bold text-[#34150F] ${compact ? 'text-sm sm:text-base' : 'text-lg sm:text-xl'}`}>{title}</h3>
+      <EmptyMedallion icon={icon} size={compact ? 'sm' : variant === 'card' ? 'lg' : 'md'} />
+      <div className={compact ? 'space-y-1' : 'space-y-2'}>
+        <h3 className={`text-balance font-lora font-bold text-[#34150F] ${compact ? 'text-sm sm:text-[15px]' : 'text-lg sm:text-xl'}`}>{title}</h3>
         {description && (
           <p
-            className={`font-inter text-[#7A6756] leading-relaxed mx-auto ${compact ? 'text-[11.5px] sm:text-xs max-w-xs' : 'text-xs sm:text-[13px] max-w-sm'
-              }`}
+            className={`mx-auto text-pretty font-inter leading-relaxed text-[#7A6756] ${
+              compact ? 'max-w-xs text-[11.5px] sm:text-xs' : 'max-w-sm text-xs sm:text-[13px]'
+            }`}
           >
             {description}
           </p>
         )}
       </div>
-      {action && <div className="pt-1 flex flex-wrap items-center justify-center gap-3">{action}</div>}
+      {action && <div className="flex flex-wrap items-center justify-center gap-3 pt-1">{action}</div>}
     </>
   );
 
   if (variant === 'card') {
     return (
       <div
-        className={`neu-raised bg-[#E5D8CB] rounded-[28px] px-8 py-10 sm:px-12 sm:py-14 max-w-lg mx-auto text-center space-y-5 select-none ${className}`}
+        className={`neu-raised bg-[#E5D8CB] rounded-[28px] px-8 py-10 sm:px-12 sm:py-12 max-w-lg mx-auto text-center space-y-5 select-none ${className}`}
       >
         {content}
       </div>

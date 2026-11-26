@@ -7,7 +7,17 @@ import { AnimatePresence, motion, useReducedMotion, type Variants } from 'motion
 import { signInAction, type AuthState } from '@/app/actions/auth';
 import { ScreenLoader } from '@/components/shared/loading';
 import { ResendVerificationButton } from './ResendVerificationButton';
-import { AuthAlert, AuthField, AuthSubmitButton, MailIcon, PasswordField, authLinkClass } from './AuthFields';
+import {
+  AuthAlert,
+  AuthField,
+  AuthSubmitArrow,
+  AuthSubmitButton,
+  MailIcon,
+  PasswordField,
+  authFormFooterClass,
+  authLinkClass,
+  authSubtleLinkClass,
+} from './AuthFields';
 
 // ─── Animation ────────────────────────────────────────────────────────────────
 
@@ -50,7 +60,7 @@ export interface SignInFormProps {
   onSwitchToForgotPassword?: () => void;
   /** Optional redirect URL after login */
   redirectTo?: string;
-  /** Whether to show the bottom "Don't have an account? Sign up" link */
+  /** Whether to show the bottom "New to Justicia? Create an account" link */
   showSignUpLink?: boolean;
 }
 
@@ -91,11 +101,11 @@ export function SignInForm({
   const fieldError = (field: 'email' | 'password') => (state?.field === field ? state.error : undefined);
 
   const forgotLink = onSwitchToForgotPassword ? (
-    <button type="button" onClick={onSwitchToForgotPassword} className={`font-inter text-[11.5px] ${authLinkClass}`}>
+    <button type="button" onClick={onSwitchToForgotPassword} className={authSubtleLinkClass}>
       Forgot password?
     </button>
   ) : (
-    <Link href="/forgot-password" onClick={onClose} className={`font-inter text-[11.5px] ${authLinkClass}`}>
+    <Link href="/forgot-password" onClick={onClose} className={authSubtleLinkClass}>
       Forgot password?
     </Link>
   );
@@ -106,7 +116,7 @@ export function SignInForm({
 
       {/* A disabled fieldset locks every field while the request runs (no double submits). */}
       <fieldset disabled={isPending} className="m-0 min-w-0 border-0 p-0">
-        <motion.div variants={container} initial="hidden" animate="visible" className="space-y-4 sm:space-y-5">
+        <motion.div variants={container} initial="hidden" animate="visible" className="flex flex-col gap-5">
           <AnimatePresence initial={false}>
             {state?.error && !state.field && (
               <motion.div key="error" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
@@ -131,7 +141,7 @@ export function SignInForm({
               error={fieldError('email')}
             />
             {state?.resendEmail && (
-              <div className="pt-1.5 pl-0.5">
+              <div className="pt-2 pl-0.5">
                 <ResendVerificationButton
                   email={state.resendEmail}
                   className={`font-inter text-[11.5px] disabled:opacity-60 ${authLinkClass}`}
@@ -141,35 +151,37 @@ export function SignInForm({
             )}
           </motion.div>
 
+          {/* "Forgot password?" sits under the field, right-aligned with its edge. */}
           <motion.div variants={item}>
             <PasswordField
               id="password_signin"
               name="password"
               label="Password"
-              labelAside={forgotLink}
               autoComplete="current-password"
               placeholder="Enter your password"
               required
               error={fieldError('password')}
             />
+            <div className="mt-2.5 flex justify-end pr-0.5">{forgotLink}</div>
           </motion.div>
 
           <motion.div variants={item} className="pt-1">
             <AuthSubmitButton id="signin-submit-btn" pending={isPending} pendingLabel="Signing in…">
               Sign In
+              <AuthSubmitArrow />
             </AuthSubmitButton>
           </motion.div>
 
           {(showSignUpLink || onSwitchToSignUp) && (
-            <motion.p variants={item} className="text-center font-inter text-[12px] text-[#7A604D]">
-              Don&apos;t have an account?{' '}
+            <motion.p variants={item} className={`mt-1 ${authFormFooterClass}`}>
+              New to Justicia?{' '}
               {onSwitchToSignUp ? (
                 <button type="button" onClick={onSwitchToSignUp} className={authLinkClass}>
-                  Create one
+                  Create an account
                 </button>
               ) : (
                 <Link href="/register" onClick={onClose} className={authLinkClass}>
-                  Create one
+                  Create an account
                 </Link>
               )}
             </motion.p>

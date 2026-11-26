@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { EmptyMedallion } from '@/components/shared/neu/EmptyMedallion';
 import Link from 'next/link';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import { useViewActive } from '@/components/live/LiveProvider';
@@ -265,12 +266,16 @@ export function LawyerDirectoryTable({ lawyers }: { lawyers: LawyerDirectoryItem
               animate={{ opacity: 1, y: 0 }}
               className="flex min-h-[280px] flex-col items-center justify-center gap-3 px-6 py-10 text-center"
             >
-              <span className="client-neu-well grid h-14 w-14 place-items-center rounded-full text-[#A8742E]">
-                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M12 3v17M8 20h8M4.5 7.5h15" />
-                  <path d="M6.5 7.5 3.5 13.5a3 3 0 0 0 6 0l-3-6ZM17.5 7.5l-3 6a3 3 0 0 0 6 0l-3-6Z" />
-                </svg>
-              </span>
+              <EmptyMedallion
+                size="md"
+                className="mb-1"
+                icon={
+                  <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M12 3v17M8 20h8M4.5 7.5h15" />
+                    <path d="M6.5 7.5 3.5 13.5a3 3 0 0 0 6 0l-3-6ZM17.5 7.5l-3 6a3 3 0 0 0 6 0l-3-6Z" />
+                  </svg>
+                }
+              />
               <p className="font-lora text-[16px] font-semibold text-[#341512]">{emptyTitle}</p>
               <p className="max-w-[340px] font-inter text-[12px] leading-relaxed text-[#7D6855]">{query.trim() ? 'Check the spelling, or search in All Lawyers.' : tabMeta.hint}</p>
               <div className="mt-2 flex flex-wrap justify-center gap-2.5">
