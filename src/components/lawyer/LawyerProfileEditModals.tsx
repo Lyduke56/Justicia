@@ -12,6 +12,7 @@ import {
   type UpdateLawyerProfileInput,
 } from '@/app/actions/lawyerProfileActions';
 import type { LawyerCaseSummaryRow } from '@/types/database';
+import { NeuNumberStepper } from '@/components/shared/neu';
 
 // ─── Shared modal chrome ──────────────────────────────────────────────────────
 
@@ -878,16 +879,27 @@ function ManageCasesModalInner({ open, onClose, cases, practiceAreaSuggestions, 
                 </div>
                 <div>
                   <label htmlFor="case-year" className={labelClass}>Year</label>
-                  <input
-                    id="case-year"
-                    type="number"
-                    inputMode="numeric"
-                    value={editing.year}
-                    disabled={busy}
-                    onChange={(e) => setEditing({ ...editing, year: e.target.value })}
-                    placeholder={String(new Date().getFullYear())}
-                    className={inputClass}
-                  />
+                  <div className="relative">
+                    <input
+                      id="case-year"
+                      type="number"
+                      inputMode="numeric"
+                      value={editing.year}
+                      disabled={busy}
+                      onChange={(e) => setEditing({ ...editing, year: e.target.value })}
+                      placeholder={String(new Date().getFullYear())}
+                      className={`${inputClass} pr-12`}
+                    />
+                    <NeuNumberStepper
+                      value={editing.year}
+                      onChange={(year) => setEditing({ ...editing, year })}
+                      min={1900}
+                      max={new Date().getFullYear()}
+                      fallback={new Date().getFullYear()}
+                      label="year"
+                      disabled={busy}
+                    />
+                  </div>
                 </div>
               </div>
               <div>

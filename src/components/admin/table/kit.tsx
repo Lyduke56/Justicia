@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { EmptyMedallion } from '@/components/shared/neu/EmptyMedallion';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useViewActive } from '@/components/live/LiveProvider';
 import { EASE_OUT, RISE } from '@/components/lawyer/motion';
@@ -151,7 +152,7 @@ export function TablePager({ start, shownCount, total, pageSize = PAGE_SIZE, nou
 export function TableEmpty({ icon, title, hint, actions, emptyKey }: { icon: ReactNode; title: string; hint: string; actions?: ReactNode; emptyKey: string }) {
   return (
     <motion.div key={emptyKey} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex min-h-[280px] flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-      <span className="client-neu-well grid h-14 w-14 place-items-center rounded-full text-[#A8742E]">{icon}</span>
+      <EmptyMedallion size="md" icon={icon} className="mb-1" />
       <p className="font-lora text-[16px] font-semibold text-[#341512]">{title}</p>
       <p className="max-w-[360px] font-inter text-[12px] leading-relaxed text-[#7D6855]">{hint}</p>
       {actions && <div className="mt-2 flex flex-wrap justify-center gap-2.5">{actions}</div>}

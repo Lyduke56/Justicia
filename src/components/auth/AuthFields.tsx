@@ -68,9 +68,16 @@ export function EyeIcon({ open, className = 'w-4 h-4' }: { open: boolean; classN
 }
 
 /** Larger icons for the raised tile at the top of an auth panel. */
-export function AuthPanelHeaderIcon({ kind, className = 'w-6 h-6' }: { kind: 'key' | 'signin' | 'mail' | 'shield'; className?: string }) {
+export function AuthPanelHeaderIcon({ kind, className = 'w-6 h-6' }: { kind: 'key' | 'signin' | 'mail' | 'shield' | 'join'; className?: string }) {
   const p = { ...iconProps, className, strokeWidth: 1.7 };
   switch (kind) {
+    case 'join':
+      return (
+        <svg {...p}>
+          <circle cx="10" cy="8" r="3.6" />
+          <path d="M3 20c0-3.7 3.1-6.3 7-6.3 1.4 0 2.7.3 3.8.9M18.5 14v6M15.5 17h6" />
+        </svg>
+      );
     case 'key':
       return (
         <svg {...p}>
@@ -102,6 +109,23 @@ export function AuthPanelHeaderIcon({ kind, className = 'w-6 h-6' }: { kind: 'ke
   }
 }
 
+export function ArrowRightIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg {...iconProps} className={className}>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+export function InfoIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg {...iconProps} className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 7.6v.1" />
+    </svg>
+  );
+}
+
 function ErrorGlyph() {
   return (
     <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 shrink-0" aria-hidden="true">
@@ -112,10 +136,10 @@ function ErrorGlyph() {
 
 // ─── Fields ───────────────────────────────────────────────────────────────────
 
-export const authLabelClass = 'block font-lora text-[13px] font-semibold text-[#4A3426] select-none';
+export const authLabelClass = 'block font-lora text-[13.5px] font-semibold text-[#4A3426] select-none';
 
 function fieldClass(hasError: boolean, withIcon: boolean, withTrailing: boolean) {
-  return `neu-input w-full h-11 sm:h-12 rounded-[13px] ${withIcon ? 'pl-11' : 'pl-4'} ${withTrailing ? 'pr-12' : 'pr-4'} font-inter text-[14px] text-[#34150F] transition-shadow duration-200 ${
+  return `neu-input w-full h-12 sm:h-[52px] rounded-[14px] ${withIcon ? 'pl-12' : 'pl-4'} ${withTrailing ? 'pr-12' : 'pr-4'} font-inter text-[14.5px] text-[#34150F] transition-shadow duration-200 ${
     hasError ? 'neu-input-error' : ''
   }`;
 }
@@ -163,7 +187,7 @@ export function AuthField({ id, label, icon, error, labelAside, trailing, hint, 
   const hintId = `${id}-hint`;
   return (
     <div>
-      <div className="mb-1.5 flex items-end justify-between gap-3 pl-0.5">
+      <div className="mb-2 flex items-end justify-between gap-3 pl-0.5">
         <label htmlFor={id} className={authLabelClass}>
           {label}
         </label>
@@ -171,7 +195,7 @@ export function AuthField({ id, label, icon, error, labelAside, trailing, hint, 
       </div>
       <div className="group relative">
         {icon && (
-          <span className="pointer-events-none absolute left-4 top-1/2 z-[1] -translate-y-1/2 text-[#9A8270] transition-colors group-focus-within:text-[#C58B3C]">
+          <span className="pointer-events-none absolute left-[18px] top-1/2 z-[1] -translate-y-1/2 text-[#9A8270] transition-colors group-focus-within:text-[#C58B3C]">
             {icon}
           </span>
         )}
@@ -362,7 +386,7 @@ export function AuthSubmitButton({
       whileHover={reduce || inactive ? undefined : { y: -2, scale: 1.01 }}
       whileTap={reduce || inactive ? undefined : { y: 1, scale: 0.975 }}
       transition={{ type: 'spring', stiffness: 520, damping: 28 }}
-      className={`neu-btn-create relative inline-flex h-12 w-full items-center justify-center overflow-hidden rounded-[14px] px-6 font-inter text-[12.5px] font-semibold uppercase tracking-[0.16em] text-[#F3E6D6] cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C58B3C]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#E5D8CB] disabled:cursor-not-allowed ${
+      className={`neu-btn-create group relative inline-flex h-12 sm:h-[52px] w-full items-center justify-center overflow-hidden rounded-[14px] px-6 font-inter text-[12.5px] font-semibold uppercase tracking-[0.16em] text-[#F3E6D6] cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#C58B3C]/70 disabled:cursor-not-allowed ${
         pending ? '' : 'disabled:opacity-55'
       } ${className}`}
       {...rest}
@@ -410,6 +434,19 @@ export function AuthSubmitButton({
   );
 }
 
+/** Arrow that trails a primary action's label and nudges forward on hover. */
+export function AuthSubmitArrow() {
+  return <ArrowRightIcon className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />;
+}
+
 /** "Text link" style used under auth forms (Sign up, Back to sign in …). */
 export const authLinkClass =
   'font-semibold text-[#99431E] underline decoration-[#99431E]/35 underline-offset-[3px] transition-colors hover:text-[#34150F] hover:decoration-[#34150F]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C58B3C]/60 rounded-sm cursor-pointer';
+
+/** The divided "switch flow" line under an auth form ("New to Justicia? Create an account"). */
+export const authFormFooterClass =
+  'border-t border-[#C8B59E]/55 pt-5 text-center font-inter text-[12.5px] leading-relaxed text-[#7A604D]';
+
+/** Quieter secondary link that sits right under a field (e.g. "Forgot password?"). */
+export const authSubtleLinkClass =
+  'font-inter text-[12px] font-semibold text-[#99431E] underline-offset-[3px] transition-colors hover:text-[#34150F] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C58B3C]/60 rounded-sm cursor-pointer';

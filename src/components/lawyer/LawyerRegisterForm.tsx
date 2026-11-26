@@ -8,7 +8,7 @@ import { saveLawyerDraftAction, submitLawyerApplicationAction } from '@/app/acti
 import type { VerificationDocumentView } from '@/app/actions/lawyerVerificationDocs';
 import { VerificationDocumentsPanel } from './VerificationDocumentsPanel';
 import { REQUIRED_DOCUMENT_TYPES, documentGapMessage } from '@/lib/lawyer/verification';
-import { NeuAlert, NeuButton, ChevronLeftIcon, ChevronRightIcon, PencilIcon } from '@/components/shared/neu';
+import { NeuAlert, NeuButton, NeuNumberStepper, ChevronLeftIcon, ChevronRightIcon, PencilIcon } from '@/components/shared/neu';
 import { SubmissionModal, useSubmission } from '@/components/shared/feedback';
 
 interface ExistingUser { id: string; email: string; fullName?: string }
@@ -85,6 +85,7 @@ interface LawyerDraft {
 const inputClass = (hasError: boolean, extra = '') =>
   `neu-input w-full h-11 rounded-[13px] px-4 font-inter text-[14px] text-[#34150F] ${hasError ? 'neu-input-error' : ''} ${extra}`;
 const labelClass = 'block font-lora text-[13px] font-semibold text-[#4A3426]';
+const CURRENT_YEAR = new Date().getFullYear();
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
@@ -238,7 +239,13 @@ export function LawyerRegisterForm({
     window.location.href = '/lawyer/verification';
   };
 
-  const field = (id: keyof FormState, label: string, type = 'text', placeholder = '', opts: { prefix?: string; autoComplete?: string; hint?: string } = {}) => (
+  const field = (
+    id: keyof FormState,
+    label: string,
+    type = 'text',
+    placeholder = '',
+    opts: { prefix?: string; autoComplete?: string; hint?: string; min?: number; max?: number; fallback?: number } = {}
+  ) => (
     <div className="space-y-1.5">
       <label htmlFor={`reg-${id}`} className={labelClass}>{label}</label>
       <div className="relative">
@@ -258,8 +265,18 @@ export function LawyerRegisterForm({
           inputMode={type === 'number' ? 'numeric' : undefined}
           aria-invalid={errors[id] ? true : undefined}
           aria-describedby={errors[id] ? `reg-${id}-error` : undefined}
-          className={inputClass(!!errors[id], opts.prefix ? 'pl-9' : '')}
+          className={inputClass(!!errors[id], `${opts.prefix ? 'pl-9' : ''} ${type === 'number' ? 'pr-12' : ''}`)}
         />
+        {type === 'number' && (
+          <NeuNumberStepper
+            value={form[id] as string}
+            onChange={(next) => set(id, next)}
+            min={opts.min}
+            max={opts.max}
+            fallback={opts.fallback}
+            label={label}
+          />
+        )}
       </div>
       {opts.hint && !errors[id] && <p className="font-inter text-[11.5px] text-[#7D6855]">{opts.hint}</p>}
       <FieldError id={`reg-${id}-error`} message={errors[id]} />
@@ -441,16 +458,15 @@ export function LawyerRegisterForm({
                       value={form.ibpChapter}
                       onChange={e => set('ibpChapter', e.target.value)}
                       aria-invalid={errors.ibpChapter ? true : undefined}
-                      className={inputClass(!!errors.ibpChapter, 'appearance-none pr-10 cursor-pointer')}
+                      className={inputClass(!!errors.ibpChapter, 'cursor-pointer')}
                     >
                       <option value="">Select IBP Chapter</option>
                       {IBP_CHAPTERS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <ChevronRightIcon className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-[#9A8270]" />
                   </div>
                   <FieldError id="reg-ibpChapter-error" message={errors.ibpChapter} />
                 </div>
-                {field('barPasserYear', 'Bar Passer Year', 'number', 'e.g. 2018')}
+                {field('barPasserYear', 'Bar Passer Year', 'number', 'e.g. 2018', { min: 1900, max: CURRENT_YEAR, fallback: CURRENT_YEAR })}
               </div>
               <NeuAlert tone="info">Next, you will upload proof of your bar admission, IBP membership and a government ID.</NeuAlert>
             </div>
@@ -549,12 +565,12 @@ export function LawyerRegisterForm({
               <div className="space-y-3">
                 <p className={labelClass}>Consultation fees</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {field('feeInitial', 'Initial (30 min)', 'number', '700', { prefix: '₱' })}
-                  {field('feeStandard', 'Standard (1 hr)', 'number', '1500', { prefix: '₱' })}
-                  {field('feeExtended', 'Extended (2 hrs)', 'number', '2300', { prefix: '₱' })}
+                  {field('feeInitial', 'Initial (30 min)', 'number', '700', { prefix: '₱', min: 0 })}
+                  {field('feeStandard', 'Standard (1 hr)', 'number', '1500', { prefix: '₱', min: 0 })}
+                  {field('feeExtended', 'Extended (2 hrs)', 'number', '2300', { prefix: '₱', min: 0 })}
                 </div>
               </div>
-              <div className="sm:max-w-[16rem]">{field('experienceYears', 'Years of Practice', 'number', 'e.g. 5')}</div>
+              <div className="sm:max-w-[16rem]">{field('experienceYears', 'Years of Practice', 'number', 'e.g. 5', { min: 0 })}</div>
 
               <NeuAlert tone="warning" title="Confidentiality reminder">
                 When adding case summaries to your profile, do NOT include client names, case numbers, or any privileged or

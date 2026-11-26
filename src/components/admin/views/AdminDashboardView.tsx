@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { EmptyMedallion } from '@/components/shared/neu/EmptyMedallion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MotionConfig, motion, useReducedMotion } from 'motion/react';
@@ -155,7 +156,7 @@ function HeaderLink({ href, children }: { href: string; children: ReactNode }) {
 function PanelEmpty({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
   return (
     <motion.div variants={RISE} className="flex h-full min-h-[180px] flex-col items-center justify-center gap-3 px-6 text-center">
-      <span className="client-neu-well grid h-12 w-12 place-items-center rounded-full text-[#A8742E]">{icon}</span>
+      <EmptyMedallion size="sm" icon={icon} />
       <p className="font-lora text-[15px] font-semibold text-[#341512]">{title}</p>
       <p className="max-w-[260px] font-inter text-xs leading-relaxed text-[#7D6855]">{description}</p>
     </motion.div>

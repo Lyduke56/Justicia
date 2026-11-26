@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { AuthPageCard, AuthPanelHeader, AuthPanelView } from '@/components/auth/AuthPanel';
 import { AuthAlert, AuthPanelHeaderIcon, AuthSubmitButton, PasswordField, authLinkClass } from '@/components/auth/AuthFields';
 import { SubmissionStatus, useSubmission, type SubmissionResult } from '@/components/shared/feedback';
-import { ScreenLoader } from '@/components/shared/loading';
+import { PanelLoader } from '@/components/shared/loading';
 import { NeuButton } from '@/components/shared/neu';
 
 type LinkState = { status: 'checking' } | { status: 'ready'; email: string } | { status: 'invalid'; reason: string };
@@ -179,7 +179,7 @@ export default function ResetPasswordPage() {
     );
   } else if (link.status === 'checking') {
     viewKey = 'checking';
-    view = <ScreenLoader variant="panel" label="Checking your reset link..." />;
+    view = <PanelLoader label="Checking your reset link..." />;
   } else if (link.status === 'invalid') {
     viewKey = 'invalid';
     view = (

@@ -88,6 +88,40 @@ body {
   background: #c59341;
 }
 
+/*
+ * Dropdowns: every native <select> gets the same chevron in the portal's brown, set 1rem in from
+ * the edge, with room reserved so the text never runs under it. Unlayered on purpose, so it wins
+ * over a field's px-* utilities (which would otherwise pull the text under the chevron).
+ */
+select:not([multiple]):not([size]) {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237A604D' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 0.875rem;
+  padding-right: 2.75rem;
+}
+
+select:not([multiple]):not([size]):disabled {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23B9A48F' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/*
+ * Number fields: the browser's spinner arrows can't be styled to match, so they're hidden; fields
+ * that want buttons use NeuNumberStepper. Typing and the keyboard arrow keys still work.
+ */
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* Subtle gold text selection */
 ::selection {
   background-color: rgba(197, 147, 65, 0.35);

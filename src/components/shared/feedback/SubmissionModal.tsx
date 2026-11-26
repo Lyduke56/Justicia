@@ -4,12 +4,12 @@
  * Dialog frame for actions that submit something (book, approve, confirm payment, save …).
  *
  *  idle       → the full sheet you pass as children (usually a NeuModalSheet).
- *  processing → the sheet fades and blurs out, the panel shrinks to a compact card and the
- *               SubmissionBadge runs its line around the groove.
- *  success    → the line writes a check; the copy and a "Done" button follow once it lands.
+ *  processing → the sheet fades and blurs out, the panel shrinks to a snug card around the
+ *               SubmissionBadge and its copy while the line runs around the groove.
+ *  success    → the line writes a check; once it lands the card grows smoothly and the copy,
+ *               any detail pills and a "Done" button follow.
  *  error      → the line writes an X; the error, "Try again" (back to the sheet) and "Close" follow.
  *
- * The compact card keeps one height in every state so nothing jumps when the mark lands.
  * Esc, the backdrop and the close buttons are disabled while the request runs.
  * Render it inside <AnimatePresence> so the overlay and panel animate out when it closes.
  * Pair it with useSubmission, which only reports success or error from the real result.
@@ -58,7 +58,17 @@ export interface SubmissionStatusProps extends Omit<SubmissionModalProps, 'child
   className?: string;
   /** Replaces the default buttons once the mark has landed (e.g. links on an auth page). */
   actions?: React.ReactNode;
+  /**
+   * While working, hug the loading badge and its copy: a narrower card with no detail pills and
+   * no space held for the buttons. Once the mark lands it grows (animated) to fit the result.
+   * SubmissionModal turns this on; inline uses keep one fixed height.
+   */
+  fitWhileWorking?: boolean;
 }
+
+/** Compact modal card widths: snug around the badge while working, room for buttons after. */
+const FIT_WIDTH_WORKING = 'min(21rem, calc(100vw - 2rem))';
+const FIT_WIDTH_FINISHED = 'min(26rem, calc(100vw - 2rem))';
 
 /**
  * The compact result card on its own: badge, copy that changes when the mark lands, optional
@@ -78,12 +88,15 @@ export function SubmissionStatus({
   onRetry,
   className = 'px-7 sm:px-9 pt-9 pb-8',
   actions,
+  fitWhileWorking = false,
 }: SubmissionStatusProps) {
   const outcome = phase === 'success' ? 'success' : phase === 'error' ? 'error' : null;
   // The copy and buttons change when the mark has landed, not when the server answers.
   const [landedFor, setLandedFor] = useState<string | null>(null);
   const finished = outcome !== null && landedFor === outcome;
   const actionsRef = useRef<HTMLDivElement>(null);
+  // Snug card while the request runs (and until the mark lands).
+  const snug = fitWhileWorking && !finished;
 
   useEffect(() => {
     if (finished) actionsRef.current?.querySelector('button')?.focus();
@@ -100,6 +113,7 @@ export function SubmissionStatus({
       key="status"
       layout
       className={`flex flex-col items-center text-center ${className}`}
+      style={fitWhileWorking ? { width: snug ? FIT_WIDTH_WORKING : FIT_WIDTH_FINISHED } : undefined}
       initial={{ opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.35, delay: 0.08, ease: EASE_OUT }}
@@ -110,7 +124,7 @@ export function SubmissionStatus({
         onLanded={() => setLandedFor(outcome)}
       />
 
-      <motion.div layout className="mt-6 min-h-[6.5rem] w-full" aria-live="polite">
+      <motion.div layout className={`mt-6 w-full ${fitWhileWorking ? '' : 'min-h-[6.5rem]'}`} aria-live="polite">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={finished ? outcome : 'working'}
@@ -137,19 +151,27 @@ export function SubmissionStatus({
         </AnimatePresence>
       </motion.div>
 
-      {details && (
-        <motion.div layout className="mt-3 flex flex-wrap items-center justify-center gap-2">
+      {details && !snug && (
+        <motion.div
+          layout
+          className="mt-3 flex flex-wrap items-center justify-center gap-2"
+          initial={fitWhileWorking ? { opacity: 0, y: 6 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1, ease: EASE_OUT }}
+        >
           {details}
         </motion.div>
       )}
 
-      {/* Space is held while working so the card doesn't grow when the buttons appear. */}
+      {/* Inline: space is held while working so the card doesn't grow when the buttons appear.
+          Snug (modal): nothing is held; the buttons arrive with the result. */}
+      {!snug && (
       <motion.div
         ref={actionsRef}
         layout
         className="mt-6 flex w-full flex-col-reverse items-stretch justify-center gap-3 sm:flex-row sm:items-center"
         style={{ visibility: finished ? 'visible' : 'hidden' }}
-        initial={false}
+        initial={fitWhileWorking ? { opacity: 0, y: 6 } : false}
         animate={finished ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
         transition={{ duration: 0.3, delay: finished ? 0.15 : 0, ease: EASE_OUT }}
       >
@@ -172,6 +194,7 @@ export function SubmissionStatus({
           </NeuButton>
         )}
       </motion.div>
+      )}
     </motion.div>
   );
 }
@@ -219,12 +242,13 @@ export function SubmissionModal({ phase, titleId, size = 'lg', onClose, children
           transition={{ layout: { type: 'spring', stiffness: 260, damping: 30, mass: 0.9 } }}
           // Radius in style so motion keeps the corners round while the panel resizes.
           style={{ borderRadius: 30, transformOrigin: '50% 50%' }}
-          className={`neu-modal relative my-auto flex w-full max-h-[90vh] flex-col overflow-hidden ${
-            compact ? 'max-w-[26rem]' : NEU_MODAL_SIZES[size]
+          className={`neu-modal relative my-auto flex max-h-[90vh] flex-col overflow-hidden ${
+            // Compact: the card sets the width (snug while working, wider for the result).
+            compact ? 'w-fit max-w-full' : `w-full ${NEU_MODAL_SIZES[size]}`
           }`}
         >
           {compact ? (
-            <SubmissionStatus phase={phase} titleId={titleId} onClose={onClose} {...status} />
+            <SubmissionStatus phase={phase} titleId={titleId} onClose={onClose} fitWhileWorking {...status} />
           ) : (
             <motion.div
               key="sheet"

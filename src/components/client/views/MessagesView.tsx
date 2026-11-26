@@ -39,7 +39,7 @@ import {
   VideoIcon,
 } from '@/components/shared/neu';
 import { EASE_OUT } from '@/components/shared/neu/motion';
-import { ScreenLoader } from '@/components/shared/loading';
+import { PanelLoader } from '@/components/shared/loading';
 import {
   ACCEPT_DOCUMENTS,
   ACCEPT_MEDIA,
@@ -1024,7 +1024,7 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
       {/* List — the negative margin + padding leaves room for the selected row's shadow */}
       <div className="flex-1 min-h-0 overflow-y-auto neu-scrollbar-discrete -mx-3 px-3 py-1">
         {!threadsLoaded ? (
-          <ScreenLoader variant="panel" srLabel="Loading conversations" className="h-full" />
+          <PanelLoader srLabel="Loading conversations" className="h-full" />
         ) : threads.length === 0 ? (
           <EmptyState
             size="sm"

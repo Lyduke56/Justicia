@@ -10,7 +10,11 @@ interface NavbarProps {
   onOpenSignUp?: () => void;
 }
 
-export function Navbar({ onOpenSignIn }: NavbarProps) {
+const signUpClass =
+  'font-lora text-[13.5px] font-medium tracking-[0.15em] bg-gradient-to-r from-[#c5944e] to-[#d6a25b] hover:from-[#d6a25b] hover:to-[#e4b574] text-[#160c0d] px-5 py-2 rounded transition-all duration-300 block shadow-sm hover:shadow-[0_4px_16px_rgba(197,148,78,0.35)]';
+const mobileSignUpClass = 'w-full font-lora text-center text-xs font-bold tracking-[0.15em] bg-[#c5944e] text-[#160c0d] py-2.5 rounded';
+
+export function Navbar({ onOpenSignIn, onOpenSignUp }: NavbarProps) {
   const [activeSection, setActiveSection] = useState<'home' | 'about' | 'features'>('home');
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -103,12 +107,16 @@ export function Navbar({ onOpenSignIn }: NavbarProps) {
             whileTap={{ scale: 0.97, y: 0 }}
             transition={{ type: 'spring', stiffness: 400, damping: 25 }}
           >
-            <Link
-              href="/register"
-              className="font-lora text-[13.5px] font-medium tracking-[0.15em] bg-gradient-to-r from-[#c5944e] to-[#d6a25b] hover:from-[#d6a25b] hover:to-[#e4b574] text-[#160c0d] px-5 py-2 rounded transition-all duration-300 block shadow-sm hover:shadow-[0_4px_16px_rgba(197,148,78,0.35)]"
-            >
-              SIGN UP
-            </Link>
+            {/* Opens the account-type modal when the page provides it; otherwise /register asks. */}
+            {onOpenSignUp ? (
+              <button type="button" onClick={onOpenSignUp} id="navbar-signup-btn" className={`${signUpClass} cursor-pointer`}>
+                SIGN UP
+              </button>
+            ) : (
+              <Link href="/register" id="navbar-signup-btn" className={signUpClass}>
+                SIGN UP
+              </Link>
+            )}
           </motion.div>
 
           {/* LOG IN Button */}
@@ -219,13 +227,23 @@ export function Navbar({ onOpenSignIn }: NavbarProps) {
             </div>
 
             <div className="pt-2 flex flex-col gap-3">
-              <Link
-                href="/register"
-                onClick={() => setMobileMenuOpen(false)}
-                className="font-lora text-center text-xs font-bold tracking-[0.15em] bg-[#c5944e] text-[#160c0d] py-2.5 rounded"
-              >
-                SIGN UP
-              </Link>
+              {onOpenSignUp ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onOpenSignUp();
+                  }}
+                  id="navbar-mobile-signup-btn"
+                  className={`${mobileSignUpClass} cursor-pointer`}
+                >
+                  SIGN UP
+                </button>
+              ) : (
+                <Link href="/register" onClick={() => setMobileMenuOpen(false)} id="navbar-mobile-signup-btn" className={mobileSignUpClass}>
+                  SIGN UP
+                </Link>
+              )}
             </div>
           </motion.div>
         )}

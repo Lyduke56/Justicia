@@ -428,7 +428,7 @@ function FindLawyerCard({
             className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] shrink-0 rounded-full"
           >
             <div className="w-full h-full flex items-center justify-center text-[#4A3528] overflow-hidden rounded-full transition-[color,scale,rotate,translate] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:text-[#C58B3C] group-hover:scale-107 group-hover:-rotate-4 group-hover:-translate-y-px">
-            <ProfilePhoto src={lawyer.photoUrl} alt={lawyer.fullName} className="w-full h-full" />
+            <ProfilePhoto src={lawyer.photoUrl} alt={lawyer.fullName} className="w-full h-full" ringed />
             </div>
           </motion.div>
 

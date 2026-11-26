@@ -10,7 +10,7 @@ import { EarningsChart } from '@/components/lawyer/earnings/EarningsChart';
 import { MetricToggle, MonthPicker } from '@/components/lawyer/earnings/EarningsControls';
 import { MONTHS_FULL, MONTHS_SHORT, earningsNote, metricChange, monthValues, pesoExact, pesoWhole, sum, type ChartMetric } from '@/components/lawyer/earnings/model';
 import { QueueToolbar } from '@/components/admin/verification/QueueToolbar';
-import { InlineLoader, ScreenLoader } from '@/components/shared/loading';
+import { InlineLoader, PanelLoader } from '@/components/shared/loading';
 import { CAPS, ROW_HEIGHT, RefreshGlyph, TableBand, TableEmpty, TablePager, TableRows, ToolbarButton, pageOf, rowClass, useEntrance } from '@/components/admin/table/kit';
 import {
   EARNINGS_SORTS,
@@ -316,7 +316,7 @@ export function AdminEarningsView({ initialData, initialError = null }: { initia
               {chart ? (
                 <EarningsChart data={chart} metric={metric} selected={month} onSelect={setPicked} />
               ) : (
-                <ScreenLoader variant="panel" srLabel="Loading chart" className="h-[272px]" />
+                <PanelLoader srLabel="Loading chart" className="h-[272px]" />
               )}
             </motion.div>
             <motion.p variants={RISE} className="mt-3 font-inter text-[10.5px] text-[#7D6855]">
