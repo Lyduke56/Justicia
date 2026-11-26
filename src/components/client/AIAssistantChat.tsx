@@ -2,8 +2,18 @@
 
 import { Markdown } from '@/components/shared/Markdown';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { motion, useReducedMotion, type Variants } from 'motion/react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { AnimatePresence, motion, useReducedMotion, type Variants } from 'motion/react';
+import { NeuAlert } from '@/components/shared/neu';
+import { PanelLoader } from '@/components/shared/loading';
+import {
+  deleteAiConversationAction,
+  getAiConversationAction,
+  listAiConversationsAction,
+  saveAiExchangeAction,
+} from '@/app/actions/aiConversationActions';
+import type { AiConversationSummary, AiStoredMessage } from '@/lib/ai/history';
+import { AIHistoryModal } from './AIHistoryModal';
 import {
   SendPaperPlaneIcon,
   PlusIcon,
@@ -12,6 +22,7 @@ import {
   FindLawyerIcon,
   ScaleIcon,
   DocumentTextIcon,
+  ClockIcon,
 } from './ClientIcons';
 
 interface Citation {
@@ -37,8 +48,45 @@ interface ChatMessage {
   offTopic?: boolean;
   suggestedFilters?: SuggestedFilters | null;
   timestamp: string;
+  /** ISO time the message was sent (saved with the conversation history). */
+  sentAt?: string;
   attachedFileName?: string;
 }
+
+/** A saved conversation's id from `?chat=<id>` or /client/ai-assistant/<id>. */
+const CONVERSATION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Today: "03:15 PM" (as before). Older saved messages also get their date. */
+function formatMessageTime(iso: string): string {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+}
+
+function toChatMessage(m: AiStoredMessage): ChatMessage {
+  return {
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    citations: m.citations,
+    escalate: m.escalate,
+    offTopic: m.offTopic,
+    suggestedFilters: m.suggestedFilters ?? null,
+    attachedFileName: m.attachedFileName,
+    sentAt: m.sentAt,
+    timestamp: formatMessageTime(m.sentAt),
+  };
+}
+
+/** Updates the address bar without a navigation (keeps this view mounted). */
+function setChatUrl(conversationId: string | null) {
+  if (typeof window === 'undefined') return;
+  window.history.replaceState(null, '', conversationId ? `/client/ai-assistant?chat=${conversationId}` : '/client/ai-assistant');
+}
+
+const historyButtonClass =
+  'neu-raised-sm rounded-full px-4 py-2 bg-[#E5D8CB] text-xs font-inter font-semibold text-[#34150F] hover:text-[#C58B3C] active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer focus:outline-none';
 
 interface AIAssistantChatProps {
   userFirstName: string;
@@ -96,8 +144,13 @@ function buildFindLawyerUrl(filters: SuggestedFilters): string {
 export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const pathname = usePathname();
   const initialQuery = searchParams.get('q') || '';
   const reduceMotion = useReducedMotion();
+
+  // A saved conversation to open: ?chat=<id>, or the /client/ai-assistant/<id> route.
+  const chatParam = searchParams.get('chat') || pathname.match(/^\/client\/ai-assistant\/([^/?#]+)$/)?.[1] || '';
+  const linkedId = CONVERSATION_ID_RE.test(chatParam) ? chatParam : '';
 
   const [inputQuery, setInputQuery] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -106,8 +159,106 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
   const [attachedText, setAttachedText] = useState<string>('');
   const [isSubmitHovered, setIsSubmitHovered] = useState(false);
 
+  // ─── Conversation history ────────────────────────────────────────────────
+  // `chatRef` is the chat on screen; its `id` fills in once the first exchange is saved. A new
+  // object per chat, so a save still finishing for an earlier chat never attaches to this one.
+  const chatRef = useRef<{ id: string | null }>({ id: null });
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [loadingConversation, setLoadingConversation] = useState(!!linkedId);
+  const [conversationError, setConversationError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<AiConversationSummary[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  // The address bar pointed at a different saved conversation (e.g. browser history): load it.
+  const [seenLinkedId, setSeenLinkedId] = useState(linkedId);
+  if (linkedId !== seenLinkedId) {
+    setSeenLinkedId(linkedId);
+    if (linkedId && linkedId !== conversationId) setLoadingConversation(true);
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  /** Shows a loaded conversation, or reports why it could not be opened. */
+  const applyConversation = useCallback(
+    (id: string, res: Awaited<ReturnType<typeof getAiConversationAction>>) => {
+      if ('error' in res) {
+        chatRef.current = { id: null };
+        setConversationId(null);
+        setMessages([]);
+        setConversationError(res.error);
+        setChatUrl(null);
+      } else {
+        chatRef.current = { id };
+        setConversationId(id);
+        setMessages(res.messages.map(toChatMessage));
+        setConversationError(null);
+      }
+      setLoadingConversation(false);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!linkedId || linkedId === chatRef.current.id) return;
+    let active = true;
+    getAiConversationAction(linkedId)
+      .then((res) => active && applyConversation(linkedId, res))
+      .catch(() => active && applyConversation(linkedId, { error: 'This conversation could not be loaded.' }));
+    return () => {
+      active = false;
+    };
+  }, [linkedId, applyConversation]);
+
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const res = await listAiConversationsAction();
+      if ('error' in res) setHistoryError(res.error);
+      else setHistory(res.conversations);
+    } catch {
+      setHistoryError('Your conversation history could not be loaded.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  /** Saves one question + answer in order, after any earlier save of the same chat. */
+  const queueSave = useCallback((question: ChatMessage, answer: ChatMessage) => {
+    const chat = chatRef.current;
+    saveChainRef.current = saveChainRef.current.then(async () => {
+      try {
+        const res = await saveAiExchangeAction({
+          conversationId: chat.id,
+          user: { content: question.content, sentAt: question.sentAt ?? new Date().toISOString(), attachedFileName: question.attachedFileName },
+          assistant: {
+            content: answer.content,
+            sentAt: answer.sentAt ?? new Date().toISOString(),
+            citations: answer.citations,
+            escalate: answer.escalate,
+            offTopic: answer.offTopic,
+            suggestedFilters: answer.suggestedFilters,
+          },
+        });
+        if ('error' in res) {
+          console.warn('[AIAssistantChat] conversation not saved:', res.error);
+          return;
+        }
+        const isNew = chat.id === null;
+        chat.id = res.conversationId;
+        if (chatRef.current === chat && isNew) {
+          setConversationId(res.conversationId);
+          setChatUrl(res.conversationId);
+        }
+      } catch {
+        console.warn('[AIAssistantChat] conversation not saved');
+      }
+    });
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -155,11 +306,13 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
       const fileToSend = forceFile ?? attachedFile;
       const fileTextToSend = forceFileText ?? attachedText;
 
+      const askedAt = new Date();
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
         role: 'user',
         content: textToSend.trim(),
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: askedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        sentAt: askedAt.toISOString(),
         attachedFileName: fileToSend?.name,
       };
 
@@ -189,6 +342,7 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
 
         const data = await response.json();
 
+        const answeredAt = new Date();
         const assistantMsg: ChatMessage = {
           id: `ai-${Date.now()}`,
           role: 'assistant',
@@ -197,10 +351,13 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
           escalate: data.escalate || false,
           offTopic: data.offTopic || false,
           suggestedFilters: data.suggestedFilters || null,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: answeredAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sentAt: answeredAt.toISOString(),
         };
 
         setMessages((prev) => [...prev, assistantMsg]);
+        // Only real answers go into the history (not the offline fallback below).
+        queueSave(userMsg, assistantMsg);
       } catch {
         // Graceful fallback for Philippine legal guidance
         const fallbackMsg: ChatMessage = {
@@ -232,24 +389,89 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
         setIsLoading(false);
       }
     },
-    [isLoading, messages, attachedFile, attachedText]
+    [isLoading, messages, attachedFile, attachedText, queueSave]
   );
 
   // If query param is present on mount, automatically trigger submission
+  // (not while a saved conversation is being opened).
   useEffect(() => {
-    if (initialQuery && messages.length === 0) {
+    if (initialQuery && messages.length === 0 && !linkedId && !loadingConversation) {
       const timer = setTimeout(() => {
         handleSend(initialQuery);
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [initialQuery, handleSend, messages.length]);
+  }, [initialQuery, handleSend, messages.length, linkedId, loadingConversation]);
 
   const handleResetChat = () => {
+    chatRef.current = { id: null };
+    setConversationId(null);
+    setConversationError(null);
+    setChatUrl(null);
     setMessages([]);
     setInputQuery('');
     removeAttachment();
   };
+
+  const openHistory = () => {
+    setHistoryOpen(true);
+    refreshHistory();
+  };
+
+  const openConversation = async (id: string) => {
+    setHistoryOpen(false);
+    if (id === chatRef.current.id) return;
+    const chat = { id };
+    chatRef.current = chat;
+    setConversationId(id);
+    setConversationError(null);
+    setMessages([]);
+    setInputQuery('');
+    removeAttachment();
+    setLoadingConversation(true);
+    setChatUrl(id);
+    let res: Awaited<ReturnType<typeof getAiConversationAction>>;
+    try {
+      res = await getAiConversationAction(id);
+    } catch {
+      res = { error: 'This conversation could not be loaded.' };
+    }
+    // Ignore if another conversation was opened (or a new one started) meanwhile.
+    if (chatRef.current === chat) applyConversation(id, res);
+  };
+
+  const deleteConversation = async (id: string): Promise<string | null> => {
+    try {
+      const res = await deleteAiConversationAction(id);
+      if ('error' in res) return res.error;
+    } catch {
+      return 'This conversation could not be deleted.';
+    }
+    setHistory((prev) => prev.filter((c) => c.id !== id));
+    if (chatRef.current.id === id) handleResetChat();
+    return null;
+  };
+
+  const historyModal = (
+    <AnimatePresence>
+      {historyOpen && (
+        <AIHistoryModal
+          conversations={history}
+          loading={historyLoading}
+          error={historyError}
+          activeId={conversationId}
+          onSelect={openConversation}
+          onDelete={deleteConversation}
+          onRetry={refreshHistory}
+          onNewQuestion={() => {
+            setHistoryOpen(false);
+            handleResetChat();
+          }}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
+    </AnimatePresence>
+  );
 
   const handleFindLawyer = (filters: SuggestedFilters | null | undefined) => {
     const effectiveFilters: SuggestedFilters = {
@@ -265,6 +487,16 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
 
   const hasPrompt = inputQuery.trim().length > 0 || !!attachedFile;
 
+  // ─── Opening a saved conversation ────────────────────────────────────────────
+  if (loadingConversation) {
+    return (
+      <div className="h-[calc(100vh-4rem)] flex items-center justify-center max-w-[1240px] mx-auto p-4 sm:p-6 lg:p-8 bg-[#E5D8CB]">
+        <PanelLoader label="Loading conversation..." />
+        {historyModal}
+      </div>
+    );
+  }
+
   // ─── Pristine / Empty State ──────────────────────────────────────────────────
   if (messages.length === 0) {
     return (
@@ -272,8 +504,16 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
         variants={pageVariants}
         initial={reduceMotion ? false : 'hidden'}
         animate="show"
-        className="min-h-[calc(100vh-4rem)] flex flex-col justify-between px-6 sm:px-10 lg:px-16 py-8 sm:py-12 max-w-[1240px] mx-auto bg-[#E5D8CB]"
+        className="relative min-h-[calc(100vh-4rem)] flex flex-col justify-between px-6 sm:px-10 lg:px-16 py-8 sm:py-12 max-w-[1240px] mx-auto bg-[#E5D8CB]"
       >
+        {/* Conversation history (out of the flow, so the centred layout doesn't move) */}
+        <motion.div variants={fadeVariants} className="absolute top-6 right-6 sm:top-8 sm:right-10 lg:right-16">
+          <button type="button" onClick={openHistory} className={historyButtonClass}>
+            <ClockIcon className="w-3.5 h-3.5 text-[#C58B3C]" />
+            <span>History</span>
+          </button>
+        </motion.div>
+
         {/* Top Spacer */}
         <div className="pt-2 sm:pt-6" />
 
@@ -317,6 +557,11 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
 
           {/* Primary Extended-Width Recessed Search & Attachment Input */}
           <motion.div variants={fadeVariants} className="w-full max-w-4xl lg:max-w-5xl mx-auto">
+            {conversationError && (
+              <NeuAlert tone="error" onDismiss={() => setConversationError(null)} className="mb-5">
+                {conversationError}
+              </NeuAlert>
+            )}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -438,6 +683,7 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
             SC Jurisprudence, not formal Attorney-Client advice.
           </p>
         </div>
+        {historyModal}
       </motion.div>
     );
   }
@@ -467,14 +713,20 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleResetChat}
-          className="neu-raised-sm rounded-full px-4 py-2 bg-[#E5D8CB] text-xs font-inter font-semibold text-[#34150F] hover:text-[#C58B3C] active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer focus:outline-none"
-        >
-          <span className="text-[#C58B3C] font-bold text-sm">+</span>
-          <span>New Question</span>
-        </button>
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button type="button" onClick={openHistory} className={historyButtonClass} aria-label="Conversation history">
+            <ClockIcon className="w-3.5 h-3.5 text-[#C58B3C]" />
+            <span className="hidden sm:inline">History</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleResetChat}
+            className="neu-raised-sm rounded-full px-4 py-2 bg-[#E5D8CB] text-xs font-inter font-semibold text-[#34150F] hover:text-[#C58B3C] active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer focus:outline-none"
+          >
+            <span className="text-[#C58B3C] font-bold text-sm">+</span>
+            <span>New Question</span>
+          </button>
+        </div>
       </div>
 
       {/* Messages Stream — thin parchment scrollbar; -mx/px gives the raised bubbles room for their
@@ -727,6 +979,7 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
           SC Jurisprudence, not formal Attorney-Client advice.
         </p>
       </div>
+      {historyModal}
     </div>
   );
 }

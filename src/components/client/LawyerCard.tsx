@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
+import { lawyerProfileHref } from './lawyerDirectory';
 
 export interface LawyerItem {
   id: string;
@@ -22,7 +23,8 @@ interface LawyerCardProps {
 export function LawyerCard({ lawyer }: LawyerCardProps) {
   return (
     <Link
-      href={`/client/lawyers/${lawyer.id}`}
+      // Opens the profile in the Find a Lawyer tab, as clicking a card there does.
+      href={lawyerProfileHref(lawyer.id)}
       className="neu-card-interactive group block rounded-[22px] py-4 pl-3 pr-5 select-none"
     >
       <div className="flex items-center gap-2">
