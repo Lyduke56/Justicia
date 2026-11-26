@@ -477,8 +477,9 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
         </button>
       </div>
 
-      {/* Messages Stream */}
-      <div className="flex-1 min-h-0 overflow-y-auto py-5 space-y-6 pr-1">
+      {/* Messages Stream — thin parchment scrollbar; -mx/px gives the raised bubbles room for their
+          shadows (a scroll box clips at its edges) without moving anything. */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden neu-scrollbar-discrete -mx-3 px-3 sm:-mx-5 sm:px-5 lg:-mx-6 lg:px-6 py-6 space-y-7">
         {messages.map((msg) => (
           <div
             key={msg.id}
@@ -493,11 +494,21 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
 
             {/* Bubble Container */}
             <div
-              className={`max-w-[88%] sm:max-w-[80%] rounded-[24px] ${msg.role === 'user'
-                ? 'bg-[#34150F] text-[#FAF6F0] rounded-tr-sm p-4 sm:p-5 shadow-md'
-                : 'neu-raised bg-[#E5D8CB] text-[#34150F] rounded-tl-sm p-5 sm:p-6 leading-relaxed'
+              className={`min-w-0 rounded-[24px] ${msg.role === 'user'
+                ? 'max-w-[88%] sm:max-w-[70%] bg-[#34150F] text-[#FAF6F0] rounded-tr-sm p-4 sm:p-5 shadow-md'
+                : 'max-w-[92%] sm:max-w-[85%] lg:max-w-[48rem] neu-raised bg-[#E5D8CB] text-[#34150F] rounded-tl-sm px-5 pb-5 pt-4 sm:px-7 sm:pb-6 sm:pt-5'
                 }`}
             >
+              {/* Who's speaking + when (assistant): a quiet label row above the answer. */}
+              {msg.role === 'assistant' && (
+                <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#CDBCA8]/60 pb-3">
+                  <span className="font-inter text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#A8742E]">
+                    Justicia AI <span className="text-[#C8B59E]">·</span> Legal information
+                  </span>
+                  <span className="font-inter text-[10.5px] text-[#8E7E70]">{msg.timestamp}</span>
+                </div>
+              )}
+
               {/* Attached file badge (user message) */}
               {msg.attachedFileName && (
                 <div className="flex items-center gap-2 mb-2.5 px-2.5 py-1.5 rounded-lg bg-white/10 text-xs text-[#FAF6F0]/90 font-inter">
@@ -524,7 +535,7 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
               ) : (
                 <Markdown
                   content={msg.content}
-                  className="leading-relaxed font-lora text-sm sm:text-[15px] text-[#34150F] font-normal"
+                  className="font-lora text-sm sm:text-[15px] leading-[1.75] text-[#3E2A1E] font-normal"
                 />
               )}
 
@@ -532,7 +543,7 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
               {msg.citations && msg.citations.length > 0 && (
                 <div className="mt-5 pt-4 border-t border-[#A89685]/30 space-y-2">
                   <div className="flex items-center gap-1.5 text-[10.5px] font-lora font-bold text-[#C58B3C] tracking-wide uppercase">
-                    <span>🏛️</span>
+                    <ScaleIcon className="w-3.5 h-3.5 shrink-0" />
                     <span>Philippine Legal Authorities Cited</span>
                   </div>
                   <div className="flex flex-wrap gap-2 pt-1">
@@ -589,13 +600,10 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
                 </div>
               )}
 
-              {/* Timestamp */}
-              <div
-                className={`text-[10px] mt-2.5 text-right font-inter ${msg.role === 'user' ? 'text-[#FAF6F0]/60' : 'text-[#8E7E70]'
-                  }`}
-              >
-                {msg.timestamp}
-              </div>
+              {/* Timestamp (user; the assistant's is in its label row) */}
+              {msg.role === 'user' && (
+                <div className="text-[10px] mt-2.5 text-right font-inter text-[#FAF6F0]/60">{msg.timestamp}</div>
+              )}
             </div>
 
             {/* User Avatar */}
@@ -613,9 +621,13 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
             <div className="neu-raised-sm size-9 rounded-full bg-[#E5D8CB] text-[#C58B3C] flex items-center justify-center shrink-0 mt-1 shadow-sm">
               <AIAssistantIcon className="w-4 h-4" />
             </div>
-            <div className="neu-raised bg-[#E5D8CB] rounded-[22px] rounded-tl-sm px-5 py-4 text-xs sm:text-sm text-[#5C4535] flex items-center gap-3 font-lora italic">
-              <span className="size-2 rounded-full bg-[#C58B3C] animate-ping" />
-              <span>Analyzing Philippine statutes &amp; Supreme Court jurisprudence…</span>
+            <div role="status" className="neu-raised bg-[#E5D8CB] rounded-[22px] rounded-tl-sm px-5 py-4 text-xs sm:text-sm text-[#5C4535] flex items-center gap-3 font-lora italic">
+              <span className="ink-dots text-[15px]" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+              <span>Reviewing Philippine statutes &amp; Supreme Court jurisprudence…</span>
             </div>
           </div>
         )}

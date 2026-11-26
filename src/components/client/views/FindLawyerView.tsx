@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { LawyerGrid } from '@/components/client/LawyerGrid';
 import { LawyerSearchFilters } from '@/components/client/LawyerSearchFilters';
 import { LawyerDetailView } from '@/components/client/LawyerDetailView';
-import { ScreenLoader } from '@/components/shared/loading';
+import { PanelLoader } from '@/components/shared/loading';
 import type { PublicLawyerProfile } from '@/components/client/LawyerGrid';
 
 const PAGE_SIZE = 9;
@@ -788,7 +788,7 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
                         animate={{ opacity: 1, transition: { delay: 0.9, duration: 0.3 } }}
                         exit={{ opacity: 0, transition: { duration: 0.12 } }}
                       >
-                        <ScreenLoader variant="panel" label="Finding lawyers..." className="min-h-[18rem]" />
+                        <PanelLoader label="Finding lawyers..." className="min-h-[18rem]" />
                       </motion.div>
                     ) : (
                       <motion.div

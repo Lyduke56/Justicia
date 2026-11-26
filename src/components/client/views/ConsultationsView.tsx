@@ -445,6 +445,9 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   };
 
   const openMessagesFor = (consultationId: string) => {
+    // The shell keeps this screen mounted after switching tabs, and the details modal is
+    // portalled to <body>, so it has to be closed here or it stays over the Messages screen.
+    closeDetails();
     router.push(`/client/messages?thread=${consultationId}`);
   };
 
@@ -1026,7 +1029,10 @@ Reason: ${last.responseReason}` : ''}`,
                   dragConstraints={{ left: 0, right: 0 }}
                   dragElastic={0.22}
                   onDragEnd={handleCardDragEnd}
-                  className="flex flex-col gap-4 sm:gap-5 lg:flex-1 lg:min-h-0 min-w-0 touch-pan-y lg:overflow-y-auto lg:overflow-x-hidden neu-scrollbar-discrete lg:-mr-2 lg:pr-2"
+                  // lg+ scrolls, and a scroll box clips at its edges: -m-5 p-5 gives the raised
+                  // pills / banner / buttons 20px all round for their shadows (they reach ~18px)
+                  // without moving anything. The card's p-7 has room for it.
+                  className="flex flex-col gap-4 sm:gap-5 lg:flex-1 lg:min-h-0 min-w-0 touch-pan-y lg:overflow-y-auto lg:overflow-x-hidden neu-scrollbar-discrete lg:-m-5 lg:p-5"
                 >
                   {/* Top section mirrors the View Details modal (shared components) */}
                   <motion.div variants={CARD_POP} className="shrink-0">

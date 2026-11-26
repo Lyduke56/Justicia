@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { NeuAlert, Spinner } from '@/components/shared/neu';
-import { ScreenLoader } from '@/components/shared/loading';
+import { PanelLoader } from '@/components/shared/loading';
 import {
   deleteVerificationDocumentAction,
   getMyVerificationDocumentUrlAction,
@@ -144,7 +144,7 @@ export function VerificationDocumentsPanel({
     }
   };
 
-  if (phase === 'loading') return <ScreenLoader variant="panel" srLabel="Loading your documents" />;
+  if (phase === 'loading') return <PanelLoader srLabel="Loading your documents" />;
   if (phase === 'failed') {
     return (
       <NeuAlert

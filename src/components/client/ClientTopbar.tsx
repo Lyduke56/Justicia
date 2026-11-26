@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EmptyMedallion } from '@/components/shared/neu/EmptyMedallion';
 import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react';
 import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import { SignOutConfirmModal } from '@/components/shared/SignOutConfirmModal';
@@ -455,11 +456,7 @@ export function ClientTopbar({
                         })
                       ) : (
                         <motion.div variants={ITEM} className="flex flex-col items-center gap-3 px-6 py-9 text-center">
-                          <span className="client-neu-well grid h-16 w-16 place-items-center rounded-full text-[#341512]/45">
-                            <span className="client-neu-raised-sm grid h-10 w-10 place-items-center rounded-full bg-[#E5D8CB]">
-                              <BellIcon className="h-5 w-5 [stroke-width:2.1]" />
-                            </span>
-                          </span>
+                          <EmptyMedallion size="sm" icon={<BellIcon className="[stroke-width:2.1]" />} />
                           <p className="font-lora text-[15px] text-[#341512]">
                             {filter === 'unread' ? 'No unread notifications' : 'Nothing here yet'}
                           </p>

@@ -40,25 +40,41 @@ export function usablePhotoUrl(src: string | null | undefined): string | null {
  * A person's profile photo, filling the round frame it is placed in. Without a usable photo
  * (missing, empty, or failing to load) the `fallback` shows instead; by default that is the
  * app's profile icon (DefaultAvatarIcon), so every card falls back to the same picture.
+ *
+ * `ringed` frames a real photo with the same ring the default icon draws: in the text colour
+ * (currentColor, so it follows hover colour changes like the icon does) and as thick as the
+ * icon's circle stroke at strokeWidth 1.6 (1.6 / 24 of the frame), so it scales with any size.
  */
 export function ProfilePhoto({
   src,
   fallback,
   className = '',
   alt = '',
+  ringed = false,
 }: {
   src: string | null | undefined;
   fallback?: React.ReactNode;
   className?: string;
   alt?: string;
+  /** Frame a real photo with the default icon's ring (no effect on the fallback). */
+  ringed?: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   const url = usablePhotoUrl(src);
   if (!url || failed === url) return <>{fallback ?? <DefaultAvatarIcon className={className} />}</>;
-  return (
+  const img = (
     // eslint-disable-next-line @next/next/no-img-element -- public avatar from Supabase Storage, any size
-    <img src={url} alt={alt} draggable={false} onError={() => setFailed(url)} className={`block rounded-full object-cover ${className}`} />
+    <img
+      src={url}
+      alt={alt}
+      draggable={false}
+      onError={() => setFailed(url)}
+      className={`block rounded-full object-cover ${ringed ? 'size-full' : className}`}
+    />
   );
+  if (!ringed) return img;
+  // Padding in % is measured against the frame's width, so the ring keeps the icon's proportion.
+  return <span className={`block rounded-full bg-current p-[6.67%] transition-colors ${className}`}>{img}</span>;
 }
 
 export default ProfilePhoto;

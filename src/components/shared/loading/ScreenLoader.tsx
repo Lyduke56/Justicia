@@ -1,15 +1,17 @@
 'use client';
 
 /**
- * The one loading screen of the app: a looping illustration (one of the three GIFs in
- * public/assets, picked at random and never the same twice in a row) with "Loading..." under it.
+ * The loading screen of the app: a looping illustration (one of the three GIFs in public/assets,
+ * picked at random and never the same twice in a row) with "Loading..." under it.
+ *
+ * Only for whole-screen loads and screen / tab switches. Content loading inside a screen (a tab's
+ * data, a list, a chart, a picker) uses PanelLoader, the plain spinner, instead.
  *
  * Variants
  *  - fullscreen: covers the whole window (e.g. while sign-in hands over to a portal).
  *  - overlay:    covers its positioned parent (the portal's content area during a tab switch).
  *  - page:       fills the portal's content area as a route's loading.tsx fallback. It sits in the
  *                same spot as `overlay`, so the two hand over without a jump.
- *  - panel:      a smaller version confined to one component (a list, a grid, a chart).
  *
  * The picture is only rendered in the browser (the pick is random), and it fades in once loaded
  * so a slow first download never shows a broken or half-drawn image.
@@ -17,21 +19,19 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { loaderHidden, loaderShown, pickLoadingGif } from './loadingGifs';
 
-export type ScreenLoaderVariant = 'fullscreen' | 'overlay' | 'page' | 'panel';
+export type ScreenLoaderVariant = 'fullscreen' | 'overlay' | 'page';
 
 const FRAME: Record<ScreenLoaderVariant, string> = {
   fullscreen: 'fixed inset-0 z-[200] bg-[#E5D8CB]',
   overlay: 'absolute inset-0 z-40 bg-[#E5D8CB]',
   // 4rem = the portal top bar, so the loader centres in the visible content area.
   page: 'w-full min-h-[calc(100dvh-4rem)] bg-[#E5D8CB]',
-  panel: 'w-full py-10 sm:py-12',
 };
 
 const GIF_SIZE: Record<ScreenLoaderVariant, string> = {
   fullscreen: 'size-36 sm:size-44',
   overlay: 'size-32 sm:size-40',
   page: 'size-32 sm:size-40',
-  panel: 'size-20 sm:size-24',
 };
 
 const noopSubscribe = () => () => {};
@@ -65,7 +65,6 @@ export function ScreenLoader({
     return loaderHidden;
   }, []);
 
-  const compact = variant === 'panel';
   // "Loading..." with the three dots breathing in turn; screen readers get the plain label.
   const text = label.replace(/(\.\.\.|…)$/, '');
   const hasDots = text !== label;
@@ -82,9 +81,7 @@ export function ScreenLoader({
       <div className={`relative grid place-items-center ${GIF_SIZE[variant]}`} aria-hidden="true">
         {/* Held space + a soft caramel ring while the picture downloads. */}
         <span
-          className={`screen-loader-ring absolute rounded-full transition-opacity duration-300 ${loaded ? 'opacity-0' : 'opacity-100'} ${
-            compact ? 'size-10' : 'size-16'
-          }`}
+          className={`screen-loader-ring absolute size-16 rounded-full transition-opacity duration-300 ${loaded ? 'opacity-0' : 'opacity-100'}`}
         />
         {inBrowser && (
           // eslint-disable-next-line @next/next/no-img-element -- animated GIF, served as-is
@@ -106,7 +103,7 @@ export function ScreenLoader({
       </div>
       <p
         aria-hidden="true"
-        className={`font-lora font-semibold tracking-wide text-[#5C4535] ${compact ? 'mt-2 text-xs sm:text-[13px]' : 'mt-3 text-sm sm:text-base'}`}
+        className="mt-3 font-lora text-sm font-semibold tracking-wide text-[#5C4535] sm:text-base"
       >
         {text}
         {hasDots && (

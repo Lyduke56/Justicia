@@ -4,8 +4,8 @@
  * Booking confirmation dialog for the client booking flow, built on the shared SubmissionModal.
  *
  *  review     → full-size sheet with every booking detail and "Confirm & Submit".
- *  submitting → the sheet fades, the panel shrinks to a compact card, and a single caramel line
- *               runs around a pressed-in groove while the request is saved.
+ *  submitting → the sheet fades, the panel shrinks to a snug card around the loader, and a single
+ *               caramel line runs around a pressed-in groove while the request is saved.
  *  success    → the same line writes the check mark, turning green as it lands, while the centre
  *               of the groove rises. A caramel bead keeps circling: the request now waits on the
  *               attorney.
