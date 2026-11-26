@@ -3,12 +3,15 @@
 import React, { useState } from 'react';
 import { LawyerCard, type LawyerItem } from './LawyerCard';
 import { ChevronLeftIcon, ChevronRightIcon } from './ClientIcons';
+import { PanelLoader } from '@/components/shared/loading';
 
 interface LawyerGridSectionProps {
   initialLawyers: LawyerItem[];
+  /** Shows the loader in place of the cards until the lawyer list arrives. */
+  loading?: boolean;
 }
 
-export function LawyerGridSection({ initialLawyers }: LawyerGridSectionProps) {
+export function LawyerGridSection({ initialLawyers, loading = false }: LawyerGridSectionProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 9;
 
@@ -36,6 +39,10 @@ export function LawyerGridSection({ initialLawyers }: LawyerGridSectionProps) {
         </span>
       </div>
 
+      {loading ? (
+        <PanelLoader label="Finding lawyers..." className="min-h-[18rem]" />
+      ) : (
+        <>
       {/* 3x3 Lawyer Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
         {currentLawyers.map((lawyer) => (
@@ -103,6 +110,8 @@ export function LawyerGridSection({ initialLawyers }: LawyerGridSectionProps) {
           </div>
         )}
       </div>
+        </>
+      )}
     </section>
   );
 }
