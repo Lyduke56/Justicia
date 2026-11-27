@@ -43,7 +43,15 @@ const emails = load('src/lib/email/notificationEmails.ts', {
   '@/lib/utils/attorneyName': attorney,
 });
 
-const site = (process.env.NEXT_PUBLIC_SITE_URL || 'https://justicia-chi.vercel.app').replace(/\/$/, '');
+// The same cleaned-up address the app puts in email buttons (src/lib/siteUrl.ts).
+const siteUrl = {};
+vm.runInNewContext(
+  ts.transpileModule(fs.readFileSync(path.join(root, 'src/lib/siteUrl.ts'), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+  { exports: siteUrl, process: { env: process.env }, URL }
+);
+const site = siteUrl.publicSiteUrl();
 const sample = emails.buildNotificationEmail({
   type: 'meeting_starting',
   title: 'Consultation starting soon',

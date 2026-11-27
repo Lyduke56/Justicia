@@ -12,6 +12,8 @@ function compile(file) {
 const rbac = {};
 vm.runInNewContext(compile('src/lib/utils/rbac.ts'), { exports: rbac });
 const roles = loadReal('src/lib/auth/roles.ts');
+const returnPath = {};
+vm.runInNewContext(compile('src/lib/auth/returnPath.ts'), { exports: returnPath, URL, require: () => rbac });
 
 /**
  * Runs the proxy for one request.
@@ -45,12 +47,14 @@ async function runProxy(role, path, { metaRole = role, appRole, appStatus, demo 
       if (name.endsWith('/rbac')) return rbac;
       if (name === '@/lib/auth/demo') return demoModule;
       if (name === '@/lib/auth/roles') return roles;
+      if (name === '@/lib/auth/returnPath') return returnPath;
       if (name === '@supabase/ssr') return { createServerClient: () => ({
         from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: { role } }) }) }) })
       }) };
       throw Error(name);
     },
-    process: { env }
+    process: { env },
+    URL
   });
   return exports.proxy({ nextUrl: url, cookies: { get: (k) => (k === 'justicia_demo_session' && cookie ? { value: cookie } : undefined), getAll: () => [] } });
 }
@@ -118,4 +122,18 @@ test('stub routes are not reachable as success for any role', async () => {
       assert.notEqual(res.status, 200, `${role} ${path}`);
     }
   }
+});
+test('a signed-out email link goes to sign-in and keeps the whole address, query included', async () => {
+  const res = await runProxy(null, '/client/messages?thread=3531288b-e3d1-4410-9ad9-4eae23c4fda2');
+  const location = new URL(res.headers.get('location'));
+  assert.equal(location.pathname, '/login');
+  assert.equal(location.searchParams.get('redirectTo'), '/client/messages?thread=3531288b-e3d1-4410-9ad9-4eae23c4fda2');
+});
+test('opening /login while signed in goes to the link target if the role may open it, else the dashboard', async () => {
+  const back = await runProxy('client', '/login?redirectTo=' + encodeURIComponent('/client/messages?thread=abc'));
+  assert.match(back.headers.get('location'), /\/client\/messages\?thread=abc$/);
+  const otherRole = await runProxy('client', '/login?redirectTo=' + encodeURIComponent('/lawyer/consultations'));
+  assert.match(otherRole.headers.get('location'), /\/client\/dashboard$/);
+  const offsite = await runProxy('client', '/login?redirectTo=' + encodeURIComponent('//evil.example/client'));
+  assert.match(offsite.headers.get('location'), /^http:\/\/localhost\/client\/dashboard$/);
 });

@@ -12,6 +12,7 @@ import { Resend } from 'resend';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { createServiceClient } from '@/lib/supabase/server';
 import { renderEmailHtml } from '@/lib/email/layout';
+import { publicSiteUrl } from '@/lib/siteUrl';
 
 let _resend: Resend | null = null;
 let _gmail: Transporter | null = null;
@@ -224,5 +225,5 @@ export function emailTemplateNeedsResubmission(lawyerName: string, message: stri
 }
 
 function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://justicia-chi.vercel.app').replace(/\/$/, '');
+  return publicSiteUrl();
 }
