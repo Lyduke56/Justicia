@@ -42,8 +42,9 @@ const SHARED_ACCOUNT_PREFIXES = ['/account', '/api/account'];
 export const ROLE_ROUTE_PREFIXES: Record<UserRole, string[]> = {
   // '/api/live' = read-only tab loaders and '/api/messages' = conversation extras
   // (each route checks the session user and conversation membership itself).
-  client: ['/client', '/ai-assistant', '/legal-research', '/consultations', '/cases', '/documents', '/messages', '/profile', '/settings', '/api/live', '/api/messages', ...SHARED_ACCOUNT_PREFIXES],
-  lawyer: ['/lawyer', '/api/live', '/api/messages', ...SHARED_ACCOUNT_PREFIXES],
+  // '/call' = in-app consultation calls (the call actions check the viewer is a participant).
+  client: ['/client', '/ai-assistant', '/legal-research', '/consultations', '/cases', '/documents', '/messages', '/profile', '/settings', '/call', '/api/live', '/api/messages', ...SHARED_ACCOUNT_PREFIXES],
+  lawyer: ['/lawyer', '/call', '/api/live', '/api/messages', ...SHARED_ACCOUNT_PREFIXES],
   admin: ['/admin', '/api/admin', ...SHARED_ACCOUNT_PREFIXES],
 };
 

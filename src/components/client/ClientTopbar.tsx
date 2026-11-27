@@ -164,7 +164,7 @@ function notificationIcon(type?: string | null): React.FC<{ className?: string }
   if (t === 'admin_lawyer_update') return ScaleIcon;
   if (t === 'admin_account_deletion') return UserCircleIcon;
   if (t === 'new_message') return MessagesIcon;
-  if (t === 'meeting_starting') return ClockIcon;
+  if (t === 'meeting_starting' || t === 'consultation_call_waiting') return ClockIcon;
   if (t.startsWith('payment')) return DocumentTextIcon;
   if (t.startsWith('consultation') || t.includes('reschedule')) return CalendarBookingIcon;
   if (/report|security|moderation|ban|suspend/.test(t)) return ShieldCheckIcon;

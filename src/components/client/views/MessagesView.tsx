@@ -15,7 +15,6 @@ import {
 import { fetchLive } from '@/lib/live/fetchLive';
 import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
 import { addLawyerReviewAction } from '@/app/actions/reviewActions';
-import { recordMeetingJoinAction } from '@/app/actions/consultationExtrasActions';
 import { usePeopleAvatars } from '@/components/account/avatarStore';
 import { ReportAccountModal } from '@/components/shared/ReportAccountModal';
 import { SubmitModal, settle, useSubmission } from '@/components/shared/feedback';
@@ -1370,19 +1369,18 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
           size="sm"
           icon={meeting.method === 'audio' ? <PhoneIcon className="w-3.5 h-3.5" /> : <VideoIcon className="w-3.5 h-3.5" />}
           onClick={() => {
-            window.open(meetingUrl, '_blank', 'noopener,noreferrer');
-            // Counts toward attendance (missed consultations); the banner only shows near the start.
-            if (meeting?.consultationId) void recordMeetingJoinAction(meeting.consultationId).catch(() => undefined);
+            // The in-app call page; entering the call there records attendance.
+            router.push(meetingUrl);
           }}
           className="shrink-0 self-start sm:self-center px-5"
         >
-          Join Meeting
+          Join Call
         </NeuButton>
       ) : (
         <span className="shrink-0 font-inter text-[11px] text-[#7D6855] italic sm:max-w-[220px] sm:text-right leading-snug">
           {isLawyer
-            ? 'Add the Google Meet link from Consultations.'
-            : 'The meeting link will appear here once your attorney adds it.'}
+            ? 'The call opens once the booking is confirmed.'
+            : 'The call opens once your booking is confirmed.'}
         </span>
       )}
     </motion.div>

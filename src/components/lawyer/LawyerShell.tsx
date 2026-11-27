@@ -172,7 +172,10 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
 
   const handleNotificationClick = useCallback(
     (n: LiveResources['notifications'][number]) => {
-      if (n.type === 'meeting_starting' || n.type === 'new_message') {
+      if (n.type === 'consultation_call_waiting' && typeof n.metadata?.consultationId === 'string') {
+        // The client is already in the call: go straight to it.
+        router.push(`/call/${n.metadata.consultationId}`);
+      } else if (n.type === 'meeting_starting' || n.type === 'new_message') {
         const thread = n.metadata?.threadId;
         const href = thread ? `/lawyer/messages?thread=${thread}` : '/lawyer/messages';
         startScreenTransition(href);

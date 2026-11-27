@@ -16,6 +16,7 @@ import { contactPreferenceLine } from '@/lib/account/profileExtras';
 import { orderSoonestFirst } from '@/lib/lawyer/dashboardSchedule';
 import { attorneyNameOr } from '@/lib/utils/attorneyName';
 import { CANCELLATION_CLOSED_MESSAGE, cancellationClosed } from '@/lib/consultations/extras';
+import { consultationCallPath } from '@/lib/consultations/call';
 import { isRegularSlot, slotStartsFor } from '@/lib/lawyer/consultationHours';
 import { loadConsultationHours } from '@/lib/lawyer/consultationHoursServer';
 import { PAYMENT_QR_REQUIRED_MESSAGE, hasOwnPaymentQr } from '@/lib/lawyer/paymentQr';
@@ -636,8 +637,14 @@ function statusLabel(status: string, paymentState: PaymentState = 'none'): Clien
 
 const DEFAULT_PLATFORM_FEE = 50;
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-/** Any Google Meet link: must start with https://meet.google.com; whatever follows is accepted. */
-const GOOGLE_MEET_REGEX = /^https:\/\/meet\.google\.com(?:[/?#]\S*)?$/i;
+/**
+ * The in-app call link of a consultation, for confirmed bookings only. Calls happen in Justicia
+ * (/call/<id>), so older rows that still hold a Google Meet URL in meeting_url get the in-app
+ * link too.
+ */
+function callLinkOf(row: Pick<ConsultationRow, 'id' | 'status'>): string | null {
+  return row.status === 'confirmed' ? consultationCallPath(row.id) : null;
+}
 const PAYMENT_PROOF_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'pdf']);
 
 /** Flat platform fee from platform_settings (key: platform_fee_php). */
@@ -857,7 +864,7 @@ function remindersFor({
     return [
       'Your proof of payment was submitted and is being reviewed by the attorney.',
       'You will be notified once the payment is confirmed.',
-      `The Google Meet link for your ${meet} will appear here after confirmation.`,
+      `Your ${meet} takes place in Justicia. You can join it here once the payment is confirmed.`,
       'Your time slot stays reserved while the payment is under review.',
     ];
   }
@@ -886,7 +893,7 @@ function remindersFor({
         `${lawyerName} accepted your request. Pay ${fee} to confirm your ${meet} on ${when}.`,
         'Open View Details to scan the QR code, then upload your proof of payment there.',
         `Upload a clear screenshot or receipt (PNG, JPG or PDF, up to ${formatBytes(MAX_UPLOAD_BYTES)}) showing the amount and reference number.`,
-        'The attorney verifies the payment, and the Google Meet link appears here once it is confirmed.',
+        'The attorney verifies the payment. Once it is confirmed, you can join the call here in Justicia.',
         'Questions about the payment? Message the attorney from the Messages tab.',
       ];
     // CONFIRMED APPOINTMENT: paid and scheduled.
@@ -894,8 +901,8 @@ function remindersFor({
       return [
         `Payment confirmed. Your ${meet} with ${lawyerName} is on ${when} (${durationLabel}).`,
         hasMeetingLink
-          ? 'Use the Join Meet button a few minutes early so you start on time.'
-          : 'The Google Meet link will appear here once the attorney adds it.',
+          ? 'The call takes place in Justicia. Press Join Call from 1 hour before the start, a few minutes early so you begin on time.'
+          : 'You can join the call here once the booking is confirmed.',
         method === 'video'
           ? 'Find a quiet, private room and test your camera and microphone beforehand.'
           : 'Find a quiet, private room and test your microphone and speakers beforehand.',
@@ -959,7 +966,7 @@ function toClientConsultation(
     docket: 'SUBJECT MATTER & CASE DOCKET',
     caseTitle: meta.subject || 'Legal Consultation',
     caseDescription: meta.description || 'No additional details were provided for this consultation.',
-    meetingLink: row.meeting_url ?? null,
+    meetingLink: callLinkOf(row),
     attachedFiles: sharedDocs,
     reminders: remindersFor({
       status: row.status,
@@ -971,7 +978,7 @@ function toClientConsultation(
       timeRange: summary.timeRange,
       durationLabel: summary.durationLabel,
       totalFee: payment.total,
-      hasMeetingLink: Boolean(row.meeting_url),
+      hasMeetingLink: Boolean(callLinkOf(row)),
     }),
     declineReason: typeof meta.declineReason === 'string' ? meta.declineReason : null,
     cancellationReason: typeof meta.cancellationReason === 'string' ? meta.cancellationReason : null,
@@ -1104,7 +1111,7 @@ export async function getBookedSlotsForLawyer(lawyerId: string, dateStr: string)
  *  1. Validates the request (lawyer, date/slot in the future, subject, files).
  *  2. Rejects slots that overlap an active booking of the lawyer or the client.
  *  3. Inserts the consultation as `pending` (awaiting the lawyer's confirmation).
- *     The Google Meet link is attached later, when the lawyer confirms.
+ *     The in-app call link is attached later, when the lawyer confirms the payment.
  *  4. Shares the selected My Documents files with the lawyer
  *     (document_access_grants, view-only).
  *  5. Notifies the lawyer in-app.
@@ -2028,7 +2035,7 @@ function toLawyerConsultation(
     caseDescription: meta.description || 'No additional details were provided for this consultation.',
     fee: Number(meta.fee ?? 0) || 0,
     attachedFiles: sharedDocsFromMeta(meta),
-    meetingLink: row.meeting_url ?? null,
+    meetingLink: callLinkOf(row),
     declineReason: typeof meta.declineReason === 'string' ? meta.declineReason : null,
     cancellationReason: typeof meta.cancellationReason === 'string' ? meta.cancellationReason : null,
     ...summaryOf(date, range),
@@ -2648,8 +2655,8 @@ async function ensureMeetingNotifications(db: Db, userId: string): Promise<void>
         userId,
         'meeting_starting',
         'Consultation starting soon',
-        `Your ${r.method === 'audio' ? 'audio call' : 'video consultation'} with ${other} ${when} (${startLabel} - ${endLabel}). Open Messages to join the meeting.`,
-        { consultationId: r.id, threadId: otherId, meetingUrl: r.meeting_url, scheduledStart: r.scheduled_start }
+        `Your ${r.method === 'audio' ? 'audio call' : 'video consultation'} with ${other} ${when} (${startLabel} - ${endLabel}). Join the call from Consultations or Messages.`,
+        { consultationId: r.id, threadId: otherId, meetingUrl: consultationCallPath(r.id), scheduledStart: r.scheduled_start }
       );
     }
   } catch (err) {
@@ -2660,7 +2667,7 @@ async function ensureMeetingNotifications(db: Db, userId: string): Promise<void>
 /**
  * Banners for a conversation:
  *  - meeting: a confirmed consultation between the pair that starts within 15 minutes or is in
- *    progress (with its Google Meet link to join);
+ *    progress (with its in-app call link to join);
  *  - ratePrompt (clients only): the latest finished consultation with this lawyer that the client
  *    hasn't rated yet.
  */
@@ -2696,7 +2703,7 @@ export async function getThreadContextAction(threadId: string): Promise<ThreadCo
         endsAt: new Date(live.w.end).toISOString(),
         scheduleLabel: `${dayLabel} · ${formatClock(startParts.minutes)} - ${formatClock(endParts.minutes)}`,
         method: live.c.method === 'audio' ? 'audio' : 'video',
-        meetingUrl: live.c.meeting_url || null,
+        meetingUrl: callLinkOf(live.c),
         subject: schedule.meta.subject || 'Consultation',
       };
     }
@@ -2789,7 +2796,7 @@ export async function getUserNotificationsAction(
 //
 // Flow: lawyer approves → PENDING PAYMENT → client uploads proof
 //       → PAYMENT UNDER REVIEW (lawyer: "payment for review")
-//       → lawyer confirms (adds Google Meet link) → CONFIRMED
+//       → lawyer confirms the payment → CONFIRMED (the call is held in Justicia, /call/<id>)
 //       → or lawyer declines the proof (with reason) → back to PENDING PAYMENT.
 // The consultation row stays `awaiting_client_confirmation` until confirmed; the
 // review state lives in concern_summary.paymentProof and is mirrored to
@@ -2970,23 +2977,20 @@ export async function submitPaymentProofAction(
 
 /**
  * Lawyer reviews a submitted proof of payment.
- *  - confirm → booking CONFIRMED with the Google Meet link (required).
+ *  - confirm → booking CONFIRMED; the session is held as an in-app call (/call/<id>).
  *  - reject  → proof declined with a reason; the client may upload a new one.
  */
 export async function reviewPaymentAction(
   consultationId: string,
   decision: 'confirm' | 'reject',
-  input: { meetingLink?: string; reason?: string } = {}
+  input: { reason?: string } = {}
 ): Promise<{ success: true; newStatus: LawyerConsultationStatus } | { success?: false; error: string }> {
   try {
     if (!UUID_REGEX.test(consultationId ?? '')) return { error: 'Consultation not found.' };
     if (decision !== 'confirm' && decision !== 'reject') return { error: 'Invalid decision.' };
 
-    const meetingLink = typeof input.meetingLink === 'string' ? input.meetingLink.trim() : '';
     const reason = typeof input.reason === 'string' ? input.reason.trim() : '';
-    if (decision === 'confirm' && !GOOGLE_MEET_REGEX.test(meetingLink)) {
-      return { error: 'Please enter a Google Meet link that starts with https://meet.google.com' };
-    }
+    const callLink = consultationCallPath(consultationId);
     if (decision === 'reject') {
       if (reason.length < 5) return { error: 'Please provide a reason for declining (at least 5 characters).' };
       if (reason.length > 1000) return { error: 'The reason must be 1000 characters or fewer.' };
@@ -3030,7 +3034,7 @@ export async function reviewPaymentAction(
       .update({
         concern_summary: JSON.stringify(meta),
         updated_at: nowIso,
-        ...(decision === 'confirm' ? { status: 'confirmed', meeting_url: meetingLink } : {}),
+        ...(decision === 'confirm' ? { status: 'confirmed', meeting_url: callLink } : {}),
       })
       .eq('id', consultationId)
       .eq('lawyer_id', user.id)
@@ -3071,15 +3075,15 @@ export async function reviewPaymentAction(
         db,
         consultationId,
         user.id,
-        `Payment confirmed by ${lawyerName}. Your consultation on ${when} is confirmed. Google Meet link: ${meetingLink}`
+        `Payment confirmed by ${lawyerName}. Your consultation on ${when} is confirmed. It takes place here in Justicia: press Join Call in Consultations from 1 hour before the start.`
       );
       await notifyUser(
         db,
         consultation.client_id,
         'payment_confirmed',
         'Payment Confirmed — Consultation Confirmed',
-        `${lawyerName} confirmed your payment. Your consultation on ${when} is confirmed. Join via Google Meet: ${meetingLink}`,
-        { consultationId, lawyerId: user.id, meetingLink }
+        `${lawyerName} confirmed your payment. Your consultation on ${when} is confirmed. Join the call in Justicia from 1 hour before the start.`,
+        { consultationId, lawyerId: user.id, callPath: callLink }
       );
     } else {
       await postSystemMessage(
@@ -3555,7 +3559,7 @@ export async function getLawyerEarningsAction(): Promise<
 // The other participant accepts or declines; the requester can withdraw. While a request is
 // open, consultations.proposed_start / proposed_end hold the proposal and the request details
 // live in concern_summary.reschedule (history in concern_summary.rescheduleHistory).
-// Accepting moves scheduled_start / scheduled_end; the fee, payment and Meet link stay as-is.
+// Accepting moves scheduled_start / scheduled_end; the fee, payment and call link stay as-is.
 
 /** Accepted reschedules allowed per booking. */
 const MAX_RESCHEDULES = 2;
@@ -4116,7 +4120,7 @@ export async function respondToRescheduleAction(
         db,
         consultation.id,
         user.id,
-        `${responder} accepted the new schedule: ${newWhen} (PST, GMT+8). The Google Meet link stays the same.`
+        `${responder} accepted the new schedule: ${newWhen} (PST, GMT+8). Join the call in Justicia from 1 hour before the new time.`
       );
       await notifyUser(
         db,

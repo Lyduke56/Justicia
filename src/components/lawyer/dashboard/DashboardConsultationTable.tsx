@@ -166,7 +166,7 @@ export function DashboardConsultationTable({
                   <MessageGlyph />
                 </IconAction>
                 {c.status === 'confirmed' && (
-                  <IconAction label={c.meetingLink ? 'Join Meet' : 'The meeting link is not set yet'} onClick={() => h.onJoin(c)} disabled={sample || !c.meetingLink} tone="caramel">
+                  <IconAction label={c.meetingLink ? 'Join call' : 'The call is not available yet'} onClick={() => h.onJoin(c)} disabled={sample || !c.meetingLink} tone="caramel">
                     <VideoIcon className="h-[15px] w-[15px]" />
                   </IconAction>
                 )}

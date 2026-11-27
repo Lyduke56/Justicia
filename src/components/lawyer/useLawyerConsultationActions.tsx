@@ -28,7 +28,7 @@ import { usePeopleAvatars } from '@/components/account/avatarStore';
 import { hasMyPaymentQrAction } from '@/app/actions/lawyerPaymentQrActions';
 import { PAYMENT_QR_SETUP_HREF } from '@/lib/lawyer/paymentQr';
 import { NeuButton, NeuModal, QrIcon } from '@/components/shared/neu';
-import { CANCELLATION_CLOSED_MESSAGE, cancellationClosed, joinState, missedSummary, type ConsultationExtras } from '@/lib/consultations/extras';
+import { CANCELLATION_CLOSED_MESSAGE, cancellationClosed, joinOpensLabel, joinState, missedSummary, type ConsultationExtras } from '@/lib/consultations/extras';
 
 /**
  * Lawyer-side consultation actions with their modals: View Details, approve / decline,
@@ -72,7 +72,7 @@ export const statusToneOf = (c: Pick<LawyerConsultation, 'status'>, extras: Cons
 
 /** Lines under the client's name: age / sex, address (or how they meet), contact. */
 export function clientLines(c: LawyerConsultation): string[] {
-  const modeLine = c.communicationMode === 'video' ? 'Video Consultation (Google Meet)' : 'Audio Call (Google Meet)';
+  const modeLine = c.communicationMode === 'video' ? 'Video Consultation (in-app call)' : 'Audio Call (in-app call)';
   const ageSex =
     c.client.age != null || c.client.sex
       ? `Age: ${c.client.age ?? 'Not provided'}  |  Sex: ${c.client.sex ?? 'Not provided'}`
@@ -109,7 +109,7 @@ export function useLawyerConsultationActions({
   const [qrPrompt, setQrPrompt] = useState(false);
   const qrKnownRef = useRef(false);
   // Attendance (missed consultations) and clients' cancellation requests.
-  const { extrasFor, now, joinMeeting, reload: reloadExtras } = useConsultationExtras();
+  const { extrasFor, now, joinCall, reload: reloadExtras } = useConsultationExtras();
   // Clients' profile photos (View Details), kept live.
   const clientPhotos = usePeopleAvatars(consultations.map((c) => c.clientId));
 
@@ -186,13 +186,16 @@ export function useLawyerConsultationActions({
     [router]
   );
 
-  /** Opens the Meet link and records the join (it counts toward attendance inside the join window). */
+  /**
+   * Opens the in-app call page. It can be entered from 1 hour before the start until the end,
+   * and entering it records the lawyer's attendance.
+   */
   const joinMeet = useCallback(
     (c: LawyerConsultation) => {
       if (isSample(c) || !c.meetingLink) return;
-      joinMeeting(c.id, c.meetingLink);
+      joinCall(c.id);
     },
-    [joinMeeting]
+    [joinCall]
   );
 
   const openCancellationReview = useCallback((c: LawyerConsultation) => {
@@ -218,7 +221,7 @@ export function useLawyerConsultationActions({
       mode === 'approve' || mode === 'decline'
         ? await respondToConsultationAction(id, mode === 'approve' ? 'approved' : 'rejected', value)
         : mode === 'confirm_payment'
-          ? await reviewPaymentAction(id, 'confirm', { meetingLink: value })
+          ? await reviewPaymentAction(id, 'confirm')
           : mode === 'decline_payment'
             ? await reviewPaymentAction(id, 'reject', { reason: value })
             : await lawyerCancelConsultationAction(id, value ?? '');
@@ -246,7 +249,8 @@ export function useLawyerConsultationActions({
     const pd = c.paymentDetails;
     const ax = c.status === 'confirmed' ? extrasFor(c.id) : null;
     const missed = ax?.attendance.missed ?? null;
-    const sessionOver = !!missed || joinState(ax?.attendance, now) === 'ended';
+    const join = joinState(ax?.attendance, now);
+    const sessionOver = !!missed || join === 'ended';
     const cancelPending = ax?.cancellation.pending ?? null;
 
     let detailNotice: ConsultationDetailsModalProps['notice'] = null;
@@ -284,6 +288,15 @@ export function useLawyerConsultationActions({
       };
     }
 
+    if (!detailNotice && join === 'not_yet' && ax?.attendance.joinOpensAt && c.meetingLink) {
+      const opens = joinOpensLabel(ax.attendance.joinOpensAt, now);
+      detailNotice = {
+        tone: 'amber',
+        title: `Join opens ${opens.includes(' at ') ? 'on ' : 'at '}${opens}`,
+        text: 'You and your client can enter the call from 1 hour before the scheduled start.',
+      };
+    }
+
     let actions: ConsultationDetailsModalProps['actions'] = [{ label: 'Close', variant: 'caramel', onClick: close }];
     if (c.status === 'pending') {
       actions = [
@@ -309,7 +322,7 @@ export function useLawyerConsultationActions({
           disabled: !c.reschedule?.pending && !c.reschedule?.canRequest,
           onClick: () => openReschedule(c),
         },
-        { label: 'Join Meet', variant: 'caramel', icon: 'video', disabled: !c.meetingLink, onClick: () => joinMeet(c) },
+        { label: 'Join Call', variant: 'caramel', icon: 'video', disabled: !c.meetingLink || join === 'not_yet', onClick: () => joinMeet(c) },
       ];
     }
     if (isSample(c)) actions = [{ label: 'Close', variant: 'caramel', onClick: close }];
@@ -336,7 +349,7 @@ export function useLawyerConsultationActions({
             lawyerName: c.lawyerSummary.name,
             lawyerMeta: `Roll No. ${c.lawyerSummary.rollNumber}  |  IBP ${c.lawyerSummary.ibpChapter}`,
             modeLabel: c.communicationMode === 'video' ? 'Video Conference' : 'Audio Call',
-            modeMeta: `Platform: Google Meet  |  Duration: ${c.durationLabel}`,
+            modeMeta: `Platform: Justicia in-app call  |  Duration: ${c.durationLabel}`,
             dateLong: c.dateLong,
             timeRange: c.timeRange,
             sessionFee: pd.sessionFee,

@@ -51,6 +51,9 @@ function extraModule(name) {
     case '@/lib/consultations/extras':
       // Pure helpers; callers pass `now` explicitly, so the sandbox clock is respected.
       return loadReal('src/lib/consultations/extras.ts');
+    case '@/lib/consultations/call':
+      // Pure helpers for in-app calls (path, availability).
+      return loadReal('src/lib/consultations/call.ts');
     case '@/lib/lawyer/consultationHours':
       return loadReal('src/lib/lawyer/consultationHours.ts');
     case '@/lib/lawyer/consultationHoursServer':

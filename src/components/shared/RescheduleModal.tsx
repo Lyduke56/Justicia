@@ -304,7 +304,7 @@ function RequestStep({
       subtitle={
         <>
           Pick a new date and time. <strong className="font-semibold text-[#341512]">{counterpartName}</strong> will be asked to
-          accept it. Your payment and Google Meet link stay the same.
+          accept it. Your payment stays the same, and the call moves to the new time.
         </>
       }
       footerStart={
@@ -527,7 +527,7 @@ function RespondStep({
       subtitle={
         <>
           <strong className="font-semibold text-[#341512]">{counterpartName}</strong> asked to move your confirmed consultation. If you
-          accept, the new time replaces the current one for both of you. The payment and Google Meet link stay the same.
+          accept, the new time replaces the current one for both of you. The payment stays the same, and the call moves to the new time.
         </>
       }
       footer={

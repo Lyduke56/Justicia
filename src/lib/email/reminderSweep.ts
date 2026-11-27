@@ -19,6 +19,7 @@ import { accountPreferences } from '@/lib/account/preferences';
 import { attorneyNameOr } from '@/lib/utils/attorneyName';
 import { emitLive } from '@/lib/realtime/live';
 import { queueNotificationEmail } from '@/lib/email/notificationEmail';
+import { consultationCallPath } from '@/lib/consultations/call';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -172,8 +173,8 @@ export async function runReminderSweep(db: SupabaseClient, now: number = Date.no
           userId,
           'meeting_starting',
           'Consultation starting soon',
-          `Your ${r.method === 'audio' ? 'audio call' : 'video consultation'} with ${other} ${when} (${clock(r.scheduled_start)} - ${clock(new Date(w.end).toISOString())}). Open Messages to join the meeting.`,
-          { consultationId: r.id, threadId: isLawyer ? r.client_id : r.lawyer_id, meetingUrl: r.meeting_url, scheduledStart: r.scheduled_start }
+          `Your ${r.method === 'audio' ? 'audio call' : 'video consultation'} with ${other} ${when} (${clock(r.scheduled_start)} - ${clock(new Date(w.end).toISOString())}). Join the call from Consultations or Messages.`,
+          { consultationId: r.id, threadId: isLawyer ? r.client_id : r.lawyer_id, meetingUrl: consultationCallPath(r.id), scheduledStart: r.scheduled_start }
         );
         if (ok) result.meetingAlerts++;
       }
