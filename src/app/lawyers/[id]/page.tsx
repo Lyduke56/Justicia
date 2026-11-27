@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
 import { LawyerProfileTabs } from '@/components/client/LawyerProfileTabs';
 
 interface Props {
@@ -24,8 +25,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!data) return { title: 'Lawyer Not Found' };
 
   return {
-    title: data.full_name,
-    description: `View the profile of ${data.full_name}, a verified lawyer${data.ibp_chapter ? ` from IBP ${data.ibp_chapter}` : ''} specializing in ${(data.practice_areas ?? []).slice(0, 3).join(', ')}.`,
+    title: attorneyNameOr(data.full_name, 'Attorney'),
+    description: `View the profile of ${attorneyNameOr(data.full_name, 'this attorney')}, a verified lawyer${data.ibp_chapter ? ` from IBP ${data.ibp_chapter}` : ''} specializing in ${(data.practice_areas ?? []).slice(0, 3).join(', ')}.`,
   };
 }
 
@@ -73,7 +74,7 @@ export default async function PublicLawyerProfilePage({ params }: Props) {
         {/* Avatar */}
         <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-[#5C4535]/60 flex items-center justify-center shrink-0 overflow-hidden bg-[#D4C1AB]">
           {profile.photo_url ? (
-            <Image src={profile.photo_url} alt={profile.full_name} width={96} height={96} className="object-cover w-full h-full" />
+            <Image src={profile.photo_url} alt={attorneyNameOr(profile.full_name, 'Attorney')} width={96} height={96} className="object-cover w-full h-full" />
           ) : (
             <svg className="w-12 h-12 text-[#5C4535]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="12" cy="8" r="4" />
@@ -84,7 +85,7 @@ export default async function PublicLawyerProfilePage({ params }: Props) {
 
         {/* Info */}
         <div className="flex-1 space-y-1">
-          <h1 className="font-cormorant text-2xl sm:text-3xl font-bold text-[#34150F]">{profile.full_name}</h1>
+          <h1 className="font-cormorant text-2xl sm:text-3xl font-bold text-[#34150F]">{attorneyNameOr(profile.full_name, 'Attorney')}</h1>
           <p className="text-sm text-[#7D6855]">
             Roll No. {profile.roll_number}{profile.ibp_chapter && ` | IBP ${profile.ibp_chapter}`}
           </p>

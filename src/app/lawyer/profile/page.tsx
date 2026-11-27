@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
 import { LawyerDetailView } from '@/components/client/LawyerDetailView';
 import type { PublicLawyerProfile } from '@/components/client/LawyerGrid';
 import { getMyLawyerProfileAction } from '@/app/actions/lawyerProfileActions';
@@ -48,7 +49,7 @@ export default async function LawyerProfilePage({
 
   const lawyer: PublicLawyerProfile = {
     userId: profile.user_id,
-    fullName: profile.full_name,
+    fullName: attorneyNameOr(profile.full_name, 'Attorney'),
     rollNumber: profile.roll_number,
     ibpChapter: profile.ibp_chapter ?? '',
     practiceAreas: profile.practice_areas ?? [],

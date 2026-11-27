@@ -1091,7 +1091,6 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
 
   // Form states
   const [newFolderName, setNewFolderName] = useState<string>('');
-  const [folderCategory, setFolderCategory] = useState<string>('Family Law');
   const [newFileName, setNewFileName] = useState<string>('');
   const [newFileType, setNewFileType] = useState<DocumentItem['type']>('pdf');
   const [renameFolderName, setRenameFolderName] = useState<string>('');
@@ -1963,25 +1962,6 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
               placeholder="e.g., Intellectual Property Dispute"
               className="neu-input font-lora w-full h-11 sm:h-12 rounded-[11px] px-4.5 text-sm text-[#34150F] placeholder-[#9A8270]/70 transition-all duration-200 focus:outline-none"
             />
-          </div>
-
-          <div>
-            <label className="block font-lora text-[13px] sm:text-sm font-medium text-[#5A4537] mb-2 pl-0.5 select-none">
-              Practice Area:
-            </label>
-            <select
-              value={folderCategory}
-              onChange={(e) => setFolderCategory(e.target.value)}
-              className="neu-input font-lora w-full h-11 sm:h-12 rounded-[11px] px-4 text-sm text-[#34150F] focus:outline-none cursor-pointer"
-            >
-              <option value="Family Law">Family Law &amp; Divorce</option>
-              <option value="Real Estate">Real Estate &amp; Land Ownership</option>
-              <option value="Criminal Defense">Criminal Defense</option>
-              <option value="Corporate Law">Corporate &amp; Business Legal</option>
-              <option value="Civil Litigation">Civil Litigation &amp; Defamation</option>
-              <option value="Labor & Employment">Labor &amp; Employment</option>
-              <option value="Cyber & IP">Cyber Law &amp; Intellectual Property</option>
-            </select>
           </div>
 
           {/* Submit Button (.neu-btn-create matching SignInForm) */}

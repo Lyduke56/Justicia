@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
 import { DEMO_COOKIE, isDemoFor } from '@/lib/auth/demo';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadCurrentDocuments } from '@/lib/lawyer/documentsServer';
@@ -78,7 +79,7 @@ export default async function VerificationPage() {
     <LawyerVerificationStatus
       profile={profile}
       email={account?.email ?? user.email ?? ''}
-      fullName={profile?.full_name ?? account?.full_name ?? user.user_metadata?.full_name ?? ''}
+      fullName={attorneyNameOr(profile?.full_name ?? account?.full_name ?? user.user_metadata?.full_name, '')}
     />
   );
 }

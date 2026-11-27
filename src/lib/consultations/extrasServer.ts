@@ -9,6 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { emitLive, type LiveScope } from '@/lib/realtime/live';
 import {
   ATTENDANCE_TRACKED_FROM,
+  CANCELLATION_CUTOFF_MS,
   CANCELLATION_NOTICE_MS,
   JOIN_LEAD_MS,
   type CancellationOutcome,
@@ -96,10 +97,13 @@ export function cancellationHistory(meta: Meta): StoredCancellationHistory[] {
   return Array.isArray(meta.cancellationRequestHistory) ? (meta.cancellationRequestHistory as StoredCancellationHistory[]) : [];
 }
 
-/** A pending request lapses when the session starts without an answer. */
+/**
+ * Cancelling closes 24 hours before the session starts: a pending request lapses then without
+ * an answer, and no new request can be sent.
+ */
 export function cancellationExpired(row: ExtrasRow, now = Date.now()): boolean {
   const w = sessionWindow(row);
-  return !!w && now >= w.start;
+  return !!w && now >= w.start - CANCELLATION_CUTOFF_MS;
 }
 
 function attendanceOf(row: ExtrasRow, meta: Meta, now: number): ConsultationAttendance {
@@ -129,7 +133,7 @@ function cancellationOf(row: ExtrasRow, meta: Meta, viewerId: string, now: numbe
   let last: CancellationRequestInfo['last'] = null;
   if (pending && expired && row.status === 'confirmed') {
     const w = sessionWindow(row);
-    const at = w ? new Date(w.start).toISOString() : pending.requestedAt;
+    const at = w ? new Date(w.start - CANCELLATION_CUTOFF_MS).toISOString() : pending.requestedAt;
     last = {
       status: 'expired',
       requestedAt: pending.requestedAt,
@@ -155,7 +159,7 @@ function cancellationOf(row: ExtrasRow, meta: Meta, viewerId: string, now: numbe
   return {
     pending: open ? { requestedAt: open.requestedAt, reason: open.reason, byMe: open.requestedById === viewerId } : null,
     last,
-    canRequest: row.client_id === viewerId && row.status === 'confirmed' && !open && (!w || now < w.start),
+    canRequest: row.client_id === viewerId && row.status === 'confirmed' && !open && (!w || now < w.start - CANCELLATION_CUTOFF_MS),
   };
 }
 

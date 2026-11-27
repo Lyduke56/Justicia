@@ -38,7 +38,14 @@ import { CancellationRequestModal, type CancellationModalMode } from '@/componen
 import { useConsultationExtras } from '@/components/consultations/useConsultationExtras';
 import { usePeopleAvatars } from '@/components/account/avatarStore';
 import { getConsultationPaymentChannelAction } from '@/app/actions/lawyerPaymentQrActions';
-import { joinOpensLabel, joinState, missedSummary, type ConsultationExtras } from '@/lib/consultations/extras';
+import {
+  CANCELLATION_CLOSED_MESSAGE,
+  cancellationClosed,
+  joinOpensLabel,
+  joinState,
+  missedSummary,
+  type ConsultationExtras,
+} from '@/lib/consultations/extras';
 import {
   NeuModal,
   NeuButton,
@@ -125,8 +132,17 @@ const MONTH_LABELS = [
 /** Statuses a client may still cancel. */
 const CANCELLABLE_STATUSES = ['pending', 'confirmed', 'awaiting_client_confirmation'];
 
-/** A booking's reminders, with missed consultations and open cancellation requests explained. */
-function remindersOf(a: ClientConsultation, extras: ConsultationExtras | null): string[] {
+/**
+ * A booking's reminders, with missed consultations and open cancellation requests explained.
+ * Inside the last 24 hours before the session, cancelling is closed, and the reminders say so.
+ */
+function remindersOf(a: ClientConsultation, extras: ConsultationExtras | null, now: number): string[] {
+  const list = baseRemindersOf(a, extras);
+  if (extras?.attendance.missed || !CANCELLABLE_STATUSES.includes(a.rawStatus) || !cancellationClosed(a.scheduledStart, now)) return list;
+  return [...list.filter((r) => !r.startsWith('Changed your mind?')), CANCELLATION_CLOSED_MESSAGE];
+}
+
+function baseRemindersOf(a: ClientConsultation, extras: ConsultationExtras | null): string[] {
   const missed = extras?.attendance.missed;
   if (a.rawStatus === 'confirmed' && missed) {
     return [
@@ -290,6 +306,8 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
       ? !currentMissed && currentJoin !== 'ended' && (currentExtras ? currentExtras.cancellation.canRequest : true)
       : CANCELLABLE_STATUSES.includes(rawStatus);
   const canJoinMeet = rawStatus === 'confirmed' && !currentMissed && currentJoin !== 'ended';
+  // Less than 24 hours before the start, the booking can no longer be cancelled (button stays, disabled).
+  const cancelClosed = !!currentAppointment && cancellationClosed(currentAppointment.scheduledStart, now);
 
   /** Cancel: paid bookings send a request to the attorney; others cancel right away. */
   const startCancel = (a: Appointment) => {
@@ -384,7 +402,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
             a.day === selectedDate.day &&
             a.rawStatus !== 'cancelled'
         )
-        .flatMap((a) => remindersOf(a, extrasFor(a.id)))
+        .flatMap((a) => remindersOf(a, extrasFor(a.id), now))
     )
   );
   const selectedDateLabel = new Date(selectedDate.year, selectedDate.month, selectedDate.day).toLocaleDateString(
@@ -578,7 +596,7 @@ Reason: ${last.responseReason}` : ''}`,
         {
           label: cancelPending ? 'Withdraw Cancellation' : 'Cancel',
           variant: 'outline',
-          disabled: !cancelPending && !!ax && !ax.cancellation.canRequest,
+          disabled: !cancelPending && ((!!ax && !ax.cancellation.canRequest) || cancellationClosed(a.scheduledStart, now)),
           onClick: () => {
             setShowDetailsModal(false);
             setCancelRequest({ mode: cancelPending ? 'withdraw' : 'request', id: a.id });
@@ -1121,8 +1139,10 @@ Reason: ${last.responseReason}` : ''}`,
                     {canCancel && (
                       <button
                         type="button"
-                        onClick={() => startCancel(currentAppointment)}
-                        className="px-5 sm:px-6 py-2 rounded-[12px] border border-[#341512]/50 bg-[#E5D8CB] font-lora text-xs font-semibold text-[#341512] hover:bg-[#DDCFC0] hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-sm cursor-pointer motion-reduce:transform-none"
+                        onClick={() => !cancelClosed && startCancel(currentAppointment)}
+                        disabled={cancelClosed}
+                        title={cancelClosed ? CANCELLATION_CLOSED_MESSAGE : undefined}
+                        className="px-5 sm:px-6 py-2 rounded-[12px] border border-[#341512]/50 bg-[#E5D8CB] font-lora text-xs font-semibold text-[#341512] hover:bg-[#DDCFC0] hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-sm cursor-pointer motion-reduce:transform-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#E5D8CB] disabled:hover:translate-y-0 disabled:active:scale-100"
                       >
                         Cancel
                       </button>

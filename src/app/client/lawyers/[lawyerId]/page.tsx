@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
 import { LawyerDetailView } from '@/components/client/LawyerDetailView';
 import type { PublicLawyerProfile } from '@/components/client/LawyerGrid';
 import { getPublicLawyerDetailsAction, type LawyerOwnProfileDetails } from '@/app/actions/lawyerProfileActions';
@@ -34,7 +35,7 @@ export default async function LawyerProfilePage({ params }: Props) {
     const fee = (v: number | string | null) => (v === null || v === undefined ? null : Number(v));
     lawyerData = {
       userId: profile.user_id,
-      fullName: profile.full_name,
+      fullName: attorneyNameOr(profile.full_name, 'Attorney'),
       rollNumber: profile.roll_number ?? '',
       ibpChapter: profile.ibp_chapter ?? '',
       practiceAreas: profile.practice_areas ?? [],

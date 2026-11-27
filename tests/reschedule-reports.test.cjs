@@ -735,8 +735,8 @@ test('accepting re-checks the calendar: a slot taken meanwhile cannot be accepte
 test('a request lapses when its time gets too close; answering it then reports expiry', async () => {
   const f = fixture({ now: NOW });
   const id = f.seedConsultation({ start: ph('2026-11-25', 14) });
-  assert.equal((await f.as(CLIENT).requestRescheduleAction(id, { date: '2026-11-22', startMinutes: 10 * 60, reason: 'Earlier please' })).success, true);
-  f.clock.set(ph('2026-11-22', 9, 45)); // 15 minutes before the proposed time
+  assert.equal((await f.as(CLIENT).requestRescheduleAction(id, { date: '2026-11-23', startMinutes: 10 * 60, reason: 'Earlier please' })).success, true);
+  f.clock.set(ph('2026-11-23', 9, 45)); // 15 minutes before the proposed time
 
   const view = (await f.as(LAWYER).getLawyerConsultationsAction()).find((c) => c.id === id);
   assert.equal(view.reschedule.pending, null);
@@ -792,10 +792,18 @@ test('cancelling or non-confirmed bookings hide reschedule info; meeting reminde
 
   // A paid booking can't be cancelled by the client directly (it needs the attorney's approval).
   assert.notEqual((await f.as(CLIENT).cancelConsultationAction(id)).success, true);
-  assert.equal((await f.as(LAWYER).lawyerCancelConsultationAction(id, 'Emergency court hearing')).success, true);
-  const cancelled = f.state.tables.consultations.find((c) => c.id === id);
+  // Less than 24 hours before the start, the lawyer can't cancel either.
+  const late = await f.as(LAWYER).lawyerCancelConsultationAction(id, 'Emergency court hearing');
+  assert.notEqual(late.success, true);
+  assert.match(late.error, /less than 24 hours/);
+  assert.equal(f.state.tables.consultations.find((c) => c.id === id).status, 'confirmed');
+
+  // More than 24 hours ahead, the lawyer can cancel, and the reschedule info disappears.
+  const later = f.seedConsultation({ start: ph('2026-11-24', 13) });
+  assert.equal((await f.as(LAWYER).lawyerCancelConsultationAction(later, 'Emergency court hearing')).success, true);
+  const cancelled = f.state.tables.consultations.find((c) => c.id === later);
   assert.equal(cancelled.status, 'cancelled');
-  const lawyerView = (await f.as(LAWYER).getLawyerConsultationsAction()).find((c) => c.id === id);
+  const lawyerView = (await f.as(LAWYER).getLawyerConsultationsAction()).find((c) => c.id === later);
   assert.equal(lawyerView.reschedule, null);
 });
 
@@ -1247,4 +1255,50 @@ test('a database error is reported as a retryable failure, not as a concurrent c
   const res = await f.as(CLIENT).requestRescheduleAction(id, { date: '2026-11-27', startMinutes: 600, reason: 'Network test' });
   assert.match(res.error, /could not be sent\. Please try again/);
   assert.equal(f.notificationsOf(LAWYER).length, 0);
+});
+
+test('regular consultation hours: bookings and reschedules follow the lawyer\u2019s weekly hours; days are marked', async () => {
+  const f = fixture({ now: NOW }); // Saturday, Nov 21 2026, 10:00 Manila
+  const day = (open, start, end, breaks = []) => ({ open, start: start * 60, end: end * 60, breaks: breaks.map(([a, b]) => ({ start: a * 60, end: b * 60 })) });
+  f.state.tables.platform_settings.push({
+    key: `consultation_hours:lawyer:${LAWYER}`,
+    value: {
+      days: {
+        1: day(true, 18, 23, [[21, 21.5]]), // Monday evenings, short break
+        2: day(false, 9, 17),
+        3: day(true, 9, 17, [[11, 13]]),
+        4: day(true, 9, 17, [[11, 13]]),
+        5: day(true, 9, 17, [[11, 13]]),
+        6: day(true, 9, 12),
+      },
+    },
+  });
+  const book = (dateStr, timeSlot) =>
+    f.as(CLIENT).bookConsultationAction({ lawyerId: LAWYER, dateStr, timeSlot, communicationMode: 'video', subject: 'Contract review', description: '', documentIds: [] });
+
+  assert.match((await book('November 29, 2026', '9:00 AM - 10:00 AM • PST, GMT+8')).error, /does not take consultations on that day/);
+  assert.match((await book('December 1, 2026', '9:00 AM - 10:00 AM • PST, GMT+8')).error, /does not take consultations on that day/);
+  assert.match((await book('November 30, 2026', '9:00 AM - 10:00 AM • PST, GMT+8')).error, /outside this attorney's consultation hours/);
+  assert.match((await book('November 30, 2026', '9:00 PM - 10:00 PM • PST, GMT+8')).error, /outside/, 'the break is skipped');
+  const ok = await book('November 30, 2026', '6:00 PM - 7:00 PM • PST, GMT+8');
+  assert.equal(ok.success, true, ok.error);
+
+  // Reschedule: slots come from the same hours; the month is marked per day.
+  const id = f.seedConsultation({ start: ph('2026-11-25', 14) });
+  const res = await f.as(CLIENT).getRescheduleOptionsAction(id, '2026-11-30');
+  assert.equal(res.success, true, res.error);
+  assert.deepEqual(
+    [...res.options.slots].map((s) => [s.startMinutes / 60, s.state]),
+    [[18, 'booked'], [19, 'available'], [20, 'available'], [21.5, 'available']]
+  );
+  const mark = (d) => res.options.days.find((m) => m.day === d);
+  assert.equal(mark(29).state, 'closed');
+  assert.equal(mark(29).reason, 'Not a consultation day');
+  assert.equal(mark(30).state, 'open');
+  assert.equal(mark(30).bookings, 1);
+  assert.equal(mark(25).bookings, 0, 'the consultation being moved does not count');
+
+  assert.match((await f.as(CLIENT).requestRescheduleAction(id, { date: '2026-11-30', startMinutes: 9 * 60, reason: 'Morning works better' })).error, /available time slots/);
+  assert.equal((await f.as(CLIENT).requestRescheduleAction(id, { date: '2026-11-30', startMinutes: 19 * 60, reason: 'Evening works better' })).success, true);
+  assert.deepEqual(f.errors(), []);
 });

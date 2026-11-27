@@ -9,6 +9,7 @@ import { changeProfilePhotoAction, removeMyProfilePhotoAction } from '@/app/acti
 import { setMyAvatar, useMyAvatar } from './avatarStore';
 import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
 import { CopyButton } from '@/components/shared/CopyButton';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
 import { ResendVerificationButton } from '@/components/auth/ResendVerificationButton';
 import {
   CONSULTATION_LANGUAGES,
@@ -87,7 +88,7 @@ export function PersonalProfileCard({ account, extras: initialExtras = null, ava
         <ProfilePhoto src={photo} className="w-full h-full" fallback={<UserCircleIcon className="w-10 h-10" />} />
       </div>
       <div className="min-w-0">
-        <h2 className="font-cormorant font-bold text-xl text-[#34150F] break-words">{account.fullName}</h2>
+        <h2 className="font-cormorant font-bold text-xl text-[#34150F] break-words">{account.role === 'lawyer' ? attorneyNameOr(account.fullName, account.fullName) : account.fullName}</h2>
         <p className="text-xs text-[#7D6855] break-all">{account.email}</p>
         <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-[#E5D7C5] text-[#34150F] text-[10px] font-semibold">
           {account.emailVerified ? 'Email Verified' : 'Email Unverified'} · {role} Account

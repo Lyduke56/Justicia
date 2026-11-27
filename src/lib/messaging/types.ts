@@ -23,12 +23,31 @@ export interface MessageAttachment {
   url?: string | null;
 }
 
+/** One file of a shared folder (as it was when the folder was shared). */
+export interface SharedFolderFile {
+  /** public.documents id; the recipient opens it through their view-only access grant. */
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+}
+
+/** A My Documents folder shared in a conversation (the files it held at that moment). */
+export interface SharedFolder {
+  /** The folder's documents row id (owned by the sender). */
+  id: string;
+  name: string;
+  files: SharedFolderFile[];
+}
+
 /** What the conversation view knows about one message beyond its text. */
 export interface MessageExtras {
   replyToId?: string | null;
   attachments?: MessageAttachment[];
   /** The text was generated ("📎 file.pdf") because only attachments were sent; hide it in the bubble. */
   autoCaption?: boolean;
+  /** A shared My Documents folder. */
+  folder?: SharedFolder | null;
   pinned?: { byMe: boolean; at: string } | null;
   /** When the recipient saw this message (set on the newest message they have seen). */
   seenAt?: string | null;
@@ -45,6 +64,7 @@ export interface StoredMessageMeta {
   replyToId?: string | null;
   attachments?: Array<Omit<MessageAttachment, 'url'>>;
   autoCaption?: boolean;
+  folder?: SharedFolder;
   pinnedBy?: string | null;
   pinnedAt?: string | null;
   seenAt?: string | null;
@@ -81,6 +101,14 @@ export function attachmentKind(mimeType: string | null | undefined, name: string
   if (mime.startsWith('audio/') || AUDIO_EXT.includes(ext)) return 'audio';
   if (mime.startsWith('video/') || VIDEO_EXT.includes(ext)) return 'video';
   return 'file';
+}
+
+/** Most files a shared folder may hold. */
+export const MAX_SHARED_FOLDER_FILES = 50;
+
+/** Message text for a folder shared without a note (previews and notifications stay readable). */
+export function folderCaption(name: string, fileCount: number): string {
+  return `📁 Shared folder: ${name} (${fileCount} file${fileCount === 1 ? '' : 's'})`;
 }
 
 /** Text saved as the message body when only attachments are sent (keeps previews/notifications readable). */

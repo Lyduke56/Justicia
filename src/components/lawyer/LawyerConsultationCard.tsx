@@ -10,7 +10,7 @@ import {
 } from '@/components/shared/ConsultationDetailsModal';
 import { NeuAlert, NeuButton, VideoIcon } from '@/components/shared/neu';
 import { canMessage, clientLines, isSample, statusLabelOf, statusToneOf } from './useLawyerConsultationActions';
-import { joinState, type ConsultationExtras } from '@/lib/consultations/extras';
+import { CANCELLATION_CLOSED_MESSAGE, cancellationClosed, joinState, type ConsultationExtras } from '@/lib/consultations/extras';
 import { usePeopleAvatars } from '@/components/account/avatarStore';
 import { CARD_ITEM, CARD_POP } from './motion';
 
@@ -74,6 +74,8 @@ export function LawyerConsultationCard({
   // Once the session is over (or missed) there is nothing left to cancel or join.
   const sessionOver = !!ax?.attendance.missed || (!!now && joinState(ax?.attendance, now) === 'ended');
   const cancelRequest = !sessionOver ? ax?.cancellation.pending ?? null : null;
+  // Cancelling closes 24 hours before the start (the button stays, disabled).
+  const cancelClosed = !sample && !!now && cancellationClosed(c.scheduledStart, now);
 
   return (
     <div className={`flex flex-col gap-4 sm:gap-5 ${fill ? 'xl:min-h-0 xl:flex-1' : ''}`}>
@@ -159,7 +161,13 @@ export function LawyerConsultationCard({
             </button>
           )}
           {c.status === 'confirmed' && !sessionOver && (
-            <button type="button" onClick={() => h.onCancel(c)} disabled={sample} title={sample ? SAMPLE_TITLE : undefined} className={OUTLINE}>
+            <button
+              type="button"
+              onClick={() => h.onCancel(c)}
+              disabled={sample || cancelClosed}
+              title={sample ? SAMPLE_TITLE : cancelClosed ? CANCELLATION_CLOSED_MESSAGE : undefined}
+              className={OUTLINE}
+            >
               Cancel
             </button>
           )}

@@ -8,6 +8,7 @@ import { SignOutConfirmModal } from '@/components/shared/SignOutConfirmModal';
 import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
 import { useMyAvatar } from '@/components/account/avatarStore';
 import type { LiveResources } from '@/lib/live/fetchLive';
+import { markNotificationsReadAction } from '@/app/actions/notificationActions';
 import {
   BellIcon,
   CalendarBookingIcon,
@@ -18,6 +19,7 @@ import {
   HomeIcon,
   LogoutIcon,
   MessagesIcon,
+  ScaleIcon,
   ShieldCheckIcon,
   UserCircleIcon,
 } from './ClientIcons';
@@ -25,8 +27,8 @@ import {
 /**
  * Client portal top bar: #341512 with heavier #E5D8CB icons.
  *
- * Each icon has its own hover gesture (home lifts, bell rings, gear turns, avatar swells)
- * over a soft halo.
+ * Each icon has its own hover gesture (home lifts, bell rings, avatar swells) over a soft halo.
+ * Settings is reached from the sidebar and the account menu (no icon in the bar).
  *
  * The popovers are parchment neumorphic panels (same #E5D8CB surface as the page they drop
  * onto), outlined by a subtle border instead of a drop shadow. Entrance: the panel unfolds
@@ -44,7 +46,6 @@ interface ClientTopbarProps {
   /** localStorage key for the "notifications seen" timestamp; separate per portal. */
   seenKey?: string;
   homeActive: boolean;
-  settingsActive: boolean;
   notifications: Notification[];
   onHome: () => void;
   onSettings: () => void;
@@ -157,6 +158,11 @@ function initials(name: string): string {
 
 function notificationIcon(type?: string | null): React.FC<{ className?: string }> {
   const t = type ?? '';
+  // Admin bell
+  if (t === 'admin_lawyer_application') return ShieldCheckIcon;
+  if (t === 'admin_lawyer_documents') return DocumentTextIcon;
+  if (t === 'admin_lawyer_update') return ScaleIcon;
+  if (t === 'admin_account_deletion') return UserCircleIcon;
   if (t === 'new_message') return MessagesIcon;
   if (t === 'meeting_starting') return ClockIcon;
   if (t.startsWith('payment')) return DocumentTextIcon;
@@ -243,13 +249,233 @@ function Popover({
   );
 }
 
+// ─── Notification bell (client, lawyer and admin top bars) ───────────────────
+
+/**
+ * The bell with its unread dot and the notifications popover (All / Unread, Mark all read).
+ * Clicking a notification marks it read on the server (notifications.is_read).
+ * Controlled by the top bar (`open` / `onToggle` / `onClose`, so only one popover is open at a
+ * time), or on its own when `open` is left out (it then closes on outside clicks and Esc).
+ */
+export function NotificationBell({
+  notifications,
+  seenKey = SEEN_KEY,
+  onNotificationClick,
+  open,
+  onToggle,
+  onClose,
+  emptyHint = 'Updates about your consultations, payments and messages will appear here.',
+  popoverClassName = 'w-[min(400px,calc(100vw-2rem))] -mr-[92px] [--caret:108px] sm:mr-0 sm:[--caret:16px]',
+  badgeRingClassName = 'ring-[#341512]',
+}: {
+  notifications: Notification[];
+  /** localStorage key for the older "Mark all read" timestamp; separate per portal. */
+  seenKey?: string;
+  onNotificationClick: (n: Notification) => void;
+  open?: boolean;
+  onToggle?: () => void;
+  onClose?: () => void;
+  emptyHint?: string;
+  popoverClassName?: string;
+  /** Ring around the unread dot (matches the top bar's colour). */
+  badgeRingClassName?: string;
+}) {
+  const [ownOpen, setOwnOpen] = useState(false);
+  const controlled = open !== undefined;
+  const isOpen = controlled ? open : ownOpen;
+  const toggleOpen = () => (controlled ? onToggle?.() : setOwnOpen((v) => !v));
+  const closeBell = useCallback(() => (controlled ? onClose?.() : setOwnOpen(false)), [controlled, onClose]);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // On its own: click outside / Esc closes the popover.
+  useEffect(() => {
+    if (controlled || !ownOpen) return;
+    const onPointer = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOwnOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOwnOpen(false);
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [controlled, ownOpen]);
+
+  // Notifications load client-side after mount, so reading storage here can't cause a hydration mismatch.
+  const [seenAt, setSeenAt] = useState(() => (typeof window === 'undefined' ? 0 : readSeenAt(seenKey)));
+  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  // Read on the server (notifications.is_read). `readIds` shows a click as read right away,
+  // before the bell reloads; `seenAt` keeps older "Mark all read" clicks from this browser.
+  const [readIds, setReadIds] = useState<ReadonlySet<string>>(() => new Set());
+  const isUnread = useCallback(
+    (n: Notification) => !n.is_read && !readIds.has(n.id) && new Date(n.created_at).getTime() > seenAt,
+    [seenAt, readIds]
+  );
+  const unreadList = useMemo(() => notifications.filter(isUnread), [notifications, isUnread]);
+  const unreadCount = unreadList.length;
+  const visible = filter === 'unread' ? unreadList : notifications;
+
+  const markRead = (ids: string[]) => {
+    if (ids.length === 0) return;
+    setReadIds((prev) => new Set([...prev, ...ids]));
+    void markNotificationsReadAction(ids).catch(() => {});
+  };
+
+  const markAllRead = () => {
+    const now = Date.now();
+    setSeenAt(now);
+    setReadIds((prev) => new Set([...prev, ...notifications.map((n) => n.id)]));
+    void markNotificationsReadAction('all').catch(() => {});
+    try {
+      window.localStorage.setItem(seenKey, String(now));
+    } catch {
+      /* storage unavailable: still cleared for this session */
+    }
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      <NavIconButton
+        id="nav-notifications"
+        label={unreadCount ? `Notifications (${unreadCount} unread)` : 'Notifications'}
+        motionKey="bell"
+        active={isOpen}
+        expanded={isOpen}
+        onClick={toggleOpen}
+        badge={
+          <AnimatePresence>
+            {unreadCount > 0 && (
+              <motion.span
+                key="dot"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0 }}
+                transition={{ type: 'spring', stiffness: 600, damping: 20 }}
+                className="absolute right-[9px] top-[9px] grid h-2.5 w-2.5 place-items-center"
+                aria-hidden
+              >
+                <span className="absolute inset-0 animate-ping rounded-full bg-[#E0A458] opacity-60" />
+                <span className={`relative h-2.5 w-2.5 rounded-full bg-[#E0A458] ring-2 ${badgeRingClassName}`} />
+              </motion.span>
+            )}
+          </AnimatePresence>
+        }
+      >
+        <BellIcon className={ICON} />
+      </NavIconButton>
+
+      <AnimatePresence>
+        {isOpen && (
+          <Popover label="Notifications" role="dialog" className={popoverClassName}>
+            <motion.div variants={ITEM} className="flex items-center justify-between gap-3 px-7 pb-4 pt-6">
+              <div>
+                <h2 className="font-lora text-[17px] font-semibold leading-tight text-[#341512]">Notifications</h2>
+                <p className="mt-0.5 text-[11.5px] text-[#341512]/55">
+                  {unreadCount > 0 ? `${unreadCount} unread update${unreadCount === 1 ? '' : 's'}` : 'You’re all caught up'}
+                </p>
+              </div>
+              <motion.button
+                type="button"
+                onClick={markAllRead}
+                disabled={unreadCount === 0}
+                whileTap={unreadCount ? { scale: 0.95 } : undefined}
+                className="client-neu-btn shrink-0 rounded-full px-3.5 py-1.5 text-[11px] font-semibold"
+              >
+                Mark all read
+              </motion.button>
+            </motion.div>
+
+            {/* All / Unread: recessed track with a raised thumb that slides */}
+            <motion.div variants={ITEM} className="px-7 pb-3">
+              <div className="client-neu-well flex rounded-full p-1" role="tablist" aria-label="Filter notifications">
+                {(['all', 'unread'] as const).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={filter === key}
+                    onClick={() => setFilter(key)}
+                    className={`relative isolate flex-1 rounded-full py-1.5 text-[11.5px] font-semibold transition-colors ${
+                      filter === key ? 'text-[#341512]' : 'text-[#341512]/50 hover:text-[#341512]/80'
+                    }`}
+                  >
+                    {filter === key && (
+                      <motion.span
+                        layoutId="client-notif-filter"
+                        transition={{ type: 'spring', stiffness: 460, damping: 34 }}
+                        className="client-neu-thumb absolute inset-0 -z-10 rounded-full"
+                      />
+                    )}
+                    {key === 'all' ? 'All' : `Unread${unreadCount ? ` (${unreadCount})` : ''}`}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+
+            <div className="client-popover-scroll max-h-[min(300px,45vh)] overflow-y-auto px-6 pb-6 pt-3">
+              <motion.div key={filter} variants={LIST} initial="hidden" animate="show" className="flex flex-col gap-4 p-1">
+                {visible.length > 0 ? (
+                  visible.map((n) => {
+                    const unread = isUnread(n);
+                    const Icon = notificationIcon(n.type);
+                    return (
+                      <motion.button
+                        key={n.id}
+                        type="button"
+                        variants={ITEM}
+                        onClick={() => {
+                          if (unread) markRead([n.id]);
+                          closeBell();
+                          onNotificationClick(n);
+                        }}
+                        data-unread={unread || undefined}
+                        className="client-notif-card relative flex w-full gap-3.5 rounded-2xl p-4 text-left"
+                      >
+                        <span className="client-neu-well grid h-10 w-10 shrink-0 place-items-center rounded-full text-[#8C5A1E]">
+                          <Icon className="h-[18px] w-[18px] [stroke-width:2.1]" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-start justify-between gap-2">
+                            <span className="font-lora text-[13.5px] font-semibold leading-snug text-[#341512]">{n.title}</span>
+                            <span className="shrink-0 pt-0.5 text-[10.5px] font-medium text-[#341512]/45">{formatWhen(n.created_at)}</span>
+                          </span>
+                          <span className="mt-1 line-clamp-2 block text-[12px] leading-relaxed text-[#341512]/70">{n.body}</span>
+                        </span>
+                        {unread && (
+                          <span className="client-unread-dot absolute bottom-3.5 right-3.5 h-2 w-2 rounded-full">
+                            <span className="sr-only">Unread</span>
+                          </span>
+                        )}
+                      </motion.button>
+                    );
+                  })
+                ) : (
+                  <motion.div variants={ITEM} className="flex flex-col items-center gap-3 px-6 py-9 text-center">
+                    <EmptyMedallion size="sm" icon={<BellIcon className="[stroke-width:2.1]" />} />
+                    <p className="font-lora text-[15px] text-[#341512]">
+                      {filter === 'unread' ? 'No unread notifications' : 'Nothing here yet'}
+                    </p>
+                    <p className="max-w-[240px] text-[11.5px] leading-relaxed text-[#341512]/55">
+                      {emptyHint}
+                    </p>
+                  </motion.div>
+                )}
+              </motion.div>
+            </div>
+          </Popover>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export function ClientTopbar({
   user,
   accountDetail,
   seenKey = SEEN_KEY,
   homeActive,
-  settingsActive,
   notifications,
   onHome,
   onSettings,
@@ -261,28 +487,7 @@ export function ClientTopbar({
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
   const myAvatar = useMyAvatar(user.avatarUrl);
   const [signOutOpen, setSignOutOpen] = useState(false);
-  // Notifications load client-side after mount, so reading storage here can't cause a hydration mismatch.
-  const [seenAt, setSeenAt] = useState(() => (typeof window === 'undefined' ? 0 : readSeenAt(seenKey)));
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const clusterRef = useRef<HTMLDivElement>(null);
-
-  const isUnread = useCallback(
-    (n: Notification) => !n.is_read && new Date(n.created_at).getTime() > seenAt,
-    [seenAt]
-  );
-  const unreadList = useMemo(() => notifications.filter(isUnread), [notifications, isUnread]);
-  const unreadCount = unreadList.length;
-  const visible = filter === 'unread' ? unreadList : notifications;
-
-  const markAllRead = () => {
-    const now = Date.now();
-    setSeenAt(now);
-    try {
-      window.localStorage.setItem(seenKey, String(now));
-    } catch {
-      /* storage unavailable: still cleared for this session */
-    }
-  };
 
   const toggle = (key: Exclude<MenuKey, null>) => setOpenMenu((cur) => (cur === key ? null : key));
   const close = useCallback(() => setOpenMenu(null), []);
@@ -343,138 +548,14 @@ export function ClientTopbar({
           </NavIconButton>
 
           {/* Notifications */}
-          <div className="relative">
-            <NavIconButton
-              id="nav-notifications"
-              label={unreadCount ? `Notifications (${unreadCount} unread)` : 'Notifications'}
-              motionKey="bell"
-              active={openMenu === 'notifications'}
-              expanded={openMenu === 'notifications'}
-              onClick={() => toggle('notifications')}
-              badge={
-                <AnimatePresence>
-                  {unreadCount > 0 && (
-                    <motion.span
-                      key="dot"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      exit={{ scale: 0 }}
-                      transition={{ type: 'spring', stiffness: 600, damping: 20 }}
-                      className="absolute right-[9px] top-[9px] grid h-2.5 w-2.5 place-items-center"
-                      aria-hidden
-                    >
-                      <span className="absolute inset-0 animate-ping rounded-full bg-[#E0A458] opacity-60" />
-                      <span className="relative h-2.5 w-2.5 rounded-full bg-[#E0A458] ring-2 ring-[#341512]" />
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              }
-            >
-              <BellIcon className={ICON} />
-            </NavIconButton>
-
-            <AnimatePresence>
-              {openMenu === 'notifications' && (
-                <Popover label="Notifications" role="dialog" className="w-[min(400px,calc(100vw-2rem))] -mr-[92px] [--caret:108px] sm:mr-0 sm:[--caret:16px]">
-                  <motion.div variants={ITEM} className="flex items-center justify-between gap-3 px-7 pb-4 pt-6">
-                    <div>
-                      <h2 className="font-lora text-[17px] font-semibold leading-tight text-[#341512]">Notifications</h2>
-                      <p className="mt-0.5 text-[11.5px] text-[#341512]/55">
-                        {unreadCount > 0 ? `${unreadCount} unread update${unreadCount === 1 ? '' : 's'}` : 'You’re all caught up'}
-                      </p>
-                    </div>
-                    <motion.button
-                      type="button"
-                      onClick={markAllRead}
-                      disabled={unreadCount === 0}
-                      whileTap={unreadCount ? { scale: 0.95 } : undefined}
-                      className="client-neu-btn shrink-0 rounded-full px-3.5 py-1.5 text-[11px] font-semibold"
-                    >
-                      Mark all read
-                    </motion.button>
-                  </motion.div>
-
-                  {/* All / Unread: recessed track with a raised thumb that slides */}
-                  <motion.div variants={ITEM} className="px-7 pb-3">
-                    <div className="client-neu-well flex rounded-full p-1" role="tablist" aria-label="Filter notifications">
-                      {(['all', 'unread'] as const).map((key) => (
-                        <button
-                          key={key}
-                          type="button"
-                          role="tab"
-                          aria-selected={filter === key}
-                          onClick={() => setFilter(key)}
-                          className={`relative isolate flex-1 rounded-full py-1.5 text-[11.5px] font-semibold transition-colors ${
-                            filter === key ? 'text-[#341512]' : 'text-[#341512]/50 hover:text-[#341512]/80'
-                          }`}
-                        >
-                          {filter === key && (
-                            <motion.span
-                              layoutId="client-notif-filter"
-                              transition={{ type: 'spring', stiffness: 460, damping: 34 }}
-                              className="client-neu-thumb absolute inset-0 -z-10 rounded-full"
-                            />
-                          )}
-                          {key === 'all' ? 'All' : `Unread${unreadCount ? ` (${unreadCount})` : ''}`}
-                        </button>
-                      ))}
-                    </div>
-                  </motion.div>
-
-                  <div className="client-popover-scroll max-h-[min(300px,45vh)] overflow-y-auto px-6 pb-6 pt-3">
-                    <motion.div key={filter} variants={LIST} initial="hidden" animate="show" className="flex flex-col gap-4 p-1">
-                      {visible.length > 0 ? (
-                        visible.map((n) => {
-                          const unread = isUnread(n);
-                          const Icon = notificationIcon(n.type);
-                          return (
-                            <motion.button
-                              key={n.id}
-                              type="button"
-                              variants={ITEM}
-                              onClick={() => { close(); onNotificationClick(n); }}
-                              data-unread={unread || undefined}
-                              className="client-notif-card relative flex w-full gap-3.5 rounded-2xl p-4 text-left"
-                            >
-                              <span className="client-neu-well grid h-10 w-10 shrink-0 place-items-center rounded-full text-[#8C5A1E]">
-                                <Icon className="h-[18px] w-[18px] [stroke-width:2.1]" />
-                              </span>
-                              <span className="min-w-0 flex-1">
-                                <span className="flex items-start justify-between gap-2">
-                                  <span className="font-lora text-[13.5px] font-semibold leading-snug text-[#341512]">{n.title}</span>
-                                  <span className="shrink-0 pt-0.5 text-[10.5px] font-medium text-[#341512]/45">{formatWhen(n.created_at)}</span>
-                                </span>
-                                <span className="mt-1 line-clamp-2 block text-[12px] leading-relaxed text-[#341512]/70">{n.body}</span>
-                              </span>
-                              {unread && (
-                                <span className="client-unread-dot absolute bottom-3.5 right-3.5 h-2 w-2 rounded-full">
-                                  <span className="sr-only">Unread</span>
-                                </span>
-                              )}
-                            </motion.button>
-                          );
-                        })
-                      ) : (
-                        <motion.div variants={ITEM} className="flex flex-col items-center gap-3 px-6 py-9 text-center">
-                          <EmptyMedallion size="sm" icon={<BellIcon className="[stroke-width:2.1]" />} />
-                          <p className="font-lora text-[15px] text-[#341512]">
-                            {filter === 'unread' ? 'No unread notifications' : 'Nothing here yet'}
-                          </p>
-                          <p className="max-w-[240px] text-[11.5px] leading-relaxed text-[#341512]/55">
-                            Updates about your consultations, payments and messages will appear here.
-                          </p>
-                        </motion.div>
-                      )}
-                    </motion.div>
-                  </div>
-                </Popover>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <NavIconButton id="nav-settings-header" label="Settings" motionKey="gear" active={settingsActive} onClick={() => { close(); onSettings(); }}>
-            <GearIcon className={ICON} />
-          </NavIconButton>
+          <NotificationBell
+            notifications={notifications}
+            seenKey={seenKey}
+            onNotificationClick={onNotificationClick}
+            open={openMenu === 'notifications'}
+            onToggle={() => toggle('notifications')}
+            onClose={close}
+          />
 
           {/* Profile */}
           <div className="relative">

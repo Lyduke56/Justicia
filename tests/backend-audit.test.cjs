@@ -548,3 +548,158 @@ test('profile completeness and the contact line lawyers see', () => {
   assert.equal(full.percent, 100);
   assert.equal(x.contactPreferenceLine({ contactMethod: 'phone_call', contactTime: 'evening', preferredLanguage: 'Cebuano' }), 'Prefers phone call, evenings (5 pm – 9 pm), in Cebuano');
 });
+
+// ─── Sharing a My Documents folder in Messages ───────────────────────────────
+
+test('messages: a folder is shared with view-only access to the files it holds; empty or foreign folders are refused', async () => {
+  const FOLDER = crypto.randomUUID();
+  const EMPTY = crypto.randomUUID();
+  const CONSULT = crypto.randomUUID();
+  const file = (name, folderId = FOLDER, owner = CLIENT) => ({
+    id: crypto.randomUUID(), owner_id: owner, filename: name, mime_type: 'application/pdf', size_bytes: 2048,
+    storage_path: `${owner}/folders/${folderId}/${name}`, uploaded_at: '2026-11-20T00:00:00Z', deleted_at: null, visibility_scope: 'private',
+  });
+  const folderRow = (id, name, owner = CLIENT) => ({
+    id, owner_id: owner, filename: `[Folder] ${name}`, mime_type: 'application/x-justicia-folder', size_bytes: 0,
+    storage_path: `${owner}/folders/${id}/.folder`, uploaded_at: '2026-11-20T00:00:00Z', deleted_at: null,
+  });
+  const a = file('Deed of Sale.pdf');
+  const b = file('Tax Declaration.pdf');
+  const loose = file('Elsewhere.pdf', crypto.randomUUID());
+  const seed = {
+    ...people(),
+    lawyer_profiles: [{ user_id: LAWYER, full_name: 'Test Lawyer', verification_status: 'approved' }],
+    consultations: [{ id: CONSULT, client_id: CLIENT, lawyer_id: LAWYER, status: 'confirmed', scheduled_start: '2026-12-01T01:00:00Z', scheduled_end: '2026-12-01T02:00:00Z', scheduled_time: '2026-12-01', concern_summary: '{}', created_at: '2026-11-20T00:00:00Z' }],
+    documents: [folderRow(FOLDER, 'Land Title Case'), folderRow(EMPTY, 'Empty'), a, b, loose, folderRow(crypto.randomUUID(), 'Lawyer folder', LAWYER)],
+    document_access_grants: [],
+    messages: [],
+    notifications: [],
+  };
+  const s = sandbox({ seed, user: userObj(CLIENT) });
+  const actions = s.load('@/app/actions/messageFolderActions');
+
+  const list = await actions.getShareableFoldersAction();
+  assert.equal(list.success, true, list.error);
+  assert.deepEqual(list.folders.map((f) => [f.name, f.fileCount]), [['Empty', 0], ['Land Title Case', 2]], 'only my own folders');
+
+  assert.match((await actions.shareDocumentFolderAction(LAWYER, EMPTY)).error, /empty/);
+  const lawyerFolder = seed.documents.at(-1).id;
+  assert.match((await actions.shareDocumentFolderAction(LAWYER, lawyerFolder)).error, /no longer in your documents/);
+  assert.match((await actions.shareDocumentFolderAction(OTHER, FOLDER)).error, /Conversation not found/);
+
+  const res = await actions.shareDocumentFolderAction(LAWYER, FOLDER);
+  assert.equal(res.success, true, res.error);
+  assert.equal(res.message.content, '📁 Shared folder: Land Title Case (2 files)');
+  assert.equal(res.extras.folder.name, 'Land Title Case');
+  assert.deepEqual(res.extras.folder.files.map((f) => f.name).sort(), ['Deed of Sale.pdf', 'Tax Declaration.pdf']);
+  assert.equal(res.extras.autoCaption, true);
+
+  const grants = s.db.tables.document_access_grants.filter((g) => g.grantee_id === LAWYER && !g.revoked_at);
+  assert.deepEqual(grants.map((g) => g.document_id).sort(), [a.id, b.id].sort(), 'only the folder’s files, view only');
+  assert.ok(grants.every((g) => g.level === 'view' && g.granted_by === CLIENT));
+
+  // The lawyer sees the folder in the conversation.
+  const server = s.load('@/lib/messaging/server');
+  const extras = await server.loadThreadExtras(s.db, { consultationIds: [CONSULT] }, LAWYER);
+  const shared = Object.values(extras.messages).find((m) => m.folder);
+  assert.equal(shared.folder.files.length, 2);
+
+  // Sharing again (with a note) doesn't duplicate grants.
+  const again = await actions.shareDocumentFolderAction(LAWYER, FOLDER, 'Updated copies for Monday');
+  assert.equal(again.message.content, 'Updated copies for Monday');
+  assert.equal(again.extras.autoCaption, false);
+  assert.equal(s.db.tables.document_access_grants.filter((g) => g.grantee_id === LAWYER).length, 2);
+});
+
+test('bell: clicking marks a notification read on the server; only your own; "mark all" clears the rest', async () => {
+  const n = (id, user_id, is_read = false) => ({ id, user_id, type: 'consultation_approved', title: 't', body: 'b', is_read, created_at: '2026-11-26T00:00:00Z' });
+  const ids = Array.from({ length: 4 }, () => crypto.randomUUID());
+  const seed = { ...people(), notifications: [n(ids[0], CLIENT), n(ids[1], CLIENT), n(ids[2], CLIENT, true), n(ids[3], LAWYER)] };
+  const s = sandbox({ seed, user: userObj(CLIENT) });
+  const { markNotificationsReadAction } = s.load('@/app/actions/notificationActions');
+  const row = (id) => s.db.tables.notifications.find((x) => x.id === id);
+
+  const one = await markNotificationsReadAction([ids[0], ids[3], 'not-a-uuid']);
+  assert.equal(one.success, true, one.error);
+  assert.equal(one.updated, 1);
+  assert.equal(row(ids[0]).is_read, true);
+  assert.equal(row(ids[3]).is_read, false, "someone else's notification is untouched");
+  assert.ok(s.signals.some((sig) => sig.ids.includes(CLIENT) && sig.scopes.includes('notifications')), 'other tabs refresh');
+
+  const all = await markNotificationsReadAction('all');
+  assert.equal(all.updated, 1);
+  assert.equal(row(ids[1]).is_read, true);
+  assert.equal(row(ids[3]).is_read, false);
+  assert.equal((await markNotificationsReadAction([])).updated, 0);
+});
+
+test('admin bell: recent audit events become per-admin notifications (no duplicates, grouped uploads)', async () => {
+  const ADMIN_2 = '00000000-0000-4000-8000-000000000009';
+  const REPORT = crypto.randomUUID();
+  const ev = (action, actor, target, details, at) => ({ id: crypto.randomUUID(), actor_id: actor, action, target_type: 't', target_id: target, details, created_at: at });
+  const seed = {
+    ...people(),
+    lawyer_profiles: [{ user_id: LAWYER, full_name: 'Maria Santos', submitted_at: '2026-11-20T00:00:00Z' }],
+    audit_log: [
+      ev('report.submitted', CLIENT, REPORT, { targetId: LAWYER, category: 'misconduct', reason: 'harassment' }, '2026-11-26T01:00:00Z'),
+      ev('lawyer.submitted', LAWYER, LAWYER, { full_name: 'Maria Santos', roll_number: '12345', previous_status: 'draft' }, '2026-11-20T00:00:00Z'),
+      // Uploaded with the application (before submitting): not separate news.
+      ev('lawyer.document.uploaded', LAWYER, LAWYER, { doc_type: 'bar_admission' }, '2026-11-19T23:59:00Z'),
+      // Two uploads the same day after submitting: one grouped notification.
+      ev('lawyer.document.replaced', LAWYER, LAWYER, { doc_type: 'bar_admission' }, '2026-11-26T02:00:00Z'),
+      ev('lawyer.document.uploaded', LAWYER, LAWYER, { doc_type: 'government_id' }, '2026-11-26T02:05:00Z'),
+      ev('lawyer.profile.updated', LAWYER, LAWYER, { changed: ['consultation fees', 'IBP chapter'] }, '2026-11-26T03:00:00Z'),
+      ev('lawyer.payment_qr.updated', LAWYER, LAWYER, { channel: 'GCash' }, '2026-11-26T03:10:00Z'),
+      ev('account.deletion_requested', OTHER, OTHER, { dueAt: '2026-12-03T00:00:00Z' }, '2026-11-26T04:00:00Z'),
+      ev('lawyer.document.viewed', ADMIN, LAWYER, {}, '2026-11-26T05:00:00Z'), // not an admin event
+      ev('report.submitted', ADMIN, REPORT, { targetId: LAWYER }, '2026-10-01T00:00:00Z'), // older than 30 days
+    ],
+    notifications: [],
+  };
+  seed.user_accounts.push({ id: ADMIN_2, email: 'admin2@example.com', role: 'admin' });
+  seed.profiles.push({ user_id: ADMIN_2, email: 'admin2@example.com', role: 'admin', account_status: 'active' });
+  const s = sandbox({ seed, user: userObj(ADMIN) });
+  const feed = s.load('@/lib/admin/notificationsFeed');
+  const now = Date.parse('2026-11-27T00:00:00Z');
+
+  await feed.ensureAdminNotifications(s.db, ADMIN, now);
+  const mine = () => s.db.tables.notifications.filter((n) => n.user_id === ADMIN).sort((a, b) => a.created_at.localeCompare(b.created_at));
+  assert.deepEqual(mine().map((n) => n.title), [
+    'New lawyer application',
+    'New report filed',
+    'Verification documents updated',
+    'Lawyer profile updated',
+    'Lawyer profile updated',
+    'Account deletion requested',
+  ]);
+  const byType = (t) => mine().filter((n) => n.type === t);
+  assert.match(byType('admin_lawyer_application')[0].body, /^Atty\. Maria Santos \(Roll No\. 12345\) applied for verification\.$/);
+  assert.match(byType('admin_report')[0].body, /reported Atty\. Maria Santos for harassment/i);
+  assert.equal(byType('admin_report')[0].metadata.href, `/admin/reports/${REPORT}`);
+  assert.equal(byType('admin_lawyer_documents')[0].body, 'Atty. Maria Santos uploaded Proof of bar admission and Government-issued ID.');
+  assert.ok(byType('admin_lawyer_update').some((n) => /changed their consultation fees and IBP chapter/.test(n.body)));
+  assert.ok(byType('admin_lawyer_update').some((n) => /updated their payment QR/.test(n.body)));
+  assert.equal(byType('admin_account_deletion')[0].metadata.href, `/admin/users/${OTHER}`);
+  assert.ok(mine().every((n) => n.is_read === false));
+
+  // Loading again creates nothing new; each admin has their own copy (own read state).
+  mine()[0].is_read = true;
+  await feed.ensureAdminNotifications(s.db, ADMIN, now);
+  assert.equal(mine().length, 6);
+  assert.equal(mine()[0].is_read, true);
+  await feed.ensureAdminNotifications(s.db, ADMIN_2, now);
+  assert.equal(s.db.tables.notifications.filter((n) => n.user_id === ADMIN_2).length, 6);
+
+  // A third upload that day refreshes the grouped notification and makes it unread again.
+  const docs = byType('admin_lawyer_documents')[0];
+  docs.is_read = true;
+  s.db.tables.audit_log.push(ev('lawyer.document.uploaded', LAWYER, LAWYER, { doc_type: 'ibp_membership' }, '2026-11-26T06:00:00Z'));
+  await feed.ensureAdminNotifications(s.db, ADMIN, now);
+  assert.equal(byType('admin_lawyer_documents').length, 1);
+  assert.match(byType('admin_lawyer_documents')[0].body, /Proof of bar admission, Government-issued ID and IBP membership/);
+  assert.equal(byType('admin_lawyer_documents')[0].is_read, false);
+
+  // The action is admin-only.
+  const clientSandbox = sandbox({ seed, user: userObj(CLIENT) });
+  assert.match((await clientSandbox.load('@/app/actions/adminNotificationActions').getAdminNotificationsAction()).error, /Administrator/);
+});

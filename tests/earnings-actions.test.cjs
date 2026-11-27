@@ -227,7 +227,12 @@ function fixture({ now = '2026-11-21T02:00:00Z', platformFee = 50 } = {}) {
         { user_id: LAWYER, full_name: 'Atty. Test Lawyer', roll_number: '1', ibp_chapter: 'Cebu', practice_areas: ['Family Law', 'Civil Law'], experience_years: 5, fee_standard_60min: 1000, rating_avg: 4.5, rating_count: 3 },
         { user_id: LAWYER_2, full_name: 'Atty. Other', roll_number: '2', ibp_chapter: 'Cebu', practice_areas: ['Criminal Law'], experience_years: 2, fee_standard_60min: 800, rating_avg: 0, rating_count: 0 },
       ],
-      platform_settings: [{ key: 'platform_fee_php', value: platformFee }],
+      platform_settings: [
+        { key: 'platform_fee_php', value: platformFee },
+        // Both lawyers uploaded their payment QR (required before approving requests).
+        { key: `payment_qr:lawyer:${LAWYER}`, value: { storagePath: `${LAWYER}/payment-qr/qr.png`, channel: 'GCash', accountName: 'Atty. Test Lawyer', accountNumber: '0917' } },
+        { key: `payment_qr:lawyer:${LAWYER_2}`, value: { storagePath: `${LAWYER_2}/payment-qr/qr.png`, channel: 'Maya', accountName: 'Atty. Other', accountNumber: '0918' } },
+      ],
       consultations: [],
       payments: [],
       documents: [],
@@ -634,6 +639,52 @@ test('declined or withdrawn cancellation requests keep the paid booking; request
   assert.equal(view.cancellation.canRequest, false);
   assert.notEqual((await f.asX(LAWYER).respondToCancellationRequestAction(id, 'accept')).success, true);
   assert.equal(f.consultation(id).status, 'confirmed');
+});
+
+test('a lawyer must upload a payment QR before approving a request (declining still works)', async () => {
+  const f = fixture();
+  f.state.tables.platform_settings = f.state.tables.platform_settings.filter((s) => s.key !== `payment_qr:lawyer:${LAWYER}`);
+  const id = f.seedConsultation({ start: NOV_25_10AM, status: 'pending' });
+  const refused = await f.as(LAWYER).respondToConsultationAction(id, 'approved');
+  assert.notEqual(refused.success, true);
+  assert.match(refused.error, /Upload your payment QR first/);
+  assert.equal(f.consultation(id).status, 'pending');
+  assert.equal(f.state.tables.notifications.filter((n) => n.user_id === CLIENT).length, 0, 'the client hears nothing');
+
+  f.state.tables.platform_settings.push({ key: `payment_qr:lawyer:${LAWYER}`, value: { storagePath: `${LAWYER}/payment-qr/new.png`, channel: 'GCash', accountName: 'A', accountNumber: '1' } });
+  assert.equal((await f.as(LAWYER).respondToConsultationAction(id, 'approved')).success, true);
+  assert.equal(f.consultation(id).status, 'awaiting_client_confirmation');
+
+  const other = f.seedConsultation({ start: NOV_25_10AM, status: 'pending', client: CLIENT_2 });
+  f.state.tables.platform_settings = f.state.tables.platform_settings.filter((s) => s.key !== `payment_qr:lawyer:${LAWYER}`);
+  assert.equal((await f.as(LAWYER).respondToConsultationAction(other, 'rejected', 'Outside my practice area')).success, true);
+});
+
+test('cancelling closes 24 hours before the start: requests lapse then, and nobody can cancel', async () => {
+  const f = fixture();
+  const id = f.seedConsultation({ start: NOV_25_10AM });
+  await f.payAndConfirm(id);
+
+  // 30 hours before: the client can still ask.
+  f.clock.set('2026-11-24T04:00:00+08:00');
+  assert.equal((await f.asX(CLIENT).requestCancellationAction(id, 'Family emergency out of town')).success, true);
+
+  // 23 hours before: the open request has lapsed, and no new one (or a direct cancel) is allowed.
+  f.clock.set('2026-11-24T11:00:00+08:00');
+  const view = f.extrasServer.buildExtras(f.consultation(id), CLIENT, f.clock.now);
+  assert.equal(view.cancellation.pending, null);
+  assert.equal(view.cancellation.last.status, 'expired');
+  assert.equal(view.cancellation.canRequest, false);
+  assert.match((await f.asX(LAWYER).respondToCancellationRequestAction(id, 'accept')).error, /lapsed/);
+  assert.match((await f.asX(CLIENT).requestCancellationAction(id, 'Asking once more, sorry')).error, /less than 24 hours/);
+  assert.match((await f.as(LAWYER).lawyerCancelConsultationAction(id, 'Court hearing moved')).error, /less than 24 hours/);
+  assert.equal(f.consultation(id).status, 'confirmed');
+  assert.equal(f.ledger(id)[0].status, 'paid');
+
+  // Unpaid (pending) requests follow the same rule for the client.
+  const pending = f.seedConsultation({ start: '2026-11-25T09:00:00+08:00', status: 'pending' });
+  assert.match((await f.as(CLIENT).cancelConsultationAction(pending)).error, /less than 24 hours/);
+  assert.equal(f.consultation(pending).status, 'pending');
 });
 
 test('join window: the client joins from 1 hour before the start; a session nobody joined is missed', async () => {

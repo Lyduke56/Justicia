@@ -14,6 +14,12 @@ import { checkRateLimit } from '@/lib/security/rateLimit';
 import { FILE_CONTENT_MISMATCH, fileMatchesExtension } from '@/lib/security/fileType';
 import { contactPreferenceLine } from '@/lib/account/profileExtras';
 import { orderSoonestFirst } from '@/lib/lawyer/dashboardSchedule';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
+import { CANCELLATION_CLOSED_MESSAGE, cancellationClosed } from '@/lib/consultations/extras';
+import { isRegularSlot, slotStartsFor } from '@/lib/lawyer/consultationHours';
+import { loadConsultationHours } from '@/lib/lawyer/consultationHoursServer';
+import { PAYMENT_QR_REQUIRED_MESSAGE, hasOwnPaymentQr } from '@/lib/lawyer/paymentQr';
+import { monthDayMarks, type CalendarDayMark } from '@/lib/consultations/monthAvailability';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -868,7 +874,7 @@ function remindersFor({
         hasFiles
           ? 'The attorney can already see the documents you shared, so they can prepare while reviewing.'
           : 'Sharing supporting documents from My Documents helps the attorney assess your concern faster.',
-        'Changed your mind? You can cancel this request from this page at no cost.',
+        'Changed your mind? You can cancel this request from this page at no cost, up to 24 hours before the session.',
       ];
     // PENDING PAYMENT: accepted by the attorney, waiting on the client's payment.
     case 'awaiting_client_confirmation':
@@ -917,7 +923,7 @@ function toClientConsultation(
   const { meta, date, range, displayDate, timeSlot } = scheduleOf(row);
   const payment = paymentOf(row, meta, range, Number(lawyer?.fee_standard_60min ?? 0), platformFee);
   const summary = summaryOf(date, range);
-  const lawyerName = lawyer?.full_name || meta.lawyerName || 'Assigned Counsel';
+  const lawyerName = attorneyNameOr(lawyer?.full_name || meta.lawyerName, 'Assigned Counsel');
   const sharedDocs = sharedDocsFromMeta(meta);
 
   const ratingAvg = Number(lawyer?.rating_avg ?? 0);
@@ -1224,6 +1230,17 @@ export async function bookConsultationAction(input: BookConsultationInput): Prom
 
     // ── 4. Slot conflicts (lawyer & client) ──
     const timeSlotLabel = formatSlotLabel(range);
+    // The slot must be one of the lawyer's regular consultation hours (consultationHours.ts).
+    const bookingWeekday = new Date(Date.UTC(date.year, date.monthIndex, date.day)).getUTCDay();
+    const lawyerHours = await loadConsultationHours(db, lawyerId);
+    if (!isRegularSlot(lawyerHours, bookingWeekday, range.startMinutes, range.endMinutes - range.startMinutes)) {
+      return {
+        error:
+          slotStartsFor(lawyerHours, bookingWeekday).length === 0
+            ? 'This attorney does not take consultations on that day. Please choose another date.'
+            : `The ${timeSlotLabel} slot is outside this attorney's consultation hours. Please choose another time slot.`,
+      };
+    }
     const lawyerBookings = await findActiveBookingsOnDate(db, 'lawyer_id', lawyerId, date);
     if (lawyerBookings.some((b) => rangesOverlap(b, range))) {
       return {
@@ -1315,7 +1332,7 @@ export async function bookConsultationAction(input: BookConsultationInput): Prom
         inserted.id,
         user.id,
         `Consultation request sent for ${dateLabel.toUpperCase()} (${timeSlotLabel}) — "${subject}". ` +
-          `Waiting for ${lawyer.full_name || 'the attorney'} to approve this booking.`
+          `Waiting for ${attorneyNameOr(lawyer.full_name, 'the attorney')} to approve this booking.`
       );
     }
 
@@ -1428,6 +1445,8 @@ export async function cancelConsultationAction(
         error: 'This consultation is already paid, so your attorney has to approve a cancellation. Send a cancellation request instead.',
       };
     }
+    // Cancelling closes 24 hours before the session starts (for the client and the lawyer).
+    if (cancellationClosed(scheduleOf(consultation).startMs, Date.now())) return { error: CANCELLATION_CLOSED_MESSAGE };
 
     const summary = toClientConsultation(consultation, null);
     const wasPaid = summary.payment.state === 'verified';
@@ -2010,7 +2029,7 @@ function toLawyerConsultation(
     cancellationReason: typeof meta.cancellationReason === 'string' ? meta.cancellationReason : null,
     ...summaryOf(date, range),
     lawyerSummary: {
-      name: lawyer?.full_name || meta.lawyerName || 'Attorney',
+      name: attorneyNameOr(lawyer?.full_name || meta.lawyerName, 'Attorney'),
       rollNumber: lawyer?.roll_number || '—',
       ibpChapter: lawyer?.ibp_chapter || '—',
     },
@@ -2056,7 +2075,7 @@ async function requireLawyerSession(): Promise<(Session & { lawyerName: string }
     .eq('user_id', session.user.id)
     .maybeSingle();
   if (!lawyer) return { error: 'Only registered attorneys can manage consultation requests.' };
-  return { ...session, lawyerName: lawyer.full_name || session.profile.full_name || 'Your attorney' };
+  return { ...session, lawyerName: attorneyNameOr(lawyer.full_name || session.profile.full_name, 'Your attorney') };
 }
 
 const CLIENT_EMBED = 'client:profiles!consultations_client_id_fkey(full_name, email, phone)';
@@ -2163,6 +2182,8 @@ export async function respondToConsultationAction(
       if (schedule.startMs <= Date.now()) {
         return { error: 'The scheduled time for this request has already passed. Please decline it instead.' };
       }
+      // The client pays with the lawyer's own QR right after the approval, so it must exist first.
+      if (!(await hasOwnPaymentQr(db, user.id))) return { error: PAYMENT_QR_REQUIRED_MESSAGE };
       meta.approvedAt = nowIso;
     } else {
       meta.declineReason = reason;
@@ -2379,7 +2400,7 @@ export async function getMessageThreadsAction(): Promise<MessageThreadItem[]> {
       if (!otherId || otherId === user.id) continue;
       const name = isLawyer
         ? r.client?.full_name?.trim() || r.client?.email || 'Client'
-        : r.lawyer_profiles?.full_name || 'Attorney';
+        : attorneyNameOr(r.lawyer_profiles?.full_name, 'Attorney');
       const pair = pairs.get(otherId) ?? { name, rows: [], messageable: false };
       pair.rows.push(r);
       pair.messageable ||= MESSAGING_STATUSES.includes(r.status);
@@ -2515,7 +2536,7 @@ export async function sendDirectMessageAction(
         db,
         recipientId,
         'new_message',
-        `New message from ${profile.full_name || (thread.role === 'lawyer' ? 'your attorney' : 'your client')}`,
+        `New message from ${thread.role === 'lawyer' ? attorneyNameOr(profile.full_name, 'your attorney') : profile.full_name || 'your client'}`,
         text.length > 140 ? `${text.slice(0, 137)}...` : text,
         { threadId: user.id, consultationId: target.id, senderId: user.id }
       );
@@ -2611,7 +2632,7 @@ async function ensureMeetingNotifications(db: Db, userId: string): Promise<void>
       const isLawyer = r.lawyer_id === userId;
       const other = isLawyer
         ? r.client?.full_name?.trim() || 'your client'
-        : r.lawyer_profiles?.full_name || 'your attorney';
+        : attorneyNameOr(r.lawyer_profiles?.full_name, 'your attorney');
       const w = consultationWindow(r)!;
       const minutes = Math.max(0, Math.round((w.start - now) / 60000));
       const when = minutes > 0 ? `starts in ${minutes} minute${minutes === 1 ? '' : 's'}` : 'has started';
@@ -2703,7 +2724,7 @@ export async function getThreadContextAction(threadId: string): Promise<ThreadCo
         const schedule = scheduleOf(unrated);
         ratePrompt = {
           consultationId: unrated.id,
-          lawyerName: lawyer?.full_name || 'your attorney',
+          lawyerName: attorneyNameOr(lawyer?.full_name, 'your attorney'),
           dateLabel: `${MONTH_NAMES[schedule.date.monthIndex]} ${schedule.date.day}, ${schedule.date.year}`,
         };
       }
@@ -3120,6 +3141,8 @@ export async function lawyerCancelConsultationAction(
     }
 
     const schedule = scheduleOf(consultation);
+    // Cancelling closes 24 hours before the session starts (for the client and the lawyer).
+    if (cancellationClosed(schedule.startMs, Date.now())) return { error: CANCELLATION_CLOSED_MESSAGE };
     const payment = paymentOf(consultation, schedule.meta, schedule.range, 0, DEFAULT_PLATFORM_FEE);
     const refundPending = payment.state === 'verified' || payment.state === 'submitted';
     const nowIso = new Date().toISOString();
@@ -3541,7 +3564,6 @@ const RESCHEDULE_ANSWER_BY_MS = 30 * 60 * 1000;
 /** …and no further ahead than this. */
 const RESCHEDULE_MAX_DAYS_AHEAD = 60;
 /** Start times offered for a reschedule — the same slots as the booking calendar. */
-const RESCHEDULE_SLOT_STARTS = [9 * 60, 10 * 60, 13 * 60, 14 * 60, 15 * 60, 16 * 60];
 const RESCHEDULE_REASON_MIN = 5;
 const RESCHEDULE_REASON_MAX = 500;
 
@@ -3726,7 +3748,7 @@ async function participantNames(db: Db, row: ConsultationRow): Promise<{ client:
   ]);
   return {
     client: client?.full_name?.trim() || client?.email || 'The client',
-    lawyer: lawyer?.full_name || 'The attorney',
+    lawyer: attorneyNameOr(lawyer?.full_name, 'The attorney'),
   };
 }
 
@@ -3743,6 +3765,8 @@ export interface RescheduleOptions {
   slots: RescheduleSlotOption[];
   /** Days of that month (1–31) the attorney has blocked entirely. */
   blockedDays: number[];
+  /** Every day of that month: open / fully booked / not available, and its bookings (both calendars). */
+  days: CalendarDayMark[];
   /** Earliest / latest selectable dates (YYYY-MM-DD). */
   minDate: string;
   maxDate: string;
@@ -3770,16 +3794,24 @@ export async function getRescheduleOptionsAction(
     const maxDate = toIsoDate(parseIsoDate(todayInManila()), RESCHEDULE_MAX_DAYS_AHEAD);
     const duration = sessionMinutes(consultation);
 
-    const [lawyerBookings, clientBookings, blocks] = await Promise.all([
+    const [lawyerBookings, clientBookings, blocks, hours] = await Promise.all([
       findActiveBookingsOnDate(db, 'lawyer_id', consultation.lawyer_id, date),
       findActiveBookingsOnDate(db, 'client_id', consultation.client_id, date),
       findUnavailabilityOnDate(db, consultation.lawyer_id, date),
+      loadConsultationHours(db, consultation.lawyer_id),
     ]);
     const otherBookings = [...lawyerBookings, ...clientBookings].filter((b) => b.id !== consultation.id);
     const current = consultation.scheduled_start ? toManilaParts(consultation.scheduled_start) : null;
 
     const outOfRange = isoDate < minDate || isoDate > maxDate;
-    const slots: RescheduleSlotOption[] = RESCHEDULE_SLOT_STARTS.map((start) => {
+    // The lawyer's regular hours for that weekday; the current time stays listed (as "Current").
+    const weekday = new Date(Date.UTC(date.year, date.monthIndex, date.day)).getUTCDay();
+    const starts = slotStartsFor(hours, weekday, duration);
+    if (current && current.isoDate === isoDate && !starts.includes(current.minutes)) {
+      starts.push(current.minutes);
+      starts.sort((a, b) => a - b);
+    }
+    const slots: RescheduleSlotOption[] = starts.map((start) => {
       const range = { startMinutes: start, endMinutes: start + duration };
       const startMs = new Date(toManilaTimestamp(date, start)).getTime();
       let state: RescheduleSlotOption['state'] = 'available';
@@ -3810,12 +3842,25 @@ export async function getRescheduleOptionsAction(
       ),
     ].sort((a, b) => a - b);
 
+    const days = await monthDayMarks(db, {
+      lawyerId: consultation.lawyer_id,
+      clientId: consultation.client_id,
+      excludeId: consultation.id,
+      year: date.year,
+      monthIndex: date.monthIndex,
+      hours,
+      length: duration,
+      earliestMs: now + RESCHEDULE_MIN_NOTICE_MS,
+      latestIso: maxDate,
+    });
+
     return {
       success: true,
       options: {
         date: isoDate,
         slots,
         blockedDays,
+        days,
         minDate,
         maxDate,
         durationMinutes: duration,
@@ -3854,7 +3899,9 @@ export async function requestRescheduleAction(
     if (reason.length > RESCHEDULE_REASON_MAX) return { error: `The reason must be ${RESCHEDULE_REASON_MAX} characters or fewer.` };
     if (typeof input?.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return { error: 'Please choose a new date.' };
     const startMinutes = Number(input.startMinutes);
-    if (!RESCHEDULE_SLOT_STARTS.includes(startMinutes)) return { error: 'Please choose one of the available time slots.' };
+    if (!Number.isInteger(startMinutes) || startMinutes < 0 || startMinutes >= 24 * 60) {
+      return { error: 'Please choose one of the available time slots.' };
+    }
     const date = parseIsoDate(input.date);
     if (toIsoDate(date) !== input.date) return { error: 'Please choose a new date.' };
 
@@ -3874,6 +3921,12 @@ export async function requestRescheduleAction(
       };
     }
     if (info.blockedReason) return { error: info.blockedReason };
+    // The new time must be one of the lawyer's regular consultation hours.
+    const hours = await loadConsultationHours(db, consultation.lawyer_id);
+    const weekday = new Date(Date.UTC(date.year, date.monthIndex, date.day)).getUTCDay();
+    if (!isRegularSlot(hours, weekday, startMinutes, sessionMinutes(consultation))) {
+      return { error: 'Please choose one of the available time slots.' };
+    }
 
     const range = { startMinutes, endMinutes: startMinutes + sessionMinutes(consultation) };
     const proposedStart = toManilaTimestamp(date, range.startMinutes);

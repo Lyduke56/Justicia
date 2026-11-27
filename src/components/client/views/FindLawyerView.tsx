@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion, type Variants } from 'motion/react';
 import { createClient } from '@/lib/supabase/client';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
 import { LawyerGrid } from '@/components/client/LawyerGrid';
 import { LawyerSearchFilters } from '@/components/client/LawyerSearchFilters';
 import { LawyerDetailView } from '@/components/client/LawyerDetailView';
@@ -333,7 +334,7 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
         setLawyers(
           filtered.map((l) => ({
             userId: l.user_id,
-            fullName: l.full_name,
+            fullName: attorneyNameOr(l.full_name, ''),
             rollNumber: l.roll_number,
             ibpChapter: l.ibp_chapter ?? '',
             practiceAreas: l.practice_areas ?? [],

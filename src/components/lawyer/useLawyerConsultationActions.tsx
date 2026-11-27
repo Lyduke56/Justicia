@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import {
@@ -25,7 +25,10 @@ import { RescheduleModal, type RescheduleModalMode } from '@/components/shared/R
 import { CancellationRequestModal } from '@/components/shared/CancellationRequestModal';
 import { useConsultationExtras } from '@/components/consultations/useConsultationExtras';
 import { usePeopleAvatars } from '@/components/account/avatarStore';
-import { joinState, missedSummary, type ConsultationExtras } from '@/lib/consultations/extras';
+import { hasMyPaymentQrAction } from '@/app/actions/lawyerPaymentQrActions';
+import { PAYMENT_QR_SETUP_HREF } from '@/lib/lawyer/paymentQr';
+import { NeuButton, NeuModal, QrIcon } from '@/components/shared/neu';
+import { CANCELLATION_CLOSED_MESSAGE, cancellationClosed, joinState, missedSummary, type ConsultationExtras } from '@/lib/consultations/extras';
 
 /**
  * Lawyer-side consultation actions with their modals: View Details, approve / decline,
@@ -102,6 +105,9 @@ export function useLawyerConsultationActions({
   const [reschedule, setReschedule] = useState<{ mode: RescheduleModalMode; id: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cancelReviewId, setCancelReviewId] = useState<string | null>(null);
+  // Approving needs the lawyer's own payment QR (clients pay with it next); asked once it's known.
+  const [qrPrompt, setQrPrompt] = useState(false);
+  const qrKnownRef = useRef(false);
   // Attendance (missed consultations) and clients' cancellation requests.
   const { extrasFor, now, joinMeeting, reload: reloadExtras } = useConsultationExtras();
   // Clients' profile photos (View Details), kept live.
@@ -121,10 +127,25 @@ export function useLawyerConsultationActions({
   }, []);
 
   const openDecision = useCallback(
-    (mode: DecisionMode, id: string) => {
+    async (mode: DecisionMode, id: string) => {
       if (id.startsWith('demo-')) return;
       const c = find(id);
       if (!c) return;
+      // No payment QR yet: explain and point to My Profile instead of opening the approval.
+      // (The server refuses the approval too; if this check fails, the server decides.)
+      if (mode === 'approve' && !qrKnownRef.current) {
+        const res = await hasMyPaymentQrAction().catch(() => null);
+        if (res?.success && !res.hasQr) {
+          setQrPrompt(true);
+          return;
+        }
+        if (res?.success) qrKnownRef.current = true;
+      }
+      // Cancelling closes 24 hours before the start (the server refuses it too).
+      if (mode === 'cancel' && cancellationClosed(c.scheduledStart)) {
+        setDetailsError(CANCELLATION_CLOSED_MESSAGE);
+        return;
+      }
       const pd = c.paymentDetails;
       const proofId = pd.proofDocumentId;
       setDecision({
@@ -281,7 +302,7 @@ export function useLawyerConsultationActions({
       ];
     } else if (c.status === 'confirmed' && !sessionOver) {
       actions = [
-        { label: 'Cancel', variant: 'outline', onClick: () => openDecision('cancel', c.id) },
+        { label: 'Cancel', variant: 'outline', disabled: cancellationClosed(c.scheduledStart, now), onClick: () => openDecision('cancel', c.id) },
         {
           label: c.reschedule?.pending ? (c.reschedule.pending.byMe ? 'Withdraw Request' : 'Review Request') : 'Reschedule',
           variant: 'espresso',
@@ -339,6 +360,41 @@ export function useLawyerConsultationActions({
 
   const modals = (
     <>
+      <AnimatePresence>
+        {qrPrompt && (
+          <NeuModal
+            key="payment-qr-required"
+            onClose={() => setQrPrompt(false)}
+            size="sm"
+            icon={<QrIcon className="w-5 h-5" />}
+            iconTone="caramel"
+            title="Upload your payment QR first"
+            footer={
+              <>
+                <NeuButton variant="secondary" onClick={() => setQrPrompt(false)}>
+                  Not Now
+                </NeuButton>
+                <NeuButton
+                  variant="primary"
+                  onClick={() => {
+                    setQrPrompt(false);
+                    setDetailsId(null);
+                    router.push(PAYMENT_QR_SETUP_HREF);
+                  }}
+                >
+                  Upload QR
+                </NeuButton>
+              </>
+            }
+          >
+            <p className="font-inter text-xs sm:text-[13px] leading-relaxed text-[#5C4535]">
+              Clients pay with your QR code right after you approve their request, so you can&apos;t approve requests until
+              you upload one. Add it in My Profile under Payment QR, then come back to approve.
+            </p>
+          </NeuModal>
+        )}
+      </AnimatePresence>
+
       {detailsTarget && <ConsultationDetailsModal {...buildDetailsProps(detailsTarget)} />}
 
       <AnimatePresence>
@@ -406,7 +462,7 @@ export function useLawyerConsultationActions({
     notice,
     clearNotice: () => setNotice(null),
     /** True while any of the modals is open (e.g. to pause keyboard shortcuts). */
-    anyOpen: detailsId !== null || decision !== null || reschedule !== null || cancelReviewId !== null,
+    anyOpen: detailsId !== null || decision !== null || reschedule !== null || cancelReviewId !== null || qrPrompt,
     modals,
   };
 }
