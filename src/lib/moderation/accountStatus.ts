@@ -19,6 +19,7 @@ import { emitLive, type LiveScope } from '@/lib/realtime/live';
 import { sendEmail } from '@/lib/integrations/email';
 import { renderEmailHtml } from '@/lib/email/layout';
 import { SUPPORT_EMAIL } from '@/lib/support';
+import { queueNotificationEmail } from '@/lib/email/notificationEmail';
 import type { AccountStatus } from './constants';
 
 type Db = SupabaseClient;
@@ -104,7 +105,11 @@ export async function notifyAccount(
       is_read: false,
     });
     if (error) console.warn('[notifyAccount]', type, error.message);
-    else signalUsers([userId], ['notifications']);
+    else {
+      signalUsers([userId], ['notifications']);
+      // Suspension / reinstatement emails are sent by emailAccount below; the hook skips those types.
+      queueNotificationEmail({ userId, type, title, body, payload });
+    }
   } catch (err) {
     console.warn('[notifyAccount] unexpected', err);
   }
@@ -214,6 +219,10 @@ export async function reinstateExpiredSuspension(db: Db, userId: string): Promis
     'Your account is active again',
     'Your suspension has ended and full access to Justicia has been restored. Please keep to the community guidelines; further violations can lead to permanent termination.'
   );
+  await emailAccount(db, userId, 'Your Justicia account is active again', 'Account reinstated', [
+    'Your suspension has ended and you can sign in to Justicia again.',
+    'Please keep to the community guidelines; further violations can lead to permanent termination.',
+  ]);
   return 'active';
 }
 

@@ -42,9 +42,9 @@ export function AccountSettings({ account }: { account: PersonalAccount }) {
             <input type="checkbox" checked={prefs.notifications[row.key]} disabled={prefs.saving} onChange={(event) => prefs.toggleNotification(row.key, event.target.checked)} className="accent-[#C58B3C] w-4 h-4 rounded" />
           </label>
         ))}
-        <label className="flex items-center justify-between py-1 border-t border-[#E5D7C5] gap-3">
-          <span>Email updates for scheduled attorney consultations <span className="text-[#7D6855]">(not available yet)</span></span>
-          <input type="checkbox" checked={false} disabled className="accent-[#C58B3C] w-4 h-4 rounded" />
+        <label className="flex items-center justify-between cursor-pointer py-1 border-t border-[#E5D7C5] gap-3">
+          <span>Email updates <span className="text-[#7D6855]">(also send the updates turned on above to {account.email})</span></span>
+          <input type="checkbox" checked={prefs.emailUpdates} disabled={prefs.saving} onChange={(event) => prefs.toggleEmailUpdates(event.target.checked)} className="accent-[#C58B3C] w-4 h-4 rounded" />
         </label>
         <label className="flex items-center justify-between py-1 border-t border-[#E5D7C5] gap-3">
           <span>SMS alerts for urgent hearing notices <span className="text-[#7D6855]">(not available yet)</span></span>

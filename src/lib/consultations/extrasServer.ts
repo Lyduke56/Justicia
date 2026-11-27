@@ -7,6 +7,7 @@
 import { after } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emitLive, type LiveScope } from '@/lib/realtime/live';
+import { queueNotificationEmail } from '@/lib/email/notificationEmail';
 import {
   ATTENDANCE_TRACKED_FROM,
   CANCELLATION_CUTOFF_MS,
@@ -228,7 +229,10 @@ export async function notify(db: Db, userId: string, type: string, title: string
     is_read: false,
   });
   if (error) console.warn('[consultation extras] notify', type, error.message);
-  else signalLive([userId], ['notifications']);
+  else {
+    signalLive([userId], ['notifications']);
+    queueNotificationEmail({ userId, type, title, body, payload });
+  }
 }
 
 /** A status line in the pair's conversation (same row shape as the original postSystemMessage). */

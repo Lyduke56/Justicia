@@ -23,6 +23,7 @@ export interface PersonalAccount {
   consultationNotifications: boolean;
   notifications: NotificationChoices;
   messaging: MessagingPrivacy;
+  emailUpdates: boolean;
 }
 
 async function accountSession() {
@@ -112,6 +113,8 @@ export interface AccountPreferencesInput {
   consultationNotifications?: boolean;
   notifications?: Partial<NotificationChoices>;
   messaging?: Partial<MessagingPrivacy>;
+  /** Also email notifications (account notices are emailed regardless). */
+  emailUpdates?: boolean;
 }
 
 export async function updateAccountPreferencesAction(input: AccountPreferencesInput): Promise<AccountResult> {
@@ -121,7 +124,9 @@ export async function updateAccountPreferencesAction(input: AccountPreferencesIn
     const legacy = input?.consultationNotifications;
     const notifications = input?.notifications && typeof input.notifications === 'object' ? input.notifications : undefined;
     const messaging = input?.messaging && typeof input.messaging === 'object' ? input.messaging : undefined;
-    if (legacy === undefined && !notifications && !messaging) return { success: false, error: 'Invalid notification preference.' };
+    const emailUpdates = input?.emailUpdates;
+    if (legacy === undefined && !notifications && !messaging && emailUpdates === undefined) return { success: false, error: 'Invalid notification preference.' };
+    if (emailUpdates !== undefined && !isBool(emailUpdates)) return { success: false, error: 'Invalid notification preference.' };
     if (legacy !== undefined && !isBool(legacy)) return { success: false, error: 'Invalid notification preference.' };
     if (notifications && Object.entries(notifications).some(([k, v]) => !(NOTIFICATION_CATEGORIES as readonly string[]).includes(k) || !isBool(v))) {
       return { success: false, error: 'Invalid notification preference.' };
@@ -139,7 +144,11 @@ export async function updateAccountPreferencesAction(input: AccountPreferencesIn
     }
     const nextMessaging = { ...current.messaging, ...(messaging ?? {}) };
     const { error } = await auth.auth.updateUser({ data: {
-      justicia_preferences: preferencesToMetadata({ notifications: nextNotifications, messaging: nextMessaging }),
+      justicia_preferences: preferencesToMetadata({
+        notifications: nextNotifications,
+        messaging: nextMessaging,
+        emailUpdates: isBool(emailUpdates) ? (emailUpdates as boolean) : current.emailUpdates,
+      }),
     } });
     if (error) return { success: false, error: 'Unable to save preferences. Please try again.' };
     signalUsers([user.id], ['notifications']);

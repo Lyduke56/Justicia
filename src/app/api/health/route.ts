@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
+import { emailTransport } from '@/lib/integrations/email';
+import { geminiApiKeys } from '@/lib/ai/geminiKeys';
 
 /**
  * GET /api/health — liveness for uptime monitors. Reports only whether each dependency is
@@ -23,8 +25,8 @@ export async function GET() {
   const database = await databaseCheck();
   const checks = {
     database,
-    email: process.env.RESEND_API_KEY ? 'configured' : 'missing',
-    ai: process.env.GEMINI_API_KEY ? 'configured' : 'missing',
+    email: emailTransport() !== 'none' ? 'configured' : 'missing',
+    ai: geminiApiKeys().length > 0 ? 'configured' : 'missing',
     cron: process.env.CRON_SECRET ? 'configured' : 'missing',
   };
   const status = database === 'ok' ? (Object.values(checks).includes('missing') ? 'degraded' : 'ok') : 'down';

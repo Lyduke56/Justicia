@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * check:gemini — validates GEMINI_API_KEY with real text generation + embedding calls.
+ * check:gemini — validates GEMINI_API_KEY and the fallback keys GEMINI_API_KEY_2…_4 with a real
+ * text generation call each, plus one embedding call.
  * Run: npm run check:gemini
  * NEVER prints the key. Only reports pass/fail, model names, and latency.
  */
@@ -31,12 +32,16 @@ try {
   // ignore
 }
 
-const apiKey = process.env.GEMINI_API_KEY;
+const KEY_NAMES = ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4'];
+const configured = KEY_NAMES.map((name) => ({ name, value: (process.env[name] || '').trim() })).filter((k) => k.value);
+const apiKey = configured[0]?.value;
 
 if (!apiKey) {
-  console.error('❌ GEMINI_API_KEY is not set in .env.local');
+  console.error('❌ No Gemini key is set in .env.local (GEMINI_API_KEY, GEMINI_API_KEY_2…_4)');
   process.exit(1);
 }
+const duplicates = configured.filter((k, i) => configured.findIndex((o) => o.value === k.value) !== i);
+if (duplicates.length) console.log(`⚠️  ${duplicates.map((k) => k.name).join(', ')} repeat an earlier key and add no fallback.`);
 
 // Verify key is NOT prefixed NEXT_PUBLIC_
 const allKeys = Object.keys(process.env).filter(k => k.includes('GEMINI'));
@@ -46,7 +51,32 @@ if (publicKeys.length > 0) {
   process.exit(1);
 }
 
+async function checkKey(name, value) {
+  const ai = new GoogleGenAI({ apiKey: value });
+  const started = Date.now();
+  try {
+    const response = await ai.models.generateContent({
+      model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+      contents: [{ role: 'user', parts: [{ text: 'Reply with exactly: "Justicia Gemini OK"' }] }],
+      config: { temperature: 0, maxOutputTokens: 50 },
+    });
+    console.log(`${name.padEnd(17)} ✅ OK (${Date.now() - started}ms) ${String(response.text || '').trim().slice(0, 40)}`);
+    return true;
+  } catch (err) {
+    const status = err && (err.status || err.code);
+    console.log(`${name.padEnd(17)} ❌ FAIL${status ? ` [${status}]` : ''} ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}`);
+    return false;
+  }
+}
+
 async function main() {
+  // ── Test 0: every configured key (fallback order) ───────────────────────────
+  console.log('\n═══ Test 0: Keys (fallback order) ═══════════════════════════════');
+  let working = 0;
+  for (const k of configured) if (await checkKey(k.name, k.value)) working++;
+  console.log(`${working} of ${configured.length} configured key(s) working. The assistant uses the first working one.`);
+  if (working === 0) process.exit(1);
+
   const ai = new GoogleGenAI({ apiKey });
 
   // ── Test 1: Text generation ──────────────────────────────────────────────────

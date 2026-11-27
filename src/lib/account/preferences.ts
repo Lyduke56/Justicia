@@ -21,6 +21,11 @@ export interface AccountPreferences {
   consultationNotifications: boolean;
   notifications: NotificationChoices;
   messaging: MessagingPrivacy;
+  /**
+   * Also email the notifications whose category is on (and the consultation reminders).
+   * Account standing and lawyer verification decisions are emailed whatever this says.
+   */
+  emailUpdates: boolean;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -48,6 +53,7 @@ export function accountPreferences(metadata: Record<string, unknown> | undefined
       hideTyping: messaging.hideTyping === true,
       hideReadReceipts: messaging.hideReadReceipts === true,
     },
+    emailUpdates: prefs.emailUpdates !== false,
   };
 }
 
@@ -60,11 +66,25 @@ export function notificationCategory(type: string): NotificationCategory | null 
   return null;
 }
 
+/** Notices that are emailed even when email updates are off (account standing, lawyer verification). */
+export function isMandatoryEmail(type: string): boolean {
+  return type.startsWith('account_') || type.startsWith('lawyer_verification_');
+}
+
+/** Whether a notification of `type` should also be emailed to someone with these preferences. */
+export function wantsEmailFor(prefs: AccountPreferences, type: string): boolean {
+  if (isMandatoryEmail(type)) return true;
+  if (!prefs.emailUpdates) return false;
+  const category = notificationCategory(type);
+  return category === null || prefs.notifications[category];
+}
+
 /** The value to store back into user_metadata.justicia_preferences. */
 export function preferencesToMetadata(prefs: Omit<AccountPreferences, 'consultationNotifications'>) {
   return {
     consultationNotifications: prefs.notifications.consultations,
     notifications: { ...prefs.notifications },
     messaging: { ...prefs.messaging },
+    emailUpdates: prefs.emailUpdates,
   };
 }
