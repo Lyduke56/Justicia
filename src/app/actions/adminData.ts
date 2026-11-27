@@ -346,7 +346,7 @@ export async function sendUserPasswordResetAction(email: string) {
     await requireAdmin();
     const supabase = await createServiceClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/reset-password`,
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://justicia-chi.vercel.app'}/auth/reset-password`,
     });
     if (error) return { error: error.message };
     return { success: true };

@@ -18,6 +18,7 @@ created, and the manual test checklist.
 | 005 | `005_booking_integrity.sql` | No overlapping bookings, booking eligibility, allowed status changes, audit entry per status change | Booking integrity |
 | 006 | `006_reviews_integrity.sql` | One review per consultation; reviews can't be edited or deleted from the browser | Review integrity |
 | 007 | `007_profile_fields.sql` | `city_province`, `consultation_language`, `contact_method`, `contact_time` on `profiles` | Client profile fields |
+| 008 | `008_drop_one_confirmed_per_day.sql` | Drops the old index that allowed only one confirmed consultation per lawyer per day (not in `RUN_ALL.sql`; run it on its own) | Confirming a second paid booking on the same day |
 
 ## Order matters
 

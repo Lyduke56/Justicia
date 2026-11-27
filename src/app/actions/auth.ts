@@ -34,7 +34,7 @@ export type AuthState = {
 const PENDING_EMAIL_COOKIE = 'justicia_pending_email';
 
 function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+  return process.env.NEXT_PUBLIC_SITE_URL ?? 'https://justicia-chi.vercel.app';
 }
 
 async function serviceDb(): Promise<SupabaseClient> {

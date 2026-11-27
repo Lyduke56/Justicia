@@ -33,7 +33,7 @@ export interface NotificationEmailParams {
 const EMAILED_ELSEWHERE = new Set(['account_suspended', 'account_reinstated', 'account_terminated']);
 
 export function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://justicia.ph').replace(/\/$/, '');
+  return (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://justicia-chi.vercel.app').replace(/\/$/, '');
 }
 
 function manilaWhen(iso: string | null | undefined): string {
