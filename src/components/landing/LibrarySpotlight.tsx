@@ -302,7 +302,7 @@ export function BookshelfSpotlight({
 // warm glow following the cursor. Strength is controlled by GLOBAL_GLOW_STRENGTH.
 // ============================================================================
 
-export function GlobalCursorSpotlight() {
+export function GlobalCursorSpotlight({ enabled = true }: { enabled?: boolean }) {
   const context = useContext(SpotlightContext);
   if (!context?.isSupported || GLOBAL_GLOW_STRENGTH <= 0) return null;
 
@@ -313,29 +313,36 @@ export function GlobalCursorSpotlight() {
       className="fixed inset-0 z-30 pointer-events-none overflow-hidden select-none"
       style={{ opacity: 'var(--spotlight-opacity, 0)' }}
     >
-      {/* Broad warm ambient halo */}
+      {/* `enabled` fades the whole glow in or out (used to hold it back during the page intro) */}
       <div
-        className="absolute inset-0"
-        style={{
-          background: `radial-gradient(550px circle at var(--spotlight-x, -999px) var(--spotlight-y, -999px), rgba(197, 148, 78, ${a(0.07)}) 0%, rgba(197, 148, 78, ${a(0.025)}) 42%, transparent 70%)`,
-        }}
-      />
+        className={`absolute inset-0 transition-opacity duration-[1600ms] ease-out ${
+          enabled ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
+        {/* Broad warm ambient halo */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `radial-gradient(550px circle at var(--spotlight-x, -999px) var(--spotlight-y, -999px), rgba(197, 148, 78, ${a(0.07)}) 0%, rgba(197, 148, 78, ${a(0.025)}) 42%, transparent 70%)`,
+          }}
+        />
 
-      {/* Focused incandescent core */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: `radial-gradient(190px circle at var(--spotlight-x, -999px) var(--spotlight-y, -999px), rgba(255, 238, 200, ${a(0.1)}) 0%, rgba(197, 148, 78, ${a(0.04)}) 50%, transparent 75%)`,
-        }}
-      />
+        {/* Focused incandescent core */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `radial-gradient(190px circle at var(--spotlight-x, -999px) var(--spotlight-y, -999px), rgba(255, 238, 200, ${a(0.1)}) 0%, rgba(197, 148, 78, ${a(0.04)}) 50%, transparent 75%)`,
+          }}
+        />
 
-      {/* Optical Fresnel lens dispersion ring */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: `radial-gradient(280px circle at var(--spotlight-x, -999px) var(--spotlight-y, -999px), transparent 72%, rgba(197, 148, 78, ${a(0.05)}) 80%, transparent 88%)`,
-        }}
-      />
+        {/* Optical Fresnel lens dispersion ring */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `radial-gradient(280px circle at var(--spotlight-x, -999px) var(--spotlight-y, -999px), transparent 72%, rgba(197, 148, 78, ${a(0.05)}) 80%, transparent 88%)`,
+          }}
+        />
+      </div>
     </div>
   );
 }
