@@ -4,12 +4,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExtern
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion, type PanInfo } from 'motion/react';
 import type { LawyerConsultation } from '@/app/actions/consultationActions';
-import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
+import { useLiveRefresh } from '@/components/live/LiveProvider';
+import { useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 import { CalendarIcon, EmptyState, NeuAlert, NeuButton } from '@/components/shared/neu';
 import {
   buildSchedule,
   parseIsoDate,
-  startMsOf,
+  endMsOf,
   todayInManila,
   type LawyerDashboardStats,
   type LawyerScheduleData,
@@ -88,7 +89,11 @@ function firstUnfinished(data: LawyerScheduleData, f: ScheduleFilter): string | 
   const range = filterRange(f);
   if (data.today < range.from || data.today > range.to) return null;
   const now = Date.now();
-  return data.consultations.find((c) => c.status !== 'completed' && startMsOf(c) + 60 * 60_000 > now)?.id ?? null;
+  // The list is earliest first, so the first one that hasn't ended (by its real booked length,
+  // so a 2-hour session in progress still counts) is the soonest. If every session in the range
+  // is over, open on the most recent one rather than the earliest.
+  const next = data.consultations.find((c) => c.status !== 'completed' && endMsOf(c) > now);
+  return next?.id ?? data.consultations[data.consultations.length - 1]?.id ?? null;
 }
 
 // ─── Grid / list toggle ───────────────────────────────────────────────────────
@@ -153,17 +158,10 @@ function LayoutToggle({ value, onChange }: { value: Layout; onChange: (next: Lay
 export function LawyerDashboardView() {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
-  const viewActive = useViewActive();
 
-  // The portal keeps tabs mounted (and preloads them hidden). Each time this tab becomes visible,
-  // bump a key that remounts the animated layout so the entrance plays again; data, filter and
-  // layout live in this component and are kept. (State adjusted during render.)
-  const [wasActive, setWasActive] = useState(viewActive);
-  const [entranceKey, setEntranceKey] = useState(0);
-  if (viewActive !== wasActive) {
-    setWasActive(viewActive);
-    if (viewActive) setEntranceKey((k) => k + 1);
-  }
+  // The entrance plays when the portal's loading screen lifts (not underneath it), and again on
+  // every visit: the reveal key remounts the animated layout; data and choices live above it.
+  const { revealed, revealKey: entranceKey } = useScreenReveal();
 
   const [today, setToday] = useState(() => todayInManila());
   const [filter, setFilter] = useState<ScheduleFilter>(() => ({ scope: 'day', date: todayInManila() }));
@@ -205,13 +203,18 @@ export function LawyerDashboardView() {
       });
   }, []);
 
+  // The portal's loading screen stays up until the schedule and the figures are here.
+  const [statsTried, setStatsTried] = useState(false);
+  useScreenLoading(loadedFor === null || !statsTried);
+
   const loadStats = useCallback(
     () =>
       fetchLawyerDashboardStats()
         .then((data) => setStats(data ?? buildSampleStats((samples.current ??= buildSampleConsultations()))))
         .catch(() => {
           // Keep the last figures; the next live refresh retries.
-        }),
+        })
+        .finally(() => setStatsTried(true)),
     []
   );
 
@@ -287,7 +290,7 @@ export function LawyerDashboardView() {
         key={entranceKey}
         variants={PAGE}
         initial={reduceMotion ? false : 'hidden'}
-        animate="show"
+        animate={revealed ? 'show' : 'hidden'}
         className="lawyer-dash mx-auto flex max-w-[1196px] flex-col gap-8 px-4 pb-14 pt-6 sm:px-8 sm:pt-10 lg:px-12 lg:pt-12"
       >
         {/* ── KPI cards ─────────────────────────────────────────────────────── */}

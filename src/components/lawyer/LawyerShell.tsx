@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import { useMyAvatarSync } from '@/components/account/avatarStore';
-import { ScreenTransitionOverlay, useScreenTransition } from '@/components/shared/loading';
+import { ScreenTransitionOverlay, useScreenGate } from '@/components/shared/loading';
 import {
   DashboardGridIcon,
   EarningsPayoutsIcon,
@@ -21,7 +21,7 @@ import { LawyerConsultationsView } from './views/LawyerConsultationsView';
 import { LawyerEarningsView } from './views/LawyerEarningsView';
 import { DocumentsView } from '@/components/documents/DocumentsView';
 import { MessagesView } from '@/components/client/views/MessagesView';
-import { KeepAliveViews } from '@/components/live/KeepAliveViews';
+import { KeepAliveViews, ROUTE_SLOT } from '@/components/live/KeepAliveViews';
 import { useLiveRefresh } from '@/components/live/LiveProvider';
 import { fetchLive, type LiveResources } from '@/lib/live/fetchLive';
 
@@ -96,6 +96,9 @@ function pathnameToView(pathname: string): LawyerViewKey {
   return 'dashboard';
 }
 
+/** Tabs kept mounted once opened (see keepAliveViews below). */
+const KEEP_ALIVE_KEYS: LawyerViewKey[] = ['dashboard', 'consultations', 'messages', 'documents', 'earnings'];
+
 export function LawyerShell({ user, children }: LawyerShellProps) {
   useInactivityLogout();
   useMyAvatarSync(user.avatarUrl);
@@ -106,8 +109,10 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
   const [activeView, setActiveView] = useState<LawyerViewKey>(() => pathnameToView(pathname));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [liveLawyerNotifs, setLiveLawyerNotifs] = useState<LiveResources['notifications']>([]);
-  // Global loading screen over the content area while the shell switches screens.
-  const { loading: screenLoading, start: startScreenTransition } = useScreenTransition(pathname);
+  // The loading screen covers the content area until the screen has everything it needs; the
+  // screen's entrance plays once it lifts. Kept-alive tabs and the route page are its slots.
+  const activeSlot = KEEP_ALIVE_KEYS.includes(activeView) ? activeView : ROUTE_SLOT;
+  const { covered: screenLoading, start: startScreenTransition, store: screenStore, revealFor } = useScreenGate(pathname, activeSlot);
 
   const loadNotifications = useCallback(
     () =>
@@ -246,6 +251,7 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
               fallback={children ?? <LawyerDashboardView />}
               fallbackKey={pathname}
               scrollContainerId="lawyer-main-content"
+              gate={{ store: screenStore, revealFor }}
             />
           </main>
           <ScreenTransitionOverlay show={screenLoading} />

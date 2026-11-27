@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
 import { recordMeetingJoinAction } from '@/app/actions/consultationExtrasActions';
 import type { ConsultationExtras, ConsultationExtrasMap } from '@/lib/consultations/extras';
+import { useScreenLoading } from '@/components/shared/loading/ScreenReadiness';
 
 const TICK_MS = 30_000;
 
@@ -16,6 +17,9 @@ export function useConsultationExtras(enabled = true) {
   const active = useViewActive();
   const [extras, setExtras] = useState<ConsultationExtrasMap>({});
   const [now, setNow] = useState(() => Date.now());
+  // The screen's loading screen waits for the first answer (live refreshes don't hold it).
+  const [firstLoadDone, setFirstLoadDone] = useState(false);
+  useScreenLoading(enabled && !firstLoadDone);
   const extrasRef = useRef(extras);
   useEffect(() => {
     extrasRef.current = extras;
@@ -31,7 +35,8 @@ export function useConsultationExtras(enabled = true) {
       })
       .catch(() => {
         // Keep what is on screen; the next refresh retries.
-      });
+      })
+      .finally(() => setFirstLoadDone(true));
   }, [enabled]);
 
   useEffect(() => {

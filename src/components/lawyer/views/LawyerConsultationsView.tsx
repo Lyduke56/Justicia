@@ -6,13 +6,14 @@ import { AnimatePresence, MotionConfig, motion, useReducedMotion, type PanInfo }
 import type { LawyerConsultation } from '@/app/actions/consultationActions';
 import { fetchLive } from '@/lib/live/fetchLive';
 import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
+import { useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 import { CalendarIcon, EmptyState, NeuAlert, NeuButton } from '@/components/shared/neu';
 import { parseIsoDate, startMsOf, todayInManila } from '@/lib/lawyer/dashboardSchedule';
 import { isMissed, useLawyerConsultationActions } from '../useLawyerConsultationActions';
 import { LawyerConsultationCard, type ConsultationCardHandlers } from '../LawyerConsultationCard';
 import { CardPager, ConsultationCardLoader } from '../CardPager';
 import { buildSampleConsultations } from '../sampleConsultations';
-import { CARD_SLIDE, EMBOSS, GROUP, PAGE, RISE, ROLL } from '../motion';
+import { CARD_SLIDE, DRAW, EMBOSS, GROUP, PAGE, RISE, ROLL } from '../motion';
 import { ConsultationsToolbar } from '../consultations/ConsultationsToolbar';
 import { ConsultationCalendar } from '../consultations/ConsultationCalendar';
 import { AppointmentList } from '../consultations/AppointmentList';
@@ -65,20 +66,16 @@ export function LawyerConsultationsView({
   const reduceMotion = useReducedMotion();
   const isXl = useSyncExternalStore(subscribeXl, () => window.matchMedia(XL).matches, () => false);
 
-  // The portal keeps tabs mounted (and preloads them hidden). Each time this tab becomes visible,
-  // bump a key that remounts the animated layout so the entrance plays again; data and selection
-  // live here and are kept. (State adjusted during render.)
+  // The entrance plays when the portal's loading screen lifts (not underneath it), and again on
+  // every visit: the reveal key remounts the animated layout; data and choices live above it.
+  const { revealed, revealKey: entranceKey } = useScreenReveal();
   const viewActive = useViewActive();
-  const [wasActive, setWasActive] = useState(viewActive);
-  const [entranceKey, setEntranceKey] = useState(0);
-  if (viewActive !== wasActive) {
-    setWasActive(viewActive);
-    if (viewActive) setEntranceKey((k) => k + 1);
-  }
 
   // ── Data ──
   const [records, setRecords] = useState<LawyerConsultation[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // The portal's loading screen stays up until the consultations are here.
+  useScreenLoading(!loaded);
   const [error, setError] = useState<string | null>(null);
   const [samples] = useState(() => buildSampleConsultations());
   const [today] = useState(() => todayInManila());
@@ -106,7 +103,8 @@ export function LawyerConsultationsView({
   // ── Filters & selection ──
   const [tab, setTab] = useState<ConsultationTab>('all');
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortKey>('action');
+  // Default: the soonest consultation first (the next one to happen).
+  const [sort, setSort] = useState<SortKey>('upcoming');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** Date chosen in the calendar; null follows the consultation shown. */
   const [pickedDate, setPickedDate] = useState<string | null>(null);
@@ -257,7 +255,7 @@ export function LawyerConsultationsView({
         key={entranceKey}
         variants={PAGE}
         initial={reduceMotion ? false : 'hidden'}
-        animate="show"
+        animate={revealed ? 'show' : 'hidden'}
         className="lawyer-page mx-auto flex max-w-[1196px] flex-col gap-8 px-4 pb-14 pt-6 sm:px-8 sm:pt-10 lg:px-12 lg:pt-12"
       >
         {/* ── Tabs, search, sort ────────────────────────────────────────────── */}
@@ -286,6 +284,9 @@ export function LawyerConsultationsView({
             </NeuAlert>
           )}
         </AnimatePresence>
+
+        {/* Same divider and spacing as the lawyer Dashboard (the page's 32px gap on each side). */}
+        <motion.div variants={DRAW} className="lawyer-dash-groove mx-auto w-[78%]" aria-hidden />
 
         <motion.div variants={GROUP} className="flex flex-col gap-6 xl:flex-row xl:items-stretch xl:gap-7">
           {/* ── Left: heading, calendar, list for the chosen date ──────────── */}

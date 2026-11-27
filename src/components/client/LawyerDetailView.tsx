@@ -52,9 +52,10 @@ import {
   type BookingConfirmPhase,
 } from './BookingConfirmModal';
 import { NeuModal, NeuButton, NeuAlert, EmptyState, StarIcon as NeuStarIcon } from '@/components/shared/neu';
+import { SubmissionOverlay, useSubmission, type SubmissionCopy } from '@/components/shared/feedback';
 import { useMyAvatar } from '@/components/account/avatarStore';
 import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
-import { PanelLoader } from '@/components/shared/loading';
+import { PanelLoader, useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 
 /** A My Documents file attached to the booking (shared with the lawyer by document ID). */
 interface BookingAttachment {
@@ -862,6 +863,10 @@ export function LawyerDetailView({
     };
   }, [shouldFetchDetails, lawyer.userId, detailsAttempt]);
   const detailsLoading = shouldFetchDetails && fetchedDetails?.id !== lawyer.userId;
+  // In a portal shell, the loading screen stays up until the profile details are here, and the
+  // whole page (banner, tabs, cards) enters once it lifts.
+  useScreenLoading(detailsLoading);
+  const { revealed } = useScreenReveal();
   const detailsFailed = shouldFetchDetails && fetchedDetails?.id === lawyer.userId && !!fetchedDetails.failed;
   const retryDetails = () => {
     setFetchedDetails(null);
@@ -894,9 +899,11 @@ export function LawyerDetailView({
   // True only during the first-load sequence. Once it ends (or you switch tabs), content stops waiting for the intro.
   const [introActive, setIntroActive] = useState<boolean>(true);
   useEffect(() => {
+    // Counted from the reveal, when the first-load sequence actually plays.
+    if (!revealed) return;
     const t = setTimeout(() => setIntroActive(false), (INTRO_DELAY + 1.6) * 1000);
     return () => clearTimeout(t);
-  }, []);
+  }, [revealed]);
   const introDelay = introActive ? INTRO_DELAY : 0;
   const panelCustom: PanelCustom = { dir: tabDir, delay: introDelay };
 
@@ -946,6 +953,13 @@ export function LawyerDetailView({
   const [isCreatingPickerFolder, setIsCreatingPickerFolder] = useState<boolean>(false);
   const [isUploadingPickerFile, setIsUploadingPickerFile] = useState<boolean>(false);
   const [pickerNotice, setPickerNotice] = useState<string | null>(null);
+  // Uploading attachments and creating folders show the submission card: loader, then check / X.
+  const fileSubmission = useSubmission();
+  const [fileCard, setFileCard] = useState<{ processing: SubmissionCopy; success: SubmissionCopy; failure: string }>({
+    processing: { title: 'Uploading…' },
+    success: { title: 'Uploaded' },
+    failure: 'Something went wrong',
+  });
   const pickerFileInputRef = useRef<HTMLInputElement>(null);
   const [attachedFiles, setAttachedFiles] = useState<BookingAttachment[]>([]);
   const [bookingStatus, setBookingStatus] = useState<'idle' | 'saved'>('idle');
@@ -1113,44 +1127,59 @@ export function LawyerDetailView({
     if (files.length === 0 || isUploadingAttachment) return;
     setIsUploadingAttachment(true);
     setBookingError(null);
-    try {
-      const { uploaded, errors } = await uploadToMyDocuments(files, null);
-      if (uploaded.length > 0) {
-        setAttachedFiles((prev) => {
-          const seen = new Set(prev.map((f) => f.id));
-          return [...prev, ...uploaded.filter((f) => !seen.has(f.id)).map(({ id, name, size }) => ({ id, name, size }))];
-        });
+    const many = files.length > 1;
+    setFileCard({
+      processing: { title: many ? 'Uploading your files' : 'Uploading your file', message: 'Saving to My Documents and attaching to this booking.' },
+      success: { title: many ? 'Files attached' : 'File attached', message: 'They are in My Documents and attached to this booking.' },
+      failure: "We couldn't upload your files",
+    });
+    const result = await fileSubmission.run(async () => {
+      try {
+        const { uploaded, errors } = await uploadToMyDocuments(files, null);
+        if (uploaded.length > 0) {
+          setAttachedFiles((prev) => {
+            const seen = new Set(prev.map((f) => f.id));
+            return [...prev, ...uploaded.filter((f) => !seen.has(f.id)).map(({ id, name, size }) => ({ id, name, size }))];
+          });
+        }
+        if (uploaded.length === 0) return { ok: false, error: errors.join(' ') || 'We could not upload your files. Please try again.' };
+        // Some files made it: keep them, and say which ones didn't.
+        if (errors.length > 0) setBookingError(errors.join(' '));
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'We could not upload your files. Please try again.' };
       }
-      if (errors.length > 0) setBookingError(errors.join(' '));
-    } catch {
-      setBookingError('We could not upload your files. Please try again.');
-    } finally {
-      setIsUploadingAttachment(false);
-    }
+    });
+    if (result && !result.ok) setBookingError(result.error);
+    setIsUploadingAttachment(false);
   };
 
   const handleCreatePickerFolder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pickerNewFolderName.trim() || isCreatingPickerFolder) return;
+    const name = pickerNewFolderName.trim();
     setIsCreatingPickerFolder(true);
     setPickerNotice(null);
-    try {
-      const res = await createDocumentFolderAction(pickerNewFolderName.trim());
-      if (!('folder' in res) || !res.folder) {
-        setPickerNotice(('error' in res && res.error) || 'Failed to create folder');
-        return;
+    setFileCard({
+      processing: { title: 'Creating your folder', message: `Adding “${name}” to My Documents.` },
+      success: { title: 'Folder created', message: `“${name}” is ready for your files.` },
+      failure: "We couldn't create the folder",
+    });
+    const result = await fileSubmission.run(async () => {
+      try {
+        const res = await createDocumentFolderAction(name);
+        if (!('folder' in res) || !res.folder) return { ok: false, error: ('error' in res && res.error) || 'Failed to create folder' };
+        const newFolder = res.folder;
+        setDocPickerFolders((prev) => [newFolder, ...prev]);
+        setActivePickerFolderId(newFolder.id);
+        setPickerNewFolderName('');
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'Failed to create folder. Please try again.' };
       }
-      const newFolder = res.folder;
-      setDocPickerFolders((prev) => [newFolder, ...prev]);
-      setActivePickerFolderId(newFolder.id);
-
-      setPickerNewFolderName('');
-      setPickerNotice(`Created folder "${newFolder.name}" successfully.`);
-    } catch (err: any) {
-      setPickerNotice(err?.message || 'Failed to create folder');
-    } finally {
-      setIsCreatingPickerFolder(false);
-    }
+    });
+    if (result && !result.ok) setPickerNotice(result.error);
+    setIsCreatingPickerFolder(false);
   };
 
   const handlePickerFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1168,13 +1197,16 @@ export function LawyerDetailView({
         ? activeFolder.id
         : null;
 
-    try {
+    setFileCard({
+      processing: { title: 'Uploading your file', message: `Saving “${file.name}” to My Documents.` },
+      success: { title: 'File uploaded', message: 'It is saved in My Documents and added to your selection.' },
+      failure: "We couldn't upload the file",
+    });
+    const result = await fileSubmission.run(async () => {
+     try {
       const { uploaded, errors } = await uploadToMyDocuments([file], targetFolderId);
       const newFileItem = uploaded[0];
-      if (!newFileItem) {
-        setPickerNotice(errors[0] || 'Failed to upload document');
-        return;
-      }
+      if (!newFileItem) return { ok: false, error: errors[0] || 'Failed to upload document' };
 
       setDocPickerFolders((prev) => {
         const destinationId = targetFolderId ?? 'uploaded-records';
@@ -1190,13 +1222,14 @@ export function LawyerDetailView({
 
       // Auto-select the newly uploaded file
       setSelectedDocPickerFiles((prev) => Array.from(new Set([...prev, newFileItem.id])));
-      setPickerNotice(`Uploaded "${newFileItem.name}" to My Documents and added it to your selection.`);
-    } catch {
-      setPickerNotice('Failed to upload document');
-    } finally {
-      setIsUploadingPickerFile(false);
-      input.value = '';
-    }
+      return { ok: true };
+     } catch {
+      return { ok: false, error: 'Failed to upload document. Please try again.' };
+     }
+    });
+    if (result && !result.ok) setPickerNotice(result.error);
+    setIsUploadingPickerFile(false);
+    input.value = '';
   };
 
   const handleConfirmDocPicker = () => {
@@ -1641,6 +1674,10 @@ export function LawyerDetailView({
   const fieldRing = (on: boolean) =>
     on ? 'ring-2 ring-rose-400/80' : 'ring-0 ring-transparent';
 
+  // Under the portal's loading screen: the data above keeps loading, and the page mounts (so all
+  // of its entrance animations play) only once the loading screen lifts.
+  if (!revealed) return <div aria-hidden className="min-h-[60vh]" />;
+
   return (
     <MotionConfig reducedMotion="user">
       <div className="space-y-6 sm:space-y-7 select-none" style={{ zoom: SCREEN_SCALE }}>
@@ -1665,19 +1702,10 @@ export function LawyerDetailView({
         <AnimatePresence initial={false}>
           {isOwner && ownerNotice && (
             <Collapse key="owner-notice" gap={24}>
-              <div role="status" className="p-4 rounded-2xl bg-amber-100/90 border border-amber-300 text-amber-900 text-xs sm:text-sm flex items-center justify-between">
-                <span className="inline-flex items-center gap-2">
-                  <AnimatedCheck className="w-4 h-4" delay={0.15} />
-                  {ownerNotice}
-                </span>
-                <Key
-                  aria-label="Dismiss"
-                  onClick={() => setOwnerNotice(null)}
-                  className="w-6 h-6 rounded-full flex items-center justify-center font-bold cursor-pointer"
-                >
-                  <CloseIcon />
-                </Key>
-              </div>
+              {/* The same pressed-in notice as the rest of the system (not a flat yellow box). */}
+              <NeuAlert tone="success" onDismiss={() => setOwnerNotice(null)}>
+                {ownerNotice}
+              </NeuAlert>
             </Collapse>
           )}
         </AnimatePresence>
@@ -3308,6 +3336,14 @@ export function LawyerDetailView({
           />
         )}
         </AnimatePresence>
+
+        {/* ─── Attachment uploads & new folders: loader → check / X ─── */}
+        <SubmissionOverlay
+          submission={fileSubmission}
+          processing={fileCard.processing}
+          success={fileCard.success}
+          failure={{ title: fileCard.failure }}
+        />
       </div>
     </MotionConfig>
   );

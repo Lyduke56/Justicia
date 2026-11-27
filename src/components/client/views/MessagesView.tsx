@@ -18,7 +18,7 @@ import { addLawyerReviewAction } from '@/app/actions/reviewActions';
 import { recordMeetingJoinAction } from '@/app/actions/consultationExtrasActions';
 import { usePeopleAvatars } from '@/components/account/avatarStore';
 import { ReportAccountModal } from '@/components/shared/ReportAccountModal';
-import { ConsultationRatingDialog } from '@/components/client/ConsultationRatingDialog';
+import { SubmitModal, settle, useSubmission } from '@/components/shared/feedback';
 import {
   NeuButton,
   NeuAlert,
@@ -39,7 +39,7 @@ import {
   VideoIcon,
 } from '@/components/shared/neu';
 import { EASE_OUT } from '@/components/shared/neu/motion';
-import { PanelLoader } from '@/components/shared/loading';
+import { PanelLoader, useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 import {
   ACCEPT_DOCUMENTS,
   ACCEPT_MEDIA,
@@ -375,6 +375,8 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
   const inputRef = useRef<HTMLInputElement>(null);
   const urlCacheRef = useRef(new Map<string, { url: string; at: number }>());
   const viewActive = useViewActive();
+  // Entrances play when the portal's loading screen lifts, and on every visit.
+  const { revealed } = useScreenReveal();
   const isDesktop = useSyncExternalStore(subscribeLg, getLg, () => true);
   const docVisible = useSyncExternalStore(subscribeVisibility, getVisible, () => true);
 
@@ -442,7 +444,8 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
           return { ...prev, [threadId]: [...server, ...sending] };
         });
       })
-      .catch(() => {});
+      // A failed first load still counts as loaded (shown empty; the next live refresh retries).
+      .catch(() => setMessages((prev) => (threadId in prev ? prev : { ...prev, [threadId]: [] })));
   }, []);
 
   /** Replies, pins, "Seen" and attachments for a conversation (stored alongside the messages). */
@@ -768,19 +771,32 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
   const [dismissedRatings, setDismissedRatings] = useState<string[]>(() =>
     typeof window === 'undefined' ? [] : readDismissed()
   );
-  const [ratingOpen, setRatingOpen] = useState<boolean>(false);
+  /** The consultation being rated (kept while the result card shows, after the prompt is gone). */
+  const [ratingFor, setRatingFor] = useState<{ consultationId: string; lawyerName: string } | null>(null);
   const [ratingStars, setRatingStars] = useState<number>(0);
   const [ratingComment, setRatingComment] = useState<string>('');
-  const [ratingBusy, setRatingBusy] = useState<boolean>(false);
+  // Submitting morphs the rating dialog into the submission loader, then a check or an X.
+  const ratingSubmission = useSubmission();
+  const ratingBusy = ratingSubmission.processing;
+  /** Form problems (no stars, no comment). Request errors are shown by the result card. */
   const [ratingError, setRatingError] = useState<string | null>(null);
   const [ratingThanks, setRatingThanks] = useState<boolean>(false);
 
+  /** The conversation whose banners (meeting, rate prompt) have been asked for at least once. */
+  const [contextTriedFor, setContextTriedFor] = useState<string | null>(null);
   const loadContext = useCallback((threadId: string | null = activeThreadRef.current) => {
     if (!threadId) return;
     return fetchLive('thread-context', { threadId })
       .then((data) => setContext({ threadId, data }))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setContextTriedFor(threadId));
   }, []);
+
+  // The portal's loading screen stays up until the conversation list, and the open conversation's
+  // messages and banners, are here. Later switches and live refreshes don't hold it.
+  useScreenLoading(
+    !threadsLoaded || (!!activeThreadId && (!(activeThreadId in messages) || contextTriedFor !== activeThreadId))
+  );
 
   useEffect(() => {
     loadContext(activeThreadId);
@@ -828,7 +844,7 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
     setAttachOpen(false);
     setActionMsgId(null);
     setShowJump(false);
-    setRatingOpen(false);
+    setRatingFor(null);
     setRatingStars(0);
     setRatingComment('');
     setRatingError(null);
@@ -838,7 +854,7 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
   const dismissRating = (consultationId: string) => {
     const next = Array.from(new Set([...dismissedRatings, consultationId]));
     setDismissedRatings(next);
-    setRatingOpen(false);
+    setRatingFor(null);
     try {
       localStorage.setItem(RATE_DISMISS_KEY, JSON.stringify(next));
     } catch {
@@ -846,32 +862,34 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
     }
   };
 
-  const submitRating = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!ratePrompt || ratingBusy) return;
+  const submitRating = () => {
+    if (!ratingFor || ratingBusy) return;
     if (ratingStars < 1) return setRatingError('Please choose a star rating.');
     if (!ratingComment.trim()) return setRatingError('Please share a few words about your consultation.');
-    setRatingBusy(true);
     setRatingError(null);
-    try {
-      const res = await addLawyerReviewAction({
-        consultationId: ratePrompt.consultationId,
-        rating: ratingStars,
-        comment: ratingComment.trim(),
-      });
-      if (!res.success) return setRatingError(res.error || 'Your rating could not be saved.');
+    const { consultationId } = ratingFor;
+    void ratingSubmission.run(() =>
+      settle(
+        () => addLawyerReviewAction({ consultationId, rating: ratingStars, comment: ratingComment.trim() }),
+        'Your rating could not be saved. Please try again.'
+      )
+    );
+  };
+
+  /** Cancel, or "Done" after the rating was saved (which hides the prompt for that consultation). */
+  const closeRating = () => {
+    if (ratingBusy) return;
+    if (ratingSubmission.phase === 'success') {
       setRatingThanks(true);
-      setRatingOpen(false);
       setRatingStars(0);
       setRatingComment('');
       // Hide the prompt for this consultation and refresh banners (a newer unrated one may surface).
       setContext((prev) => (prev ? { ...prev, data: { ...prev.data, ratePrompt: null } } : prev));
       if (activeThreadId) loadContext(activeThreadId);
-    } catch {
-      setRatingError('Your rating could not be saved. Please try again.');
-    } finally {
-      setRatingBusy(false);
     }
+    setRatingFor(null);
+    setRatingError(null);
+    ratingSubmission.reset();
   };
 
   // ─── Sending ───
@@ -1611,7 +1629,7 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
             key={activeThreadId ?? 'none'}
             variants={STREAM}
             initial="hidden"
-            animate={viewActive ? 'show' : 'hidden'}
+            animate={revealed ? 'show' : 'hidden'}
             className="flex flex-col"
           >
             {activeMessages.map(renderMessage)}
@@ -1663,6 +1681,90 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
     </motion.div>
   );
 
+  const ratingDialog = (
+    <AnimatePresence>
+      {ratingFor && (
+        <SubmitModal
+          key="rate-lawyer"
+          submission={ratingSubmission}
+          onClose={closeRating}
+          size="md"
+          icon={<StarIcon className="w-5 h-5" />}
+          title={`How would you rate your consultation with ${ratingFor.lawyerName}?`}
+          subtitle="Your review helps other clients choose a lawyer."
+          processing={{ title: 'Submitting your rating', message: `Saving your review of ${ratingFor.lawyerName}.` }}
+          success={{ title: 'Thank you!', message: `Your rating of ${ratingFor.lawyerName} has been submitted.` }}
+          failure={{ title: "We couldn't save your rating" }}
+          bodyClassName="space-y-5"
+          footer={
+            <>
+              <NeuButton key="cancel" onClick={closeRating} disabled={ratingBusy}>
+                Cancel
+              </NeuButton>
+              <NeuButton key="submit" variant="primary" onClick={submitRating} disabled={ratingBusy} icon={<StarIcon className="w-4 h-4" />}>
+                Submit Rating
+              </NeuButton>
+            </>
+          }
+        >
+          <div className="flex items-center justify-center gap-1.5" role="radiogroup" aria-label="Star rating">
+            {[1, 2, 3, 4, 5].map((s) => (
+              <motion.button
+                key={s}
+                type="button"
+                role="radio"
+                aria-checked={ratingStars === s}
+                aria-label={`${s} star${s === 1 ? '' : 's'}`}
+                onClick={() => {
+                  setRatingStars(s);
+                  setRatingError(null);
+                }}
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.85 }}
+                animate={s <= ratingStars ? { scale: [1, 1.25, 1] } : { scale: 1 }}
+                transition={{ duration: 0.3, delay: s <= ratingStars ? s * 0.03 : 0 }}
+                className="p-1 cursor-pointer"
+              >
+                <svg
+                  viewBox="0 0 20 20"
+                  className={`w-9 h-9 transition-colors ${s <= ratingStars ? 'text-[#A8742E] fill-[#C58B3C]' : 'text-[#B79C80] fill-transparent'}`}
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  aria-hidden="true"
+                >
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+              </motion.button>
+            ))}
+          </div>
+          <div className="space-y-2.5">
+            <label htmlFor="rating-comment" className="block font-lora text-[11px] font-bold uppercase tracking-[0.14em] text-[#946525]">
+              Your review
+            </label>
+            <textarea
+              id="rating-comment"
+              value={ratingComment}
+              onChange={(e) => {
+                setRatingComment(e.target.value);
+                setRatingError(null);
+              }}
+              maxLength={5000}
+              rows={4}
+              disabled={ratingBusy}
+              placeholder="Share how the consultation went…"
+              className="neu-input w-full rounded-[20px] py-4 px-5 font-inter text-xs sm:text-sm text-[#23150F] leading-relaxed resize-y"
+            />
+          </div>
+          {ratingError && (
+            <NeuAlert key="rating-error" tone="error">
+              {ratingError}
+            </NeuAlert>
+          )}
+        </SubmitModal>
+      )}
+    </AnimatePresence>
+  );
+
   const ratingBlock = (ratePrompt || ratingThanks) && (
     <motion.div variants={PART_UP} className="shrink-0">
       <AnimatePresence mode="wait" initial={false}>
@@ -1707,7 +1809,7 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                   </button>
                   <motion.button
                     type="button"
-                    onClick={() => setRatingOpen(true)}
+                    onClick={() => setRatingFor({ consultationId: ratePrompt.consultationId, lawyerName: ratePrompt.lawyerName })}
                     whileHover={{ y: -1.5 }}
                     whileTap={{ scale: 0.95 }}
                     className="neu-btn-banner h-9 px-5 rounded-xl font-lora text-xs font-bold text-[#341512] cursor-pointer"
@@ -1717,77 +1819,6 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                 </div>
             </div>
 
-            {ratingOpen && (
-              <ConsultationRatingDialog
-                lawyerName={ratePrompt.lawyerName}
-                busy={ratingBusy}
-                onClose={() => {
-                  setRatingOpen(false);
-                  setRatingError(null);
-                }}
-              >
-              <form onSubmit={submitRating} className="space-y-4 pt-1">
-                <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Star rating">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <motion.button
-                      key={s}
-                      type="button"
-                      role="radio"
-                      aria-checked={ratingStars === s}
-                      aria-label={`${s} star${s === 1 ? '' : 's'}`}
-                      onClick={() => setRatingStars(s)}
-                      whileHover={{ scale: 1.15 }}
-                      whileTap={{ scale: 0.85 }}
-                      animate={s <= ratingStars ? { scale: [1, 1.25, 1] } : { scale: 1 }}
-                      transition={{ duration: 0.3, delay: s <= ratingStars ? s * 0.03 : 0 }}
-                      className="p-1 cursor-pointer"
-                    >
-                      <svg
-                        viewBox="0 0 20 20"
-                        className={`w-7 h-7 transition-colors ${s <= ratingStars ? 'text-[#A8742E] fill-[#C58B3C]' : 'text-[#B79C80] fill-transparent'}`}
-                        stroke="currentColor"
-                        strokeWidth="1.2"
-                        aria-hidden="true"
-                      >
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                    </motion.button>
-                  ))}
-                </div>
-                <textarea
-                  value={ratingComment}
-                  onChange={(e) => setRatingComment(e.target.value)}
-                  maxLength={5000}
-                  rows={3}
-                  disabled={ratingBusy}
-                  placeholder="Share how the consultation went…"
-                  aria-label="Your review"
-                  className="w-full neu-inset-banner rounded-[14px] px-4 py-3 text-[13px] sm:text-sm font-lora text-[#34150F] placeholder-[#7D6855]/70 focus:outline-none focus:ring-2 focus:ring-[#B9833C]/45 resize-y"
-                />
-                {ratingError && (
-                  <p role="alert" className="font-inter text-xs text-[#7A1A12]">
-                    {ratingError}
-                  </p>
-                )}
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    disabled={ratingBusy}
-                    onClick={() => {
-                      setRatingOpen(false);
-                      setRatingError(null);
-                    }}
-                    className="px-3 py-2 rounded-xl font-lora text-xs font-semibold text-[#5C4535] hover:text-[#341512] cursor-pointer disabled:opacity-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <NeuButton type="submit" variant="dark" size="sm" loading={ratingBusy} className="px-5">
-                    {ratingBusy ? 'Submitting…' : 'Submit Rating'}
-                  </NeuButton>
-                </div>
-              </form>
-              </ConsultationRatingDialog>
-            )}
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -2046,11 +2077,11 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
       >
         <h1 className="sr-only">Messages — Justicia Philippine Legal Intelligence</h1>
 
-        {/* Replays the entrance each time this tab is shown (the shell keeps it mounted). */}
+        {/* Plays when the loading screen lifts, and again each time this tab is shown. */}
         <motion.div
           variants={PAGE_STAGGER}
           initial="hidden"
-          animate={viewActive ? 'show' : 'hidden'}
+          animate={revealed ? 'show' : 'hidden'}
           className="flex-1 min-h-0 flex gap-6 lg:gap-7 xl:gap-8"
         >
           {/* ─── Left: conversation list ───
@@ -2102,6 +2133,7 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                 {meetingBanner}
                 {messageStream}
                 {ratingBlock}
+                {ratingDialog}
                 {composer}
               </>
             )}

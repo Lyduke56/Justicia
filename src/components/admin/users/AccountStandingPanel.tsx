@@ -12,13 +12,43 @@ import {
   type AdminSuspensionLength,
 } from '@/app/actions/adminAccountActions';
 import { CAPS } from '../table/kit';
+import { SubmissionOverlay, useSubmission, type SubmissionCopy, type SubmissionResult } from '@/components/shared/feedback';
+import { useScreenLoading } from '@/components/shared/loading';
+
+/** Wording of the submission card for one change. */
+export interface StatusCardCopy {
+  processing: SubmissionCopy;
+  success: SubmissionCopy;
+  failure: string;
+}
+/** Runs a change with a submission card (loader, then check / X) and answers with its result. */
+export type SubmissionRunner = (copy: StatusCardCopy, task: () => Promise<SubmissionResult>) => Promise<SubmissionResult | null>;
 
 /**
  * Account standing for one user (admin): current status, and suspend / reinstate / terminate.
  * Each action expands inline (like the password form in Settings) and asks for the reason the
  * user will see; terminating also asks for the admin's password. Used in the Users modal and the
- * lawyer dossier.
+ * lawyer dossier. Saving shows the submission card: inside the Users modal the modal itself morphs
+ * (`runner`); on the dossier page the card opens on its own.
  */
+
+const CARD: Record<Exclude<Mode, null>, StatusCardCopy> = {
+  suspend: {
+    processing: { title: 'Suspending the account', message: 'Signing them out and saving your reason.' },
+    success: { title: 'Account suspended', message: 'They are signed out and will see your reason when they try to sign in.' },
+    failure: "We couldn't suspend the account",
+  },
+  reinstate: {
+    processing: { title: 'Reinstating the account', message: 'Lifting the suspension.' },
+    success: { title: 'Account reinstated', message: 'They can sign in and use Justicia again.' },
+    failure: "We couldn't reinstate the account",
+  },
+  terminate: {
+    processing: { title: 'Terminating the account', message: 'Checking your password and closing the account.' },
+    success: { title: 'Account terminated', message: 'They are signed out and can no longer sign in.' },
+    failure: "We couldn't terminate the account",
+  },
+};
 
 const LENGTH_OPTIONS: Array<{ value: AdminSuspensionLength; label: string }> = [
   { value: 3, label: '3 days' },
@@ -52,9 +82,20 @@ function statusLine(standing: AccountStandingView): string {
   }
 }
 
-export function AccountStandingPanel({ userId, onChanged }: { userId: string; onChanged?: () => void }) {
+export function AccountStandingPanel({ userId, onChanged, runner }: { userId: string; onChanged?: () => void; runner?: SubmissionRunner }) {
+  // Without a host dialog to morph, the card opens on its own.
+  const own = useSubmission();
+  const [ownCard, setOwnCard] = useState<StatusCardCopy>(CARD.suspend);
+  const run: SubmissionRunner =
+    runner ??
+    ((copy, task) => {
+      setOwnCard(copy);
+      return own.run(task);
+    });
   const [standing, setStanding] = useState<AccountStandingView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // The page's loading screen waits for the account standing.
+  useScreenLoading(standing === null && loadError === null);
   const [mode, setMode] = useState<Mode>(null);
   const [reason, setReason] = useState('');
   const [length, setLength] = useState<AdminSuspensionLength>(7);
@@ -99,27 +140,26 @@ export function AccountStandingPanel({ userId, onChanged }: { userId: string; on
     setBusy(true);
     setError(null);
     setNotice(null);
-    try {
-      const res =
-        mode === 'suspend'
-          ? await adminSuspendAccountAction({ userId, reason, length })
-          : mode === 'reinstate'
-            ? await adminReinstateAccountAction({ userId, reason })
-            : await adminTerminateAccountAction({ userId, reason, password });
-      if (!res.success) {
-        setError(res.error);
-        return;
+    const result = await run(CARD[mode], async () => {
+      try {
+        const res =
+          mode === 'suspend'
+            ? await adminSuspendAccountAction({ userId, reason, length })
+            : mode === 'reinstate'
+              ? await adminReinstateAccountAction({ userId, reason })
+              : await adminTerminateAccountAction({ userId, reason, password });
+        if (!res.success) return { ok: false, error: res.error };
+        // Reload first so the status line changes with the result.
+        await load();
+        close();
+        onChanged?.();
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'The change could not be saved. Please try again.' };
       }
-      // Reload first so the status line and the message change together.
-      await load();
-      setNotice(res.message);
-      close();
-      onChanged?.();
-    } catch {
-      setError('The change could not be saved. Please try again.');
-    } finally {
-      setBusy(false);
-    }
+    });
+    if (result && !result.ok) setError(result.error);
+    setBusy(false);
   };
 
   if (loadError) {
@@ -234,7 +274,7 @@ export function AccountStandingPanel({ userId, onChanged }: { userId: string; on
               )}
               {error && <NeuAlert tone="error">{error}</NeuAlert>}
               <div className="flex flex-wrap gap-2.5">
-                <NeuButton size="sm" variant={mode === 'terminate' ? 'danger' : 'dark'} loading={busy} disabled={!ready} onClick={() => void submit()}>
+                <NeuButton size="sm" variant={mode === 'terminate' ? 'danger' : 'dark'} disabled={!ready || busy} onClick={() => void submit()}>
                   {mode === 'suspend' ? 'Suspend account' : mode === 'reinstate' ? 'Reinstate account' : 'Terminate account'}
                 </NeuButton>
                 <NeuButton size="sm" disabled={busy} onClick={close}>
@@ -253,6 +293,8 @@ export function AccountStandingPanel({ userId, onChanged }: { userId: string; on
           </NeuAlert>
         </div>
       )}
+
+      {!runner && <SubmissionOverlay submission={own} processing={ownCard.processing} success={ownCard.success} failure={{ title: ownCard.failure }} />}
     </div>
   );
 }

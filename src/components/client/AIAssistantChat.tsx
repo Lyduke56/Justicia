@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { AnimatePresence, motion, useReducedMotion, type Variants } from 'motion/react';
 import { NeuAlert } from '@/components/shared/neu';
-import { PanelLoader } from '@/components/shared/loading';
+import { PanelLoader, useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 import {
   deleteAiConversationAction,
   getAiConversationAction,
@@ -155,6 +155,8 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
   const [inputQuery, setInputQuery] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // The greeting's entrance plays when the portal's loading screen lifts.
+  const { revealed } = useScreenReveal();
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [attachedText, setAttachedText] = useState<string>('');
   const [isSubmitHovered, setIsSubmitHovered] = useState(false);
@@ -166,6 +168,8 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [loadingConversation, setLoadingConversation] = useState(!!linkedId);
+  // Opening a saved conversation from a link holds the portal's loading screen until it is here.
+  useScreenLoading(loadingConversation);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<AiConversationSummary[]>([]);
@@ -503,7 +507,7 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
       <motion.div
         variants={pageVariants}
         initial={reduceMotion ? false : 'hidden'}
-        animate="show"
+        animate={revealed ? 'show' : 'hidden'}
         className="relative min-h-[calc(100vh-4rem)] flex flex-col justify-between px-6 sm:px-10 lg:px-16 py-8 sm:py-12 max-w-[1240px] mx-auto bg-[#E5D8CB]"
       >
         {/* Conversation history (out of the flow, so the centred layout doesn't move) */}

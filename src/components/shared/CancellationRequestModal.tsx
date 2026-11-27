@@ -15,7 +15,8 @@ import {
   withdrawCancellationRequestAction,
 } from '@/app/actions/consultationExtrasActions';
 import { CANCELLATION_REASON_MAX, CANCELLATION_REASON_MIN } from '@/lib/consultations/extras';
-import { AlertIcon, CalendarIcon, CheckCircleIcon, ClockIcon, NeuAlert, NeuButton, NeuModal } from '@/components/shared/neu';
+import { AlertIcon, CalendarIcon, CheckCircleIcon, ClockIcon, NeuAlert, NeuButton } from '@/components/shared/neu';
+import { SubmitModal, settle, useSubmission, type SubmissionCopy } from '@/components/shared/feedback';
 
 export type CancellationModalMode = 'request' | 'withdraw' | 'respond';
 
@@ -121,33 +122,35 @@ function ModalBody({
 }: Omit<CancellationRequestModalProps, 'open'>) {
   const [reason, setReason] = useState('');
   const [declining, setDeclining] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const close = () => !submitting && onClose();
+  const submission = useSubmission();
+  const submitting = submission.processing;
+  const [done, setDone] = useState<{ message: string; processing: SubmissionCopy; success: SubmissionCopy } | null>(null);
+  // Closing after a success hands the confirmation to the caller (which refreshes).
+  const close = () => {
+    if (submitting) return;
+    if (submission.phase === 'success' && done) onDone(done.message);
+    else onClose();
+  };
 
-  const run = async (call: () => Promise<{ success?: boolean; error?: string }>, message: string) => {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await call();
-      if (!res.success) {
-        setError(res.error || 'This could not be saved. Please try again.');
-        return;
-      }
-      onDone(message);
-    } catch {
-      setError('This could not be saved. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
+  /** Sends the answer; the dialog morphs into the loader, then the check or the X. */
+  const run = (call: () => Promise<unknown>, message: string, processing: SubmissionCopy, success: SubmissionCopy) => {
+    setDone({ message, processing, success });
+    void submission.run(() => settle(call, 'This could not be saved. Please try again.'));
+  };
+  const status = {
+    submission,
+    processing: done?.processing ?? { title: 'Saving…' },
+    success: done?.success ?? { title: 'Saved' },
   };
 
   if (mode === 'request') {
     const ready = reason.trim().length >= CANCELLATION_REASON_MIN;
     return (
-      <NeuModal
+      <SubmitModal
+        {...status}
+        failure={{ title: "We couldn't send your request" }}
+        waitingAfterSuccess
         onClose={close}
-        dismissible={!submitting}
         size="md"
         icon={<AlertIcon className="w-5 h-5" />}
         iconTone="danger"
@@ -165,11 +168,17 @@ function ModalBody({
             </NeuButton>
             <NeuButton
               variant="danger"
-              disabled={!ready}
-              loading={submitting}
-              onClick={() => run(() => requestCancellationAction(consultationId, reason), `Your cancellation request was sent to ${counterpartName}.`)}
+              disabled={!ready || submitting}
+              onClick={() =>
+                run(
+                  () => requestCancellationAction(consultationId, reason),
+                  `Your cancellation request was sent to ${counterpartName}.`,
+                  { title: 'Sending your request', message: `Asking ${counterpartName} to cancel this consultation.` },
+                  { title: 'Request sent', message: `${counterpartName} has to approve it. Until then, the consultation stays booked.` }
+                )
+              }
             >
-              {submitting ? 'Sending…' : 'Send Request'}
+              Send Request
             </NeuButton>
           </>
         }
@@ -184,16 +193,16 @@ function ModalBody({
           placeholder={`Let ${counterpartName} know why you need to cancel.`}
         />
         <NeuAlert tone="info">If the attorney accepts, the consultation is cancelled and your payment is marked for a refund.</NeuAlert>
-        {error && <NeuAlert tone="error">{error}</NeuAlert>}
-      </NeuModal>
+      </SubmitModal>
     );
   }
 
   if (mode === 'withdraw') {
     return (
-      <NeuModal
+      <SubmitModal
+        {...status}
+        failure={{ title: "We couldn't withdraw your request" }}
         onClose={close}
-        dismissible={!submitting}
         size="md"
         icon={<AlertIcon className="w-5 h-5" />}
         title="Withdraw your request?"
@@ -210,26 +219,33 @@ function ModalBody({
             </NeuButton>
             <NeuButton
               variant="primary"
-              loading={submitting}
-              onClick={() => run(() => withdrawCancellationRequestAction(consultationId), 'Your cancellation request was withdrawn. The consultation stays booked.')}
+              disabled={submitting}
+              onClick={() =>
+                run(
+                  () => withdrawCancellationRequestAction(consultationId),
+                  'Your cancellation request was withdrawn. The consultation stays booked.',
+                  { title: 'Withdrawing your request', message: `Letting ${counterpartName} know.` },
+                  { title: 'Request withdrawn', message: 'The consultation stays booked.' }
+                )
+              }
             >
-              {submitting ? 'Withdrawing…' : 'Withdraw Request'}
+              Withdraw Request
             </NeuButton>
           </>
         }
       >
         <ScheduleCard name={counterpartName} dateLong={dateLong} timeRange={timeRange} />
         {requestReason && <ReasonQuote label="Your reason" text={requestReason} />}
-        {error && <NeuAlert tone="error">{error}</NeuAlert>}
-      </NeuModal>
+      </SubmitModal>
     );
   }
 
   // respond (lawyer)
   return (
-    <NeuModal
+    <SubmitModal
+      {...status}
+      failure={{ title: "We couldn't save your answer" }}
       onClose={close}
-      dismissible={!submitting}
       size="lg"
       bodyClassName="space-y-7 sm:space-y-8"
       icon={<AlertIcon className="w-5 h-5" />}
@@ -249,39 +265,38 @@ function ModalBody({
             </NeuButton>
             <NeuButton
               variant="danger"
-              disabled={reason.trim().length < CANCELLATION_REASON_MIN}
-              loading={submitting}
+              disabled={reason.trim().length < CANCELLATION_REASON_MIN || submitting}
               onClick={() =>
-                run(() => respondToCancellationRequestAction(consultationId, 'decline', reason), 'You declined the request. The consultation stays booked.')
+                run(
+                  () => respondToCancellationRequestAction(consultationId, 'decline', reason),
+                  'You declined the request. The consultation stays booked.',
+                  { title: 'Declining the request', message: `Letting ${counterpartName} know.` },
+                  { title: 'Request declined', message: `${counterpartName} will be notified. The consultation stays booked.` }
+                )
               }
             >
-              {submitting ? 'Declining…' : 'Decline Request'}
+              Decline Request
             </NeuButton>
           </>
         ) : (
           <>
-            <NeuButton
-              variant="secondary"
-              onClick={() => {
-                setError(null);
-                setDeclining(true);
-              }}
-              disabled={submitting}
-            >
+            <NeuButton variant="secondary" onClick={() => setDeclining(true)} disabled={submitting}>
               Decline
             </NeuButton>
             <NeuButton
               variant="primary"
-              loading={submitting}
+              disabled={submitting}
               icon={<CheckCircleIcon className="w-4 h-4" />}
               onClick={() =>
                 run(
                   () => respondToCancellationRequestAction(consultationId, 'accept'),
-                  'You accepted the cancellation. The consultation is cancelled and the refund is pending.'
+                  'You accepted the cancellation. The consultation is cancelled and the refund is pending.',
+                  { title: 'Cancelling the consultation', message: `Accepting the request from ${counterpartName}.` },
+                  { title: 'Cancellation accepted', message: 'The consultation is cancelled and the payment is marked for a refund.' }
                 )
               }
             >
-              {submitting ? 'Accepting…' : 'Accept Cancellation'}
+              Accept Cancellation
             </NeuButton>
           </>
         )
@@ -299,8 +314,7 @@ function ModalBody({
           placeholder="e.g. The session is less than a day away and the slot can no longer be given to another client."
         />
       )}
-      {error && <NeuAlert tone="error">{error}</NeuAlert>}
-    </NeuModal>
+    </SubmitModal>
   );
 }
 

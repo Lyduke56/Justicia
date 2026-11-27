@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState, useTransition, type ReactNode } from 'react';
+import React, { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { changeAccountPasswordAction, updatePersonalAccountAction, type PersonalAccount } from '@/app/actions/accountActions';
 import { ComingSoonPill, Hint, KeyIcon, NeuSwitch, PAGE, PasswordField, RISE_IN, SectionCard, SettingRow, initialsOf } from '@/components/account/ClientAccountSettings';
 import { ChevronRightIcon, EXTRUDE, InfoIcon, NeuAlert, NeuButton, PencilIcon } from '@/components/shared/neu';
+import { SubmissionOverlay, useSubmission } from '@/components/shared/feedback';
+import { useScreenReveal } from '@/components/shared/loading';
 import { EASE_OUT } from '@/components/shared/neu/motion';
 import { PAGE_FRAME } from '../table/kit';
 import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
@@ -52,9 +54,11 @@ function AdminAccountLayout({
   children: ReactNode;
 }) {
   const myAvatar = useMyAvatar();
+  // The entrance plays when the portal's loading screen lifts (not underneath it).
+  const { revealed } = useScreenReveal();
   return (
     <MotionConfig reducedMotion="user">
-      <motion.div variants={PAGE} initial="hidden" animate="show" className={`${PAGE_FRAME} admin-account`}>
+      <motion.div variants={PAGE} initial="hidden" animate={revealed ? 'show' : 'hidden'} className={`${PAGE_FRAME} admin-account`}>
         <motion.header variants={RISE_IN} className="space-y-1.5">
           <h1 className="font-lora text-2xl font-medium leading-[1.2] tracking-tight text-[#34150F] sm:text-3xl lg:text-[36px]">
             {title} <span className="font-semibold text-[#C58B3C]">{accent}</span>
@@ -131,7 +135,9 @@ const PLATFORM = [
 
 export function AdminAccountSettings({ account }: { account: PersonalAccount }) {
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const [changing, startChanging] = useTransition();
+  // Changing the password shows the submission card: loader, then check / X.
+  const passwordSubmission = useSubmission();
+  const changing = passwordSubmission.processing;
   const [passwordError, setPasswordError] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [current, setCurrent] = useState('');
@@ -149,20 +155,21 @@ export function AdminAccountSettings({ account }: { account: PersonalAccount }) 
     event.preventDefault();
     setPasswordError('');
     setPasswordMessage('');
-    startChanging(async () => {
-      try {
-        const result = await changeAccountPasswordAction({ currentPassword: current, password: next, confirmPassword: confirm });
-        if (!result.success) {
-          setPasswordError(result.error);
-          return;
+    void passwordSubmission
+      .run(async () => {
+        try {
+          const result = await changeAccountPasswordAction({ currentPassword: current, password: next, confirmPassword: confirm });
+          if (!result.success) return { ok: false, error: result.error };
+          resetPasswordForm();
+          setPasswordOpen(false);
+          return { ok: true };
+        } catch {
+          return { ok: false, error: 'Unable to change your password. Please try again.' };
         }
-        resetPasswordForm();
-        setPasswordOpen(false);
-        setPasswordMessage(result.message);
-      } catch {
-        setPasswordError('Unable to change your password. Please try again.');
-      }
-    });
+      })
+      .then((result) => {
+        if (result && !result.ok) setPasswordError(result.error);
+      });
   };
 
   return (
@@ -240,8 +247,8 @@ export function AdminAccountSettings({ account }: { account: PersonalAccount }) 
                       )}
                     </AnimatePresence>
                     <div className="flex flex-wrap items-center gap-3 pt-1">
-                      <NeuButton type="submit" variant="primary" size="sm" loading={changing}>
-                        {changing ? 'Updating…' : 'Update password'}
+                      <NeuButton type="submit" variant="primary" size="sm" disabled={changing}>
+                        Update password
                       </NeuButton>
                       <NeuButton
                         size="sm"
@@ -300,6 +307,13 @@ export function AdminAccountSettings({ account }: { account: PersonalAccount }) 
           These controls are not connected to the application yet, so they can&apos;t be changed here.
         </p>
       </SectionCard>
+
+      <SubmissionOverlay
+        submission={passwordSubmission}
+        processing={{ title: 'Updating your password', message: 'Checking your current password and saving the new one.' }}
+        success={{ title: 'Password updated', message: 'Use your new password the next time you sign in.' }}
+        failure={{ title: "We couldn't update your password" }}
+      />
     </AdminAccountLayout>
   );
 }
@@ -320,7 +334,9 @@ export function AdminProfile({ account }: { account: PersonalAccount }) {
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(account.fullName);
   const [phone, setPhone] = useState(account.phone);
-  const [saving, startSaving] = useTransition();
+  // Saving shows the submission card: loader, then check / X.
+  const profileSubmission = useSubmission();
+  const saving = profileSubmission.processing;
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -328,20 +344,21 @@ export function AdminProfile({ account }: { account: PersonalAccount }) {
     event.preventDefault();
     setError('');
     setMessage('');
-    startSaving(async () => {
-      try {
-        const result = await updatePersonalAccountAction({ fullName, phone });
-        if (!result.success) {
-          setError(result.error);
-          return;
+    void profileSubmission
+      .run(async () => {
+        try {
+          const result = await updatePersonalAccountAction({ fullName, phone });
+          if (!result.success) return { ok: false, error: result.error };
+          setEditing(false);
+          router.refresh();
+          return { ok: true };
+        } catch {
+          return { ok: false, error: 'Unable to save your profile. Please try again.' };
         }
-        setMessage(result.message);
-        setEditing(false);
-        router.refresh();
-      } catch {
-        setError('Unable to save your profile. Please try again.');
-      }
-    });
+      })
+      .then((result) => {
+        if (result && !result.ok) setError(result.error);
+      });
   };
 
   return (
@@ -386,8 +403,8 @@ export function AdminProfile({ account }: { account: PersonalAccount }) {
                 </label>
               </fieldset>
               <div className="flex flex-wrap gap-3">
-                <NeuButton type="submit" variant="primary" size="sm" loading={saving}>
-                  {saving ? 'Saving…' : 'Save changes'}
+                <NeuButton type="submit" variant="primary" size="sm" disabled={saving}>
+                  Save changes
                 </NeuButton>
                 <NeuButton
                   size="sm"
@@ -421,6 +438,13 @@ export function AdminProfile({ account }: { account: PersonalAccount }) {
         </AnimatePresence>
       </SectionCard>
       <ProfilePhotoSection fullName={account.fullName} />
+
+      <SubmissionOverlay
+        submission={profileSubmission}
+        processing={{ title: 'Saving your profile', message: 'Updating your name and contact number.' }}
+        success={{ title: 'Profile saved', message: 'Other administrators see your updated details in the audit log.' }}
+        failure={{ title: "We couldn't save your profile" }}
+      />
     </AdminAccountLayout>
   );
 }
@@ -429,48 +453,49 @@ export function AdminProfile({ account }: { account: PersonalAccount }) {
 function ProfilePhotoSection({ fullName }: { fullName: string }) {
   const photo = useMyAvatar();
   const input = React.useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
+  // Changing or removing the photo shows the submission card: loader, then check / X.
+  const submission = useSubmission();
+  const busy = submission.processing;
+  const [removing, setRemoving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
   const upload = async (file: File | undefined) => {
     if (!file) return;
-    setBusy(true);
+    setRemoving(false);
     setError('');
     setMessage('');
-    try {
-      const fd = new FormData();
-      fd.set('file', file);
-      const res = await changeProfilePhotoAction(fd);
-      if (!res.success) setError(res.error);
-      else {
+    const result = await submission.run(async () => {
+      try {
+        const fd = new FormData();
+        fd.set('file', file);
+        const res = await changeProfilePhotoAction(fd);
+        if (!res.success) return { ok: false, error: res.error };
         setMyAvatar(res.avatarUrl);
-        setMessage('Your photo has been updated.');
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'Your photo could not be uploaded. Please try again.' };
       }
-    } catch {
-      setError('Your photo could not be uploaded. Please try again.');
-    } finally {
-      setBusy(false);
-      if (input.current) input.current.value = '';
-    }
+    });
+    if (result && !result.ok) setError(result.error);
+    if (input.current) input.current.value = '';
   };
 
   const remove = async () => {
-    setBusy(true);
+    setRemoving(true);
     setError('');
     setMessage('');
-    try {
-      const res = await removeMyProfilePhotoAction();
-      if (!res.success) setError(res.error);
-      else {
+    const result = await submission.run(async () => {
+      try {
+        const res = await removeMyProfilePhotoAction();
+        if (!res.success) return { ok: false, error: res.error };
         setMyAvatar(null);
-        setMessage('Your photo has been removed.');
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'Your photo could not be removed. Please try again.' };
       }
-    } catch {
-      setError('Your photo could not be removed. Please try again.');
-    } finally {
-      setBusy(false);
-    }
+    });
+    if (result && !result.ok) setError(result.error);
   };
 
   return (
@@ -480,8 +505,8 @@ function ProfilePhotoSection({ fullName }: { fullName: string }) {
           {photo ? <ProfilePhoto src={photo} className="size-full" fallback={initialsOf(fullName)} /> : initialsOf(fullName)}
         </span>
         <input ref={input} id="admin-profile-photo-input" type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={busy} onChange={(e) => void upload(e.target.files?.[0])} />
-        <NeuButton size="sm" variant="primary" loading={busy} onClick={() => input.current?.click()}>
-          {busy ? 'Saving…' : photo ? 'Change photo' : 'Add a photo'}
+        <NeuButton size="sm" variant="primary" disabled={busy} onClick={() => input.current?.click()}>
+          {photo ? 'Change photo' : 'Add a photo'}
         </NeuButton>
         {photo && (
           <NeuButton size="sm" disabled={busy} onClick={() => void remove()}>
@@ -496,6 +521,13 @@ function ProfilePhotoSection({ fullName }: { fullName: string }) {
           </NeuAlert>
         )}
       </AnimatePresence>
+
+      <SubmissionOverlay
+        submission={submission}
+        processing={removing ? { title: 'Removing your photo' } : { title: 'Uploading your photo', message: 'It replaces the person icon in the header.' }}
+        success={removing ? { title: 'Photo removed', message: 'Your initials show in its place.' } : { title: 'Photo updated', message: 'It now shows in the header and your account summary.' }}
+        failure={{ title: removing ? "We couldn't remove your photo" : "We couldn't upload your photo" }}
+      />
     </SectionCard>
   );
 }

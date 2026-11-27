@@ -2,7 +2,8 @@
 
 /**
  * Reschedule dialogs for confirmed appointments (client and lawyer portals), built on the shared
- * neumorphic modal frame (NeuModal) so they match the rest of the consultation booking flow.
+ * neumorphic modal frame so they match the rest of the consultation booking flow. Sending morphs
+ * the dialog into the submission loader, which then writes a check or an X (SubmitModal).
  *  - request:  pick a new date + time slot (both calendars are checked server-side) and a reason
  *  - respond:  accept or decline the other party's proposal (optional reason when declining)
  *  - withdraw: cancel your own open request
@@ -18,8 +19,8 @@ import {
 } from '@/app/actions/consultationActions';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
 import { PanelLoader } from '@/components/shared/loading';
+import { SubmitModal, settle, useSubmission, type SubmissionResult, type SubmissionState } from '@/components/shared/feedback';
 import {
-  NeuModal,
   NeuButton,
   NeuAlert,
   EmptyState,
@@ -96,10 +97,19 @@ function longDate(iso: string): string {
 }
 
 export function RescheduleModal(props: RescheduleModalProps) {
-  const { mode, pending } = props;
-  const [submitting, setSubmitting] = useState(false);
+  const { mode, pending, onClose, onDone } = props;
+  const submission = useSubmission();
+  const [doneMessage, setDoneMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const shared = { ...props, submitting, setSubmitting, error, setError };
+  /** Sends the request; the dialog morphs into the loader, then the check or the X. */
+  const send = (call: () => Promise<unknown>, fallback: string, message: string) => {
+    setDoneMessage(message);
+    setError(null);
+    return submission.run(() => settle(call, fallback));
+  };
+  /** Closing after a success hands the confirmation to the caller (which refreshes). */
+  const finish = () => (submission.phase === 'success' ? onDone(doneMessage) : onClose());
+  const shared = { ...props, submitting: submission.processing, submission, send, finish, error, setError };
 
   if (mode === 'request') return <RequestStep {...shared} />;
   if (mode === 'respond' && pending) return <RespondStep {...shared} pending={pending} />;
@@ -109,7 +119,10 @@ export function RescheduleModal(props: RescheduleModalProps) {
 
 type StepProps = RescheduleModalProps & {
   submitting: boolean;
-  setSubmitting: (v: boolean) => void;
+  submission: SubmissionState;
+  send: (call: () => Promise<unknown>, fallback: string, message: string) => Promise<SubmissionResult | null>;
+  finish: () => void;
+  /** Errors other than the submission's own (e.g. loading the free time slots). */
   error: string | null;
   setError: (v: string | null) => void;
 };
@@ -125,11 +138,12 @@ function RequestStep({
   currentStart,
   remaining,
   submitting,
-  setSubmitting,
+  submission,
+  send,
+  finish,
   error,
   setError,
   onClose,
-  onDone,
 }: StepProps) {
   const today = manilaToday();
   // Open on the current appointment's month (or today, if that month has already begun).
@@ -171,13 +185,13 @@ function RequestStep({
     [consultationId, setError]
   );
 
-  /** Selects a date and loads its slots. `keepError` keeps a submit error visible while refreshing. */
-  const loadDate = (iso: string, { keepError = false } = {}) => {
+  /** Selects a date and loads its slots. */
+  const loadDate = (iso: string) => {
     const seq = ++requestSeq.current;
     setSelectedDate(iso);
     setSlot(null);
     setLoadingSlots(true);
-    if (!keepError) setError(null);
+    setError(null);
     void fetchOptions(iso, seq);
   };
 
@@ -222,29 +236,30 @@ function RequestStep({
 
   const submit = async () => {
     if (!valid || !selectedDate || slot === null) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await requestRescheduleAction(consultationId, { date: selectedDate, startMinutes: slot, reason: reason.trim() });
-      if (!('success' in res) || !res.success) {
-        setError(('error' in res && res.error) || 'Your request could not be sent.');
-        if (selectedDate) loadDate(selectedDate, { keepError: true });
-        return;
-      }
-      onDone(`Reschedule request sent to ${counterpartName}.`);
-    } catch {
-      setError('Your request could not be sent. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
+    const date = selectedDate;
+    const result = await send(
+      () => requestRescheduleAction(consultationId, { date, startMinutes: slot, reason: reason.trim() }),
+      'Your request could not be sent. Please try again.',
+      `Reschedule request sent to ${counterpartName}.`
+    );
+    // The slot may have been taken in the meantime: refresh the day's times.
+    if (result && !result.ok) loadDate(date);
   };
 
   const newLabel = selectedDate && chosen ? `${longDate(selectedDate)} · ${chosen.label.replace(' • PST, GMT+8', '')}` : null;
 
   return (
-    <NeuModal
-      onClose={onClose}
-      dismissible={!submitting}
+    <SubmitModal
+      submission={submission}
+      onClose={finish}
+      processing={{ title: 'Sending your request', message: `Asking ${counterpartName} to move the consultation.` }}
+      success={{
+        title: 'Request sent',
+        message: `${counterpartName} will be asked to accept the new time. The current schedule stays until they do.`,
+      }}
+      failure={{ title: "We couldn't send your request", retryLabel: 'Review Request' }}
+      details={newLabel ? <SchedulePill label={newLabel} /> : undefined}
+      waitingAfterSuccess
       size="2xl"
       bodyClassName="space-y-8 sm:space-y-9"
       icon={<CalendarClockIcon className="w-5 h-5" />}
@@ -267,8 +282,8 @@ function RequestStep({
           <NeuButton variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </NeuButton>
-          <NeuButton variant="primary" onClick={submit} disabled={!valid} loading={submitting} icon={<SendIcon className="w-4 h-4" />}>
-            {submitting ? 'Sending…' : 'Send Request'}
+          <NeuButton variant="primary" onClick={submit} disabled={!valid || submitting} icon={<SendIcon className="w-4 h-4" />}>
+            Send Request
           </NeuButton>
         </>
       }
@@ -462,8 +477,13 @@ function RequestStep({
       </div>
 
       {error && <NeuAlert tone="error">{error}</NeuAlert>}
-    </NeuModal>
+    </SubmitModal>
   );
+}
+
+/** The new date and time, as a pill under the result. */
+function SchedulePill({ label }: { label: string }) {
+  return <span className="neu-raised-pill bg-[#E5D8CB] rounded-full px-4 py-1.5 font-lora text-[10.5px] font-bold text-[#5C4535]">{label}</span>;
 }
 
 // ─── Shared: "from → to" schedule card ──────────────────────────────────────
@@ -530,40 +550,44 @@ function RespondStep({
   currentLabel,
   pending,
   submitting,
-  setSubmitting,
+  submission,
+  send,
+  finish,
   error,
   setError,
-  onClose,
-  onDone,
 }: StepProps & { pending: NonNullable<RescheduleInfo['pending']> }) {
   const [declining, setDeclining] = useState(false);
   const [note, setNote] = useState('');
+  const [answered, setAnswered] = useState<'accept' | 'decline'>('accept');
+  const proposed = `${pending.proposedDateLong} · ${pending.proposedTimeRange}`;
 
-  const answer = async (response: 'accept' | 'decline') => {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await respondToRescheduleAction(consultationId, response, response === 'decline' ? note.trim() : undefined);
-      if (!('success' in res) || !res.success) {
-        setError(('error' in res && res.error) || 'Your answer could not be saved.');
-        return;
-      }
-      onDone(
-        response === 'accept'
-          ? `The consultation was moved to ${pending.proposedDateLong}, ${pending.proposedTimeRange}.`
-          : 'The request was declined. The original schedule stays.'
-      );
-    } catch {
-      setError('Your answer could not be saved. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
+  const answer = (response: 'accept' | 'decline') => {
+    setAnswered(response);
+    void send(
+      () => respondToRescheduleAction(consultationId, response, response === 'decline' ? note.trim() : undefined),
+      'Your answer could not be saved. Please try again.',
+      response === 'accept'
+        ? `The consultation was moved to ${pending.proposedDateLong}, ${pending.proposedTimeRange}.`
+        : 'The request was declined. The original schedule stays.'
+    );
   };
 
   return (
-    <NeuModal
-      onClose={onClose}
-      dismissible={!submitting}
+    <SubmitModal
+      submission={submission}
+      onClose={finish}
+      processing={
+        answered === 'accept'
+          ? { title: 'Moving the consultation', message: `Saving the new time with ${counterpartName}.` }
+          : { title: 'Declining the request', message: `Letting ${counterpartName} know.` }
+      }
+      success={
+        answered === 'accept'
+          ? { title: 'Consultation moved', message: `The new time replaces the old one for you and ${counterpartName}.` }
+          : { title: 'Request declined', message: `${counterpartName} will be notified. The original schedule stays.` }
+      }
+      failure={{ title: "We couldn't save your answer" }}
+      details={answered === 'accept' ? <SchedulePill label={proposed} /> : undefined}
       size="lg"
       bodyClassName="space-y-7 sm:space-y-8"
       icon={<CalendarClockIcon className="w-5 h-5" />}
@@ -580,8 +604,8 @@ function RespondStep({
             <NeuButton variant="secondary" onClick={() => setDeclining(false)} disabled={submitting}>
               Back
             </NeuButton>
-            <NeuButton variant="danger" onClick={() => answer('decline')} loading={submitting}>
-              {submitting ? 'Declining…' : 'Decline Request'}
+            <NeuButton variant="danger" onClick={() => answer('decline')} disabled={submitting}>
+              Decline Request
             </NeuButton>
           </>
         ) : (
@@ -596,14 +620,14 @@ function RespondStep({
             >
               Decline
             </NeuButton>
-            <NeuButton variant="primary" onClick={() => answer('accept')} loading={submitting} icon={<CheckCircleIcon className="w-4 h-4" />}>
-              {submitting ? 'Accepting…' : 'Accept New Time'}
+            <NeuButton variant="primary" onClick={() => answer('accept')} disabled={submitting} icon={<CheckCircleIcon className="w-4 h-4" />}>
+              Accept New Time
             </NeuButton>
           </>
         )
       }
     >
-      <ScheduleChange from={currentLabel} to={`${pending.proposedDateLong} · ${pending.proposedTimeRange}`} />
+      <ScheduleChange from={currentLabel} to={proposed} />
       <ReasonQuote label={`Reason from ${counterpartName}`} text={pending.reason} />
 
       {declining && (
@@ -631,7 +655,7 @@ function RespondStep({
       )}
 
       {error && <NeuAlert tone="error">{error}</NeuAlert>}
-    </NeuModal>
+    </SubmitModal>
   );
 }
 
@@ -642,33 +666,26 @@ function WithdrawStep({
   counterpartName,
   pending,
   submitting,
-  setSubmitting,
+  submission,
+  send,
+  finish,
   error,
-  setError,
   onClose,
-  onDone,
 }: StepProps & { pending: NonNullable<RescheduleInfo['pending']> }) {
-  const withdraw = async () => {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await withdrawRescheduleAction(consultationId);
-      if (!('success' in res) || !res.success) {
-        setError(('error' in res && res.error) || 'The request could not be withdrawn.');
-        return;
-      }
-      onDone('Your reschedule request was withdrawn. The original schedule stays.');
-    } catch {
-      setError('The request could not be withdrawn. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const withdraw = () =>
+    void send(
+      () => withdrawRescheduleAction(consultationId),
+      'The request could not be withdrawn. Please try again.',
+      'Your reschedule request was withdrawn. The original schedule stays.'
+    );
 
   return (
-    <NeuModal
-      onClose={onClose}
-      dismissible={!submitting}
+    <SubmitModal
+      submission={submission}
+      onClose={finish}
+      processing={{ title: 'Withdrawing your request', message: `Letting ${counterpartName} know.` }}
+      success={{ title: 'Request withdrawn', message: 'The original schedule stays.' }}
+      failure={{ title: "We couldn't withdraw your request" }}
       size="md"
       bodyClassName="space-y-7 sm:space-y-8"
       icon={<CalendarClockIcon className="w-5 h-5" />}
@@ -685,8 +702,8 @@ function WithdrawStep({
           <NeuButton variant="secondary" onClick={onClose} disabled={submitting}>
             Keep Request
           </NeuButton>
-          <NeuButton variant="danger" onClick={withdraw} loading={submitting}>
-            {submitting ? 'Withdrawing…' : 'Withdraw Request'}
+          <NeuButton variant="danger" onClick={withdraw} disabled={submitting}>
+            Withdraw Request
           </NeuButton>
         </>
       }
@@ -694,7 +711,7 @@ function WithdrawStep({
       <ScheduleChange to={`${pending.proposedDateLong} · ${pending.proposedTimeRange}`} />
       <ReasonQuote label="Your reason" text={pending.reason} />
       {error && <NeuAlert tone="error">{error}</NeuAlert>}
-    </NeuModal>
+    </SubmitModal>
   );
 }
 

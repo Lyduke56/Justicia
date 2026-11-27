@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useViewActive } from '@/components/live/LiveProvider';
 import { ADMIN_REFRESH_EVENT } from '@/lib/live/adminRefresh';
+import { useScreenLoading } from '@/components/shared/loading/ScreenReadiness';
 import type { DashboardData, LawyerDirectoryRow, LawyerQueueRow } from '@/app/actions/adminData';
 import type { AdminUserAccount, AdminAuditEntry } from '@/types/admin';
 import { AdminDashboardView } from './views/AdminDashboardView';
@@ -26,6 +27,8 @@ function AdminTab<K extends keyof Resources>({ resource, children }: {
   const active = useViewActive();
   const [data, setData] = useState<Resources[K] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The portal's loading screen stays up until the tab's data is here (or failed to load).
+  useScreenLoading(data === null && !error);
   const lastLoaded = useRef(0);
   const pending = useRef<AbortController | null>(null);
   const load = useCallback(async () => {

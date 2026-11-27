@@ -1,11 +1,16 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { restoreAccountAction } from '@/app/actions/accountPrivacyActions';
 import { signOutAction } from '@/app/actions/auth';
+import { SubmissionOverlay, useSubmission } from '@/components/shared/feedback';
+import { NeuAlert } from '@/components/shared/neu';
 
 export function RestoreAccountPanel({ email, dueAt }: { email: string; dueAt: string }) {
-  const [pending, start] = useTransition();
+  // Restoring shows the submission card: loader, then check (Continue opens the portal) or X.
+  const submission = useSubmission();
+  const pending = submission.processing;
+  const [redirectTo, setRedirectTo] = useState<string | null>(null);
   const [error, setError] = useState('');
   const when = new Date(dueAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'long', timeStyle: 'short' });
 
@@ -23,22 +28,32 @@ export function RestoreAccountPanel({ email, dueAt }: { email: string; dueAt: st
         <p className="text-sm text-[#5C4535] leading-relaxed">
           Restore it now to keep using Justicia with everything as it was. If you do nothing, the deletion goes ahead.
         </p>
-        {error && <p role="alert" className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</p>}
+        {error && (
+          <NeuAlert tone="error" onDismiss={() => setError('')}>
+            {error}
+          </NeuAlert>
+        )}
         <div className="flex flex-wrap gap-3 pt-1">
           <button
             type="button"
             disabled={pending}
-            onClick={() =>
-              start(async () => {
-                setError('');
-                const res = await restoreAccountAction();
-                if (!res.success) setError(res.error);
-                else window.location.assign(res.redirectTo);
-              })
-            }
+            onClick={async () => {
+              setError('');
+              const result = await submission.run(async () => {
+                try {
+                  const res = await restoreAccountAction();
+                  if (!res.success) return { ok: false, error: res.error };
+                  setRedirectTo(res.redirectTo);
+                  return { ok: true };
+                } catch {
+                  return { ok: false, error: 'Your account could not be restored. Please try again.' };
+                }
+              });
+              if (result && !result.ok) setError(result.error);
+            }}
             className="px-6 py-2.5 rounded-xl bg-[#34150F] text-white text-sm font-semibold hover:bg-[#23150F] transition-colors disabled:opacity-60 shadow-md"
           >
-            {pending ? 'Restoring…' : 'Restore my account'}
+            Restore my account
           </button>
           <form action={signOutAction}>
             <button
@@ -51,6 +66,16 @@ export function RestoreAccountPanel({ email, dueAt }: { email: string; dueAt: st
           </form>
         </div>
       </div>
+
+      <SubmissionOverlay
+        submission={submission}
+        processing={{ title: 'Restoring your account', message: 'Cancelling the scheduled deletion.' }}
+        success={{ title: 'Your account is restored', message: 'Everything is as it was.', actionLabel: 'Continue' }}
+        failure={{ title: "We couldn't restore your account" }}
+        onDone={() => {
+          if (redirectTo) window.location.assign(redirectTo);
+        }}
+      />
     </div>
   );
 }

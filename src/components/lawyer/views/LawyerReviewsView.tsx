@@ -5,6 +5,8 @@ import { AnimatePresence, motion, type Variants } from 'motion/react';
 import { useReducedMotionPreference } from '@/components/lawyer/useReducedMotionPreference';
 import { addReviewReplyAction } from '@/app/actions/reviewActions';
 import { useLawyerReviews } from '@/components/client/useLawyerReviews';
+import { SubmissionOverlay, useSubmission } from '@/components/shared/feedback';
+import { useScreenReveal } from '@/components/shared/loading';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const reviewsEntrance: Variants = {
@@ -29,6 +31,8 @@ interface LawyerReviewItem {
 
 export function LawyerReviewsView() {
   const reduceMotion = useReducedMotionPreference();
+  // The entrance plays when the portal's loading screen lifts (the reviews hook holds it until loaded).
+  const { revealed } = useScreenReveal();
   const { reviews: savedReviews, setReviews: setSavedReviews, loading, error } = useLawyerReviews();
   const reviews: LawyerReviewItem[] = savedReviews.map(r => ({
     id: r.id, clientName: r.name, category: 'Legal Consultation', stars: r.stars,
@@ -38,6 +42,8 @@ export function LawyerReviewsView() {
   const [replyingId, setReplyingId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState('');
   const [flagToast, setFlagToast] = useState<string | null>(null);
+  // Posting a reply shows the submission card: loader, then check / X.
+  const replySubmission = useSubmission();
 
   const filteredReviews = reviews.filter((r) => {
     if (selectedFilter === '5') return r.stars === 5;
@@ -47,14 +53,20 @@ export function LawyerReviewsView() {
   });
 
   const handlePostReply = async (id: string) => {
-    if (!replyDraft.trim()) return;
+    if (!replyDraft.trim() || replySubmission.processing) return;
     const cleanReply = replyDraft.trim();
-    const result = await addReviewReplyAction({ reviewId: id, replyText: cleanReply });
-    if (!result.success) { setFlagToast(result.error || 'Unable to save reply.'); return; }
-    setSavedReviews(prev => prev.map(r => r.id === id ? { ...r, reply: cleanReply } : r));
-
-    setReplyingId(null);
-    setReplyDraft('');
+    await replySubmission.run(async () => {
+      try {
+        const result = await addReviewReplyAction({ reviewId: id, replyText: cleanReply });
+        if (!result.success) return { ok: false, error: result.error || 'Unable to save reply.' };
+        setSavedReviews(prev => prev.map(r => r.id === id ? { ...r, reply: cleanReply } : r));
+        setReplyingId(null);
+        setReplyDraft('');
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'Unable to save reply. Please try again.' };
+      }
+    });
   };
 
   const handleFlagReview = () => {
@@ -63,7 +75,7 @@ export function LawyerReviewsView() {
   };
 
   return (
-    <motion.div variants={reviewsEntrance} initial={reduceMotion ? false : 'hidden'} animate="show" className="p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-7">
+    <motion.div variants={reviewsEntrance} initial={reduceMotion ? false : 'hidden'} animate={revealed ? 'show' : 'hidden'} className="p-6 sm:p-10 lg:p-12 max-w-7xl mx-auto space-y-7">
       {loading && <p role="status">Loading reviews…</p>}
       {error && <p role="alert" className="text-red-700">{error}</p>}
       {/* ── Top Header Title ────────────────────────────────────────────────── */}
@@ -236,7 +248,7 @@ export function LawyerReviewsView() {
                     {rev.category}
                   </span>
                   {rev.flagged && (
-                    <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold">
+                    <span className="px-2 py-0.5 rounded-full bg-[#B42318]/10 text-[#B42318] text-[10px] font-semibold">
                       Under Review
                     </span>
                   )}
@@ -336,6 +348,13 @@ export function LawyerReviewsView() {
           </div>
         )}
       </motion.div>
+
+      <SubmissionOverlay
+        submission={replySubmission}
+        processing={{ title: 'Posting your reply', message: 'Adding your reply under the client’s review.' }}
+        success={{ title: 'Reply posted', message: 'Clients now see your reply with this review.' }}
+        failure={{ title: "We couldn't post your reply" }}
+      />
     </motion.div>
   );
 }

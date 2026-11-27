@@ -9,7 +9,15 @@ export { SubmissionBadge, type SubmissionBadgeProps, type SubmissionOutcome } fr
 export {
   useSubmission,
   toSubmissionResult,
+  settle,
   type SubmissionPhase,
   type SubmissionResult,
   type RunOptions,
 } from './useSubmission';
+export {
+  SubmitModal,
+  SubmissionOverlay,
+  type SubmitModalProps,
+  type SubmissionOverlayProps,
+  type SubmissionState,
+} from './SubmitModal';

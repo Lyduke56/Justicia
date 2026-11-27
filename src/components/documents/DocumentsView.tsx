@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useId, useRef, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion, type Variants } from 'motion/react';
@@ -22,9 +22,17 @@ import {
 import { getDocumentDownloadUrlAction } from '@/app/actions/documentFeatureActions';
 import type { DocumentFolderView } from '@/lib/documents/types';
 import { useLiveRefresh } from '@/components/live/LiveProvider';
-import { PanelLoader } from '@/components/shared/loading';
+import { PanelLoader, useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 import { NeuButton } from '@/components/shared/neu/NeuButton';
+import { NeuAlert } from '@/components/shared/neu/NeuAlert';
 import { EmptyMedallion } from '@/components/shared/neu/EmptyMedallion';
+import {
+  SubmissionStatus,
+  useSubmission,
+  type SubmissionCopy,
+  type SubmissionResult,
+  type SubmissionStatusProps,
+} from '@/components/shared/feedback';
 
 /** The signed-in user's folders (GET /api/live/documents). null: signed out. */
 async function fetchDocumentFolders(role: 'client' | 'lawyer'): Promise<DocumentFolderView[] | null> {
@@ -668,6 +676,12 @@ function FolderMenu({ open, folderName, subtitle, onToggle, onClose, onOpenFolde
 // comes into focus while the caramel rim closes in around it; sections cascade
 // in (CSS, .docs-modal-card). On close the sheet tips back, the rim lets go
 // and everything blurs out.
+//
+// With `status`, submitting morphs the sheet like the booking dialog: the form
+// fades, the panel shrinks around the submission loader, and the line writes a
+// check or an X once the request answers (SubmissionStatus).
+
+type ViewportModalStatus = Omit<SubmissionStatusProps, 'titleId' | 'onClose' | 'fitWhileWorking' | 'className' | 'actions'>;
 
 interface ViewportModalProps {
   isOpen: boolean;
@@ -675,6 +689,7 @@ interface ViewportModalProps {
   children: React.ReactNode;
   maxWidth?: string;
   ariaLabel?: string;
+  status?: ViewportModalStatus;
 }
 
 // Shared scroll-lock counter so closing one stacked modal never unlocks the page
@@ -739,9 +754,18 @@ function ViewportModal({
   children,
   maxWidth = 'max-w-[480px] sm:max-w-[520px]',
   ariaLabel = 'Modal dialog',
+  status,
 }: ViewportModalProps) {
   // true on the client, false during SSR, so the portal only renders in the browser.
   const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
+  const statusTitleId = useId();
+  const phase = status?.phase ?? 'idle';
+  // The panel only shrinks once the form has faded out; it grows back when returning to idle.
+  const [compact, setCompact] = useState(false);
+  if (phase === 'idle' && compact) setCompact(false);
+  const leaving = phase !== 'idle' && !compact;
+  // Esc and the backdrop are ignored while the request runs.
+  const dismissible = phase !== 'processing';
 
   // Lock body scroll while any modal is active
   useEffect(() => {
@@ -757,11 +781,11 @@ function ViewportModal({
   // Handle ESC key to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && dismissible) onClose();
     };
     if (isOpen) window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, dismissible]);
 
   if (!mounted) return null;
 
@@ -775,7 +799,9 @@ function ViewportModal({
             style={{ perspective: 1400 }}
             role="dialog"
             aria-modal="true"
-            aria-label={ariaLabel}
+            aria-label={compact ? undefined : ariaLabel}
+            aria-labelledby={compact ? statusTitleId : undefined}
+            aria-busy={phase === 'processing' || undefined}
             initial="hidden"
             animate="show"
             exit="exit"
@@ -784,18 +810,35 @@ function ViewportModal({
             <motion.div
               variants={modalBackdropVariants}
               className="fixed inset-0 bg-[radial-gradient(ellipse_at_center,rgba(26,15,10,0.55)_0%,rgba(26,15,10,0.82)_100%)]"
-              onClick={onClose}
+              onClick={() => dismissible && onClose()}
               aria-hidden="true"
             />
 
             {/* Sheet: .neu-modal with the caramel rim (rim colour/offset animated inline) */}
             <motion.div
               variants={modalPanelVariants}
-              style={{ transformOrigin: '50% 100%' }}
-              className={`docs-modal-card neu-modal relative w-full ${maxWidth} px-7 sm:px-10 pt-9 pb-8 sm:pt-10 sm:pb-9 z-10 max-h-[92vh] overflow-y-auto`}
+              layout
+              transition={{ layout: { type: 'spring', stiffness: 260, damping: 30, mass: 0.9 } }}
+              // Radius in style so motion keeps the corners round while the panel resizes.
+              style={{ transformOrigin: '50% 100%', borderRadius: 20 }}
+              className={`neu-modal relative z-10 max-h-[92vh] overflow-y-auto ${compact ? 'w-fit max-w-full' : `w-full ${maxWidth}`}`}
               onClick={(e) => e.stopPropagation()}
             >
-              {children}
+              {compact && status ? (
+                <SubmissionStatus {...status} titleId={statusTitleId} onClose={onClose} fitWhileWorking className="px-7 sm:px-9 pt-9 pb-8" />
+              ) : (
+                <motion.div
+                  className={`docs-modal-card px-7 sm:px-10 pt-9 pb-8 sm:pt-10 sm:pb-9 ${leaving ? 'pointer-events-none' : ''}`}
+                  initial={false}
+                  animate={leaving ? { opacity: 0, scale: 0.97, filter: 'blur(6px)' } : { opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                  transition={{ duration: leaving ? 0.22 : 0.3, ease: EASE_OUT }}
+                  onAnimationComplete={() => {
+                    if (leaving) setCompact(true);
+                  }}
+                >
+                  {children}
+                </motion.div>
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -949,12 +992,14 @@ function DocumentsEmptyState({
   };
   const { title, text } = copy[kind];
   const searching = kind === 'no-folder-matches' || kind === 'no-file-matches';
+  // Waits for the portal's loading screen to lift, like the rest of the screen.
+  const { revealed } = useScreenReveal();
 
   return (
     <motion.div
       role="status"
       initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
       transition={{ duration: 0.5, ease: EASE_OUT }}
       className="col-span-full"
     >
@@ -967,7 +1012,7 @@ function DocumentsEmptyState({
           <motion.ol
             className="mx-auto mt-6 grid max-w-xl gap-3 text-left sm:grid-cols-3"
             initial="hidden"
-            animate="show"
+            animate={revealed ? 'show' : 'hidden'}
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.35 } } }}
           >
             {EMPTY_STEPS.map((step, i) => (
@@ -1023,6 +1068,8 @@ function DocumentsEmptyState({
 export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const [loadingDocs, setLoadingDocs] = useState<boolean>(true);
+  // The portal's loading screen stays up until the folders and files are here.
+  useScreenLoading(loadingDocs);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [currentSection, setCurrentSection] = useState<'shared' | 'owned' | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -1044,7 +1091,16 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const [newFileName, setNewFileName] = useState<string>('');
   const [newFileType, setNewFileType] = useState<DocumentItem['type']>('pdf');
   const [renameFolderName, setRenameFolderName] = useState<string>('');
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  // Creating, uploading, renaming and deleting morph the open dialog into the submission loader,
+  // then a check or an X (one dialog is open at a time, so they share one submission).
+  const docSubmission = useSubmission();
+  const isSubmitting = docSubmission.processing;
+  const [docCopy, setDocCopy] = useState<{ processing: SubmissionCopy; success: SubmissionCopy; failure: string }>({
+    processing: { title: 'Saving…' },
+    success: { title: 'Saved' },
+    failure: 'Something went wrong',
+  });
+  /** Form problems, and the last request error once the person goes back to the form. */
   const [modalError, setModalError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<{ id: string; message: string } | null>(null);
@@ -1150,30 +1206,59 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
 
   // ─── Server Action Handlers ──────────────────────────────────────────────────
 
+  const docStatus = {
+    phase: docSubmission.phase,
+    error: docSubmission.error,
+    onRetry: docSubmission.reset,
+    processing: docCopy.processing,
+    success: docCopy.success,
+    failure: { title: docCopy.failure },
+  };
+
+  /** Runs a dialog's request with the submission card; the form shows the error if they go back. */
+  const runDocTask = async (copy: typeof docCopy, task: () => Promise<SubmissionResult>) => {
+    setDocCopy(copy);
+    setModalError(null);
+    const result = await docSubmission.run(async () => {
+      try {
+        return await task();
+      } catch {
+        return { ok: false, error: `${copy.failure}. Please try again.` };
+      }
+    });
+    if (result && !result.ok) setModalError(result.error);
+    return result;
+  };
+
+  /** Closes a dialog (not while its request runs) and clears the finished submission. */
+  const closeDocDialog = (close: () => void) => {
+    if (isSubmitting) return;
+    close();
+    docSubmission.reset();
+  };
+
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = newFolderName.trim();
     if (!trimmed || isSubmitting) return;
 
-    setIsSubmitting(true);
-    setModalError(null);
-
-    try {
-      const res = await createDocumentFolderAction(trimmed);
-      if (!('folder' in res) || !res.folder) {
-        setModalError(('error' in res && res.error) || 'Failed to create case folder.');
-        return;
+    await runDocTask(
+      {
+        processing: { title: 'Creating your folder', message: `Adding “${trimmed}” to your documents.` },
+        success: { title: 'Folder created', message: `“${trimmed}” is ready for your documents.` },
+        failure: "We couldn't create the folder",
+      },
+      async () => {
+        const res = await createDocumentFolderAction(trimmed);
+        if (!('folder' in res) || !res.folder) {
+          return { ok: false, error: ('error' in res && res.error) || 'Failed to create case folder.' };
+        }
+        const created: FolderItem = res.folder;
+        setFolders((prev) => [created, ...prev]);
+        setNewFolderName('');
+        return { ok: true };
       }
-
-      const created: FolderItem = res.folder;
-      setFolders((prev) => [created, ...prev]);
-      setNewFolderName('');
-      setShowNewFolderModal(false);
-    } catch (err: any) {
-      setModalError(err?.message || 'Failed to create case folder.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    );
   };
 
   const handleLocalFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1204,99 +1289,91 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       return;
     }
 
-    setIsSubmitting(true);
-    setModalError(null);
-
     const currentFolderItem = folders.find((f) => f.id === currentFolderId);
     const targetFolderId =
       currentFolderItem && currentFolderItem.kind === 'owned' && currentFolderItem.id !== 'uploaded-records'
         ? currentFolderItem.id
         : null;
+    const displayName = newFileName.trim();
 
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('displayName', newFileName.trim());
-      if (targetFolderId) fd.append('folderId', targetFolderId);
+    await runDocTask(
+      {
+        processing: { title: 'Uploading your file', message: `Uploading “${displayName}” securely.` },
+        success: { title: 'File uploaded', message: `“${displayName}” is saved in your documents.` },
+        failure: "We couldn't upload the file",
+      },
+      async () => {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('displayName', displayName);
+        if (targetFolderId) fd.append('folderId', targetFolderId);
 
-      const res = await uploadDocumentFileAction(fd);
-      if (!('file' in res) || !res.file) {
-        setModalError(('error' in res && res.error) || 'Failed to upload document.');
-        return;
+        const res = await uploadDocumentFileAction(fd);
+        if (!('file' in res) || !res.file) {
+          return { ok: false, error: ('error' in res && res.error) || 'Failed to upload document.' };
+        }
+        const newFile: DocumentItem = res.file;
+        setFolders((prev) => {
+          const destId = targetFolderId ?? (currentFolderId || 'uploaded-records');
+          return prev.map((f) => (f.id === destId ? { ...f, files: [newFile, ...f.files] } : f));
+        });
+        selectedFileRef.current = null;
+        setNewFileName('');
+        return { ok: true };
       }
-      const newFile: DocumentItem = res.file;
-
-      setFolders((prev) => {
-        const destId = targetFolderId ?? (currentFolderId || 'uploaded-records');
-        return prev.map((f) => (f.id === destId ? { ...f, files: [newFile, ...f.files] } : f));
-      });
-
-      selectedFileRef.current = null;
-      setNewFileName('');
-      setShowUploadFileModal(false);
-    } catch (err: any) {
-      setModalError(err?.message || 'Failed to upload document.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    );
   };
 
   const handleRenameFolder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showRenameFolderModal || !renameFolderName.trim() || isSubmitting) return;
+    const folderId = showRenameFolderModal.id;
+    const name = renameFolderName.trim();
 
-    setIsSubmitting(true);
-    setModalError(null);
-
-    try {
-      const res = await renameDocumentFolderAction(showRenameFolderModal.id, renameFolderName.trim());
-      if ('error' in res && res.error) {
-        setModalError(res.error);
-        return;
+    await runDocTask(
+      {
+        processing: { title: 'Renaming the folder', message: `Saving the new name “${name}”.` },
+        success: { title: 'Folder renamed', message: `The folder is now called “${name}”.` },
+        failure: "We couldn't rename the folder",
+      },
+      async () => {
+        const res = await renameDocumentFolderAction(folderId, name);
+        if ('error' in res && res.error) return { ok: false, error: res.error };
+        setFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, name } : f)));
+        return { ok: true };
       }
-
-      setFolders((prev) =>
-        prev.map((f) => (f.id === showRenameFolderModal.id ? { ...f, name: renameFolderName.trim() } : f))
-      );
-      setShowRenameFolderModal(null);
-      setRenameFolderName('');
-    } catch (err: any) {
-      setModalError(err?.message || 'Failed to rename folder.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    );
   };
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget || isSubmitting) return;
+    const target = deleteTarget;
+    const what = target.type === 'file' ? 'file' : 'folder';
 
-    setIsSubmitting(true);
-    try {
-      if (deleteTarget.type === 'file') {
-        await deleteDocumentFileAction(deleteTarget.id);
-        setFolders((prev) =>
-          prev.map((f) => ({
-            ...f,
-            files: f.files.filter((file) => file.id !== deleteTarget.id),
-          }))
-        );
-        if (previewDocument?.id === deleteTarget.id) {
-          setPreviewDocument(null);
+    await runDocTask(
+      {
+        processing: { title: `Deleting the ${what}`, message: `Removing “${target.name}”.` },
+        success: { title: target.type === 'file' ? 'File deleted' : 'Folder deleted', message: `“${target.name}” was removed from your documents.` },
+        failure: `We couldn't delete the ${what}`,
+      },
+      async () => {
+        if (target.type === 'file') {
+          const res = await deleteDocumentFileAction(target.id);
+          if (!res.success) return { ok: false, error: res.error || 'Failed to delete the document.' };
+          setFolders((prev) => prev.map((f) => ({ ...f, files: f.files.filter((file) => file.id !== target.id) })));
+          if (previewDocument?.id === target.id) setPreviewDocument(null);
+        } else {
+          const res = await deleteDocumentFolderAction(target.id);
+          if (!res.success) return { ok: false, error: res.error || 'Failed to delete folder.' };
+          setFolders((prev) => prev.filter((f) => f.id !== target.id));
+          if (currentFolderId === target.id) {
+            setNavDirection('back');
+            setCurrentFolderId(null);
+          }
         }
-      } else {
-        await deleteDocumentFolderAction(deleteTarget.id);
-        setFolders((prev) => prev.filter((f) => f.id !== deleteTarget.id));
-        if (currentFolderId === deleteTarget.id) {
-          setNavDirection('back');
-          setCurrentFolderId(null);
-        }
+        return { ok: true };
       }
-      setDeleteTarget(null);
-    } catch (err) {
-      console.error('Delete failed:', err);
-    } finally {
-      setIsSubmitting(false);
-    }
+    );
   };
 
   // Downloads the real file: a short-lived signed link served as an attachment. Only the owner
@@ -1752,7 +1829,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                           <p className="font-lora text-[15px] font-medium text-[#34150F] truncate">{file.name}</p>
                           <p className="font-inter text-xs text-[#8C7A6A] mt-0.5">{file.size} • {file.updatedAt}</p>
                           {downloadError?.id === file.id && !previewDocument && (
-                            <p role="alert" className="font-inter text-xs text-red-700 mt-0.5">{downloadError.message}</p>
+                            <p role="alert" className="font-inter text-xs text-[#B42318] mt-0.5">{downloadError.message}</p>
                           )}
                         </div>
                       </div>
@@ -1774,7 +1851,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                             e.stopPropagation();
                             setDeleteTarget({ type: 'file', id: file.id, name: file.name });
                           }}
-                          className="font-inter text-xs text-red-600 hover:text-red-700 hover:underline p-1 transition-colors duration-200"
+                          className="font-inter text-xs text-[#B42318] hover:text-[#7A1A12] hover:underline p-1 transition-colors duration-200"
                         >
                           Delete
                         </button>
@@ -1813,8 +1890,9 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       {/* ─── MODAL 1: Create New Case Folder ─────────────────────────────────── */}
       <ViewportModal
         isOpen={showNewFolderModal}
-        onClose={() => setShowNewFolderModal(false)}
+        onClose={() => closeDocDialog(() => setShowNewFolderModal(false))}
         ariaLabel="Create Case Folder"
+        status={showNewFolderModal ? docStatus : undefined}
       >
         {/* Close button */}
         <button
@@ -1844,8 +1922,10 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
         </div>
 
         {modalError && (
-          <div className="mb-5 px-3.5 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-inter">
-            {modalError}
+          <div className="mb-5">
+            <NeuAlert tone="error" onDismiss={() => setModalError(null)}>
+              {modalError}
+            </NeuAlert>
           </div>
         )}
 
@@ -1907,9 +1987,10 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       {/* ─── MODAL 2: Upload Legal Document ──────────────────────────────────── */}
       <ViewportModal
         isOpen={showUploadFileModal}
-        onClose={() => setShowUploadFileModal(false)}
+        onClose={() => closeDocDialog(() => setShowUploadFileModal(false))}
         maxWidth="max-w-[500px] sm:max-w-[540px]"
         ariaLabel="Upload Document"
+        status={showUploadFileModal ? docStatus : undefined}
       >
         <button
           type="button"
@@ -1930,8 +2011,10 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
         </div>
 
         {modalError && (
-          <div className="mb-5 px-3.5 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-inter">
-            {modalError}
+          <div className="mb-5">
+            <NeuAlert tone="error" onDismiss={() => setModalError(null)}>
+              {modalError}
+            </NeuAlert>
           </div>
         )}
 
@@ -2099,7 +2182,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                 {downloadingId === previewDocument.id ? 'DOWNLOADING…' : 'DOWNLOAD FILE'}
               </button>
               {downloadError?.id === previewDocument.id && (
-                <p role="alert" className="font-inter text-xs text-red-700 text-center">{downloadError.message}</p>
+                <p role="alert" className="font-inter text-xs text-[#B42318] text-center">{downloadError.message}</p>
               )}
 
               <div className="flex items-center gap-8">
@@ -2108,7 +2191,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                   onClick={() => {
                     setDeleteTarget({ type: 'file', id: previewDocument.id, name: previewDocument.name });
                   }}
-                  className="text-xs font-inter text-red-600 hover:text-red-700 hover:underline transition-colors duration-200 cursor-pointer"
+                  className="text-xs font-inter text-[#B42318] hover:text-[#7A1A12] hover:underline transition-colors duration-200 cursor-pointer"
                 >
                   Delete Document
                 </button>
@@ -2128,8 +2211,9 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       {/* ─── MODAL 4: Rename Folder Modal ───────────────────────────────────── */}
       <ViewportModal
         isOpen={Boolean(showRenameFolderModal)}
-        onClose={() => setShowRenameFolderModal(null)}
+        onClose={() => closeDocDialog(() => setShowRenameFolderModal(null))}
         ariaLabel="Rename Folder"
+        status={showRenameFolderModal ? docStatus : undefined}
       >
         <button
           type="button"
@@ -2155,8 +2239,10 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
         </div>
 
         {modalError && (
-          <div className="mb-5 px-3.5 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-inter">
-            {modalError}
+          <div className="mb-5">
+            <NeuAlert tone="error" onDismiss={() => setModalError(null)}>
+              {modalError}
+            </NeuAlert>
           </div>
         )}
 
@@ -2197,9 +2283,10 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
       {/* ─── MODAL 5: Delete Confirmation Modal ─────────────────────────────── */}
       <ViewportModal
         isOpen={Boolean(deleteTarget)}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => closeDocDialog(() => setDeleteTarget(null))}
         maxWidth="max-w-[440px] sm:max-w-[460px]"
         ariaLabel="Confirm Deletion"
+        status={deleteTarget ? docStatus : undefined}
       >
         {deleteTarget && (
           <>

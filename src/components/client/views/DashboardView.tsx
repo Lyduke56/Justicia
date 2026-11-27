@@ -8,7 +8,7 @@ import { LawyerGridSection } from '@/components/client/LawyerGridSection';
 import type { LawyerItem } from '@/components/client/LawyerCard';
 import type { PublicLawyerProfile } from '@/components/client/LawyerGrid';
 import { fetchDirectoryLawyers } from '@/components/client/lawyerDirectory';
-import { useViewActive } from '@/components/live/LiveProvider';
+import { useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 
 /** A Find a Lawyer entry as a dashboard card (same name, roll, chapter and practice areas). */
 function toLawyerItem(l: PublicLawyerProfile): LawyerItem {
@@ -85,19 +85,14 @@ interface DashboardViewProps {
 export function DashboardView({ firstName }: DashboardViewProps) {
   // Recommended Lawyers = the Find a Lawyer directory (null until it has loaded).
   const [lawyers, setLawyers] = useState<LawyerItem[] | null>(null);
+  // The portal's loading screen stays up until the recommended lawyers are here.
+  useScreenLoading(lawyers === null);
   // If the user has "reduce motion" turned on in their device, skip the animation.
   const reduceMotion = useReducedMotion();
 
-  // The portal keeps tabs mounted (and preloads them hidden). Each time this tab becomes visible,
-  // bump a key that remounts the animated layout so the entrance plays again. (State adjusted
-  // during render, React's pattern for reacting to a changed value without an effect.)
-  const isViewActive = useViewActive();
-  const [wasViewActive, setWasViewActive] = useState(isViewActive);
-  const [entranceKey, setEntranceKey] = useState(0);
-  if (isViewActive !== wasViewActive) {
-    setWasViewActive(isViewActive);
-    if (isViewActive) setEntranceKey((k) => k + 1);
-  }
+  // The entrance plays when the portal's loading screen lifts (not underneath it), and again on
+  // every visit: the reveal key remounts the animated layout.
+  const { revealed, revealKey: entranceKey } = useScreenReveal();
 
   // Load the directory, and refresh it each time the dashboard is shown again so newly
   // approved (or hidden) lawyers match Find a Lawyer.
@@ -116,7 +111,7 @@ export function DashboardView({ firstName }: DashboardViewProps) {
       key={entranceKey}
       variants={page}
       initial={reduceMotion ? false : 'hidden'}
-      animate="show"
+      animate={revealed ? 'show' : 'hidden'}
       className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-12 max-w-[1300px] mx-auto space-y-7 sm:space-y-8 bg-[#E5D8CB]"
     >
       {/* ─── Top Split Section: Greeting + Search Input & Calendar Card ─────── */}

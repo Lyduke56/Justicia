@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { EmptyMedallion } from '@/components/shared/neu/EmptyMedallion';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { useViewActive } from '@/components/live/LiveProvider';
+import { useScreenReveal } from '@/components/shared/loading/ScreenReadiness';
 import { EASE_OUT, RISE } from '@/components/lawyer/motion';
 
 /**
@@ -25,24 +25,20 @@ export const ROW_HEIGHT = 60;
 export const ROWS_AT_ENTRANCE = 0.56;
 const ROW_STAGGER = 0.04;
 
-/** Bumps a key each time the kept-alive tab is shown, and reports when the entrance is over. */
+/**
+ * The screen entrance: it plays when the portal's loading screen lifts (not underneath it) and
+ * again on every visit (`entranceKey` changes on each reveal). Reports when the entrance is over.
+ */
 export function useEntrance(settleMs = 1300) {
-  const viewActive = useViewActive();
-  const [wasActive, setWasActive] = useState(viewActive);
-  const [entranceKey, setEntranceKey] = useState(0);
-  const [settled, setSettled] = useState(false);
-  if (viewActive !== wasActive) {
-    setWasActive(viewActive);
-    if (viewActive) {
-      setEntranceKey((k) => k + 1);
-      setSettled(false);
-    }
-  }
+  const { revealed, revealKey: entranceKey } = useScreenReveal();
+  const [settledFor, setSettledFor] = useState<number | null>(null);
+  const settled = revealed && settledFor === entranceKey;
   useEffect(() => {
-    const timer = window.setTimeout(() => setSettled(true), settleMs);
+    if (!revealed) return;
+    const timer = window.setTimeout(() => setSettledFor(entranceKey), settleMs);
     return () => window.clearTimeout(timer);
-  }, [entranceKey, settleMs]);
-  return { entranceKey, settled, rowsAt: settled ? 0 : ROWS_AT_ENTRANCE };
+  }, [revealed, entranceKey, settleMs]);
+  return { entranceKey, revealed, settled, rowsAt: settled ? 0 : ROWS_AT_ENTRANCE };
 }
 
 /** Pages a list: the visible slice and the first row's index, clamped when the list shrinks. */

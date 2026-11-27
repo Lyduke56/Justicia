@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { KeepAliveViews } from '@/components/live/KeepAliveViews';
+import { KeepAliveViews, ROUTE_SLOT } from '@/components/live/KeepAliveViews';
 import { useLiveRefresh } from '@/components/live/LiveProvider';
 import { fetchLive, type LiveResources } from '@/lib/live/fetchLive';
 import { useRouter, usePathname } from 'next/navigation';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import { useMyAvatarSync } from '@/components/account/avatarStore';
-import { ScreenTransitionOverlay, useScreenTransition } from '@/components/shared/loading';
+import { ScreenTransitionOverlay, useScreenGate } from '@/components/shared/loading';
 import {
   AIAssistantIcon,
   FindLawyerIcon,
@@ -82,6 +82,9 @@ function pathnameToView(pathname: string): ViewKey {
   return 'other';
 }
 
+/** Tabs kept mounted once opened (see keepAliveViews below). */
+const KEEP_ALIVE_KEYS: ViewKey[] = ['dashboard', 'consultations', 'messages', 'cases'];
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export function ClientShell({ user, children }: ClientShellProps) {
   useInactivityLogout();
@@ -92,10 +95,12 @@ export function ClientShell({ user, children }: ClientShellProps) {
 
   // Initialise view from current URL so hard-refresh works correctly
   const [activeView, setActiveView] = useState<ViewKey>(() => pathnameToView(pathname));
+  // The loading screen covers the content area until the screen has everything it needs; the
+  // screen's entrance plays once it lifts. Kept-alive tabs and the route page are its slots.
+  const activeSlot = KEEP_ALIVE_KEYS.includes(activeView) ? activeView : ROUTE_SLOT;
+  const { covered: screenLoading, start: startScreenTransition, store: screenStore, revealFor } = useScreenGate(pathname, activeSlot);
   const [mobileMenuOpen,    setMobileMenuOpen]    = useState(false);
   const [liveNotifs, setLiveNotifs] = useState<LiveResources['notifications']>([]);
-  // Global loading screen over the content area while the shell switches screens.
-  const { loading: screenLoading, start: startScreenTransition } = useScreenTransition(pathname);
 
   const loadNotifications = useCallback(
     () =>
@@ -259,6 +264,7 @@ export function ClientShell({ user, children }: ClientShellProps) {
               fallback={renderRouteView()}
               fallbackKey={`${activeView}:${pathname}`}
               scrollContainerId="client-main-content"
+              gate={{ store: screenStore, revealFor }}
             />
           </main>
           <ScreenTransitionOverlay show={screenLoading} />

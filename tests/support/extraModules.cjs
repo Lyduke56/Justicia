@@ -43,6 +43,9 @@ function extraModule(name) {
       return loadReal('src/lib/security/fileType.ts');
     case '@/lib/account/profileExtras':
       return loadReal('src/lib/account/profileExtras.ts');
+    case '@/lib/lawyer/dashboardSchedule':
+      // Pure date helpers (consultation start / end, "soonest first" ordering).
+      return loadReal('src/lib/lawyer/dashboardSchedule.ts');
     case '@/lib/legal':
       return loadReal('src/lib/legal.ts');
     case '@/lib/auth/roles':

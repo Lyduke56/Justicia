@@ -64,34 +64,41 @@ export function AppointmentList({ dateKey, dateLabel, items, currentId, emptyTex
           </svg>
         </motion.div>
         <div className="min-w-0 flex-1">
-          <h3 className="font-lora text-base font-bold leading-tight text-[#341512] sm:text-[17px]">List of Appointments</h3>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.p
-              key={dateKey}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.18 }}
-              className="truncate font-inter text-[11px] text-[#5C4535]"
-            >
-              {dateLabel}
-            </motion.p>
-          </AnimatePresence>
+          {/* One line only, so the header never grows while the date or count swaps. */}
+          <h3 className="truncate font-lora text-base font-bold leading-tight text-[#341512] sm:text-[17px]">List of Appointments</h3>
+          <div className="relative h-4">
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.p
+                key={dateKey}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.18 }}
+                className="truncate font-inter text-[11px] leading-4 text-[#5C4535]"
+              >
+                {dateLabel}
+              </motion.p>
+            </AnimatePresence>
+          </div>
         </div>
-        <AnimatePresence>
-          {items.length > 0 && (
-            <motion.span
-              key={`count-${dateKey}-${items.length}`}
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.5, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 520, damping: 20 }}
-              className="neu-inset-banner flex h-6 min-w-7 shrink-0 items-center justify-center rounded-full px-2.5 font-inter text-[11px] font-bold text-[#5C4535]"
-            >
-              {items.length}
-            </motion.span>
-          )}
-        </AnimatePresence>
+        {/* Fixed slot for the count: the outgoing and incoming pills overlap here instead of
+            sitting side by side and squeezing the title onto two lines. */}
+        <span className="relative flex h-6 min-w-7 shrink-0 items-center justify-end">
+          <AnimatePresence mode="popLayout">
+            {items.length > 0 && (
+              <motion.span
+                key={`count-${dateKey}-${items.length}`}
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.5, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 520, damping: 20 }}
+                className="neu-inset-banner flex h-6 min-w-7 shrink-0 items-center justify-center rounded-full px-2.5 font-inter text-[11px] font-bold text-[#5C4535]"
+              >
+                {items.length}
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </span>
       </div>
 
       <AnimatePresence mode="wait" initial={false}>

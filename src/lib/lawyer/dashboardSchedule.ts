@@ -80,6 +80,18 @@ type Schedulable = Pick<
   'status' | 'year' | 'month' | 'day' | 'scheduledStart' | 'timeRange' | 'timeTag'
 >;
 
+/** Enough to place a session in time (lawyer or client consultation). */
+export interface Timed {
+  year: number;
+  /** 0-based */
+  month: number;
+  day: number;
+  scheduledStart: string | null;
+  /** e.g. "10:30 AM - 11:30 AM" */
+  timeRange?: string | null;
+  timeTag?: string | null;
+}
+
 // ─── Calendar dates ──────────────────────────────────────────────────────────
 
 export function toIsoDate(year: number, month: number, day: number): string {
@@ -153,13 +165,40 @@ export function startMinutes(label: string | null | undefined): number | null {
 }
 
 /** Epoch ms of a consultation's start (falls back to the slot label, then Manila midnight). */
-export function startMsOf(c: Schedulable): number {
+export function startMsOf(c: Timed): number {
   if (c.scheduledStart) {
     const ms = Date.parse(c.scheduledStart);
     if (!Number.isNaN(ms)) return ms;
   }
   const minutes = startMinutes(c.timeRange) ?? startMinutes(c.timeTag) ?? 0;
   return Date.UTC(c.year, c.month, c.day) + minutes * 60_000 - MANILA_OFFSET_MS;
+}
+
+/** Length of a "h:mm AM - h:mm PM" range in minutes, or null when it can't be read. */
+function rangeMinutes(label: string | null | undefined): number | null {
+  const times = [...(label ?? '').matchAll(/(\d{1,2}):(\d{2})\s*([AP]M)/gi)];
+  if (times.length < 2) return null;
+  const toMinutes = (m: RegExpMatchArray) => (Number(m[1]) % 12 + (m[3].toUpperCase() === 'PM' ? 12 : 0)) * 60 + Number(m[2]);
+  const length = toMinutes(times[1]) - toMinutes(times[0]);
+  return length > 0 ? length : length + 24 * 60;
+}
+
+/** Epoch ms of a consultation's end: its start plus the booked length (an hour if unknown). */
+export function endMsOf(c: Timed): number {
+  const minutes = rangeMinutes(c.timeRange) ?? rangeMinutes(c.timeTag) ?? 60;
+  return startMsOf(c) + minutes * 60_000;
+}
+
+/**
+ * "Soonest first": sessions that are still ahead or in progress and still live (`isLive`),
+ * earliest start first, then everything else (finished, closed, cancelled), most recent first.
+ * So the consultation shown first is always the next one to happen.
+ */
+export function orderSoonestFirst<T extends Timed>(items: readonly T[], isLive: (c: T) => boolean, now: number = Date.now()): T[] {
+  return items
+    .map((c) => ({ c, start: startMsOf(c), ahead: isLive(c) && endMsOf(c) > now }))
+    .sort((a, b) => (a.ahead === b.ahead ? (a.ahead ? a.start - b.start : b.start - a.start) : a.ahead ? -1 : 1))
+    .map(({ c }) => c);
 }
 
 // ─── Filtering ───────────────────────────────────────────────────────────────

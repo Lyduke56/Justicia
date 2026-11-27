@@ -13,6 +13,7 @@ import { writeAuditLog } from '@/lib/notifications';
 import { checkRateLimit } from '@/lib/security/rateLimit';
 import { FILE_CONTENT_MISMATCH, fileMatchesExtension } from '@/lib/security/fileType';
 import { contactPreferenceLine } from '@/lib/account/profileExtras';
+import { orderSoonestFirst } from '@/lib/lawyer/dashboardSchedule';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -1349,9 +1350,17 @@ export async function bookConsultationAction(input: BookConsultationInput): Prom
   }
 }
 
+/** Client bookings that are still going ahead (they sort by date ahead of finished ones). */
+const CLIENT_LIVE_STATUSES = new Set<ClientConsultationStatusLabel>([
+  'PENDING CONFIRMATION',
+  'PENDING PAYMENT',
+  'PAYMENT UNDER REVIEW',
+  'CONFIRMED APPOINTMENT',
+]);
+
 /**
  * Fetches the signed-in client's consultations (excluding cancelled ones),
- * upcoming first.
+ * soonest first.
  */
 export async function getClientConsultationsAction(): Promise<ClientConsultation[]> {
   try {
@@ -1373,15 +1382,13 @@ export async function getClientConsultationsAction(): Promise<ClientConsultation
 
     // lawyer_id → lawyer_profiles.user_id is many-to-one, so PostgREST embeds a single object.
     const rows = (data ?? []) as unknown as Array<ConsultationRow & { lawyer_profiles: LawyerSummaryRow | null }>;
-    const now = Date.now();
-    const sortKey = (c: ClientConsultation) =>
-      c.scheduledStart ? new Date(c.scheduledStart).getTime() : Date.UTC(c.year, c.month, c.day);
 
     const platformFee = await getPlatformFee(db);
     const items = rows.map((row) => toClientConsultation(row, row.lawyer_profiles, platformFee));
-    const upcoming = items.filter((c) => sortKey(c) >= now).sort((a, b) => sortKey(a) - sortKey(b));
-    const past = items.filter((c) => sortKey(c) < now).sort((a, b) => sortKey(b) - sortKey(a));
-    return [...upcoming, ...past];
+    // Soonest first: active bookings that haven't ended yet (including one in progress or later
+    // today), earliest start first; then finished / declined ones, most recent first. The client
+    // Consultations screen opens on the first one.
+    return orderSoonestFirst(items, (c) => CLIENT_LIVE_STATUSES.has(c.status));
   } catch (err) {
     console.error('[getClientConsultationsAction] catch:', err);
     return [];

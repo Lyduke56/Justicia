@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type SetStateAction } from 'react';
 import { getLawyerReviewsAction, type SerializedReview } from '@/app/actions/reviewActions';
+import { useScreenLoading } from '@/components/shared/loading/ScreenReadiness';
 
 type ReviewState = { lawyerId?: string; reviews: SerializedReview[]; error: string };
 
@@ -19,6 +20,8 @@ export function useLawyerReviews(lawyerId?: string) {
     return () => { active = false; };
   }, [lawyerId]);
   const current = state?.lawyerId === lawyerId ? state : null;
+  // The screen's loading screen waits for the reviews (ratings show in banners and cards).
+  useScreenLoading(!current);
   const setReviews = (update: SetStateAction<SerializedReview[]>) => setState(previous => {
     if (!previous || previous.lawyerId !== lawyerId) return previous;
     return { ...previous, reviews: typeof update === 'function' ? update(previous.reviews) : update };

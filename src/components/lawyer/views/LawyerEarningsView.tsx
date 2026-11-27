@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import type { LawyerEarningsData } from '@/app/actions/consultationActions';
 import { fetchLive } from '@/lib/live/fetchLive';
-import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
+import { useLiveRefresh } from '@/components/live/LiveProvider';
+import { useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 import { NeuAlert, NeuButton } from '@/components/shared/neu';
 import { DRAW, EMBOSS, GROUP, PAGE, RISE } from '../motion';
 import {
@@ -92,20 +93,15 @@ function ChangeChip({ pct, previousMonth }: { pct: number | null; previousMonth:
 export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
-  const viewActive = useViewActive();
 
-  // The portal keeps tabs mounted (and preloads them hidden). Each time this tab becomes visible,
-  // bump a key that remounts the animated layout so the entrance plays again; the data and the
-  // chosen month live in this component and are kept. (State adjusted during render.)
-  const [wasActive, setWasActive] = useState(viewActive);
-  const [entranceKey, setEntranceKey] = useState(0);
-  if (viewActive !== wasActive) {
-    setWasActive(viewActive);
-    if (viewActive) setEntranceKey((k) => k + 1);
-  }
+  // The entrance plays when the portal's loading screen lifts (not underneath it), and again on
+  // every visit: the reveal key remounts the animated layout; data and choices live above it.
+  const { revealed, revealKey: entranceKey } = useScreenReveal();
 
   const [data, setData] = useState<LawyerEarningsData | null>(() => (isDemo ? buildSampleEarnings() : null));
   const [error, setError] = useState<string | null>(null);
+  // The portal's loading screen stays up until the figures are here (or failed to load).
+  useScreenLoading(!data && !error);
   /** Month picked by the lawyer; until then the current month. */
   const [picked, setPicked] = useState<number | null>(null);
   const [metric, setMetric] = useState<ChartMetric>('earnings');
@@ -153,7 +149,7 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
         key={entranceKey}
         variants={PAGE}
         initial={reduceMotion ? false : 'hidden'}
-        animate="show"
+        animate={revealed ? 'show' : 'hidden'}
         className="lawyer-dash mx-auto flex max-w-[1196px] flex-col gap-8 px-4 pb-14 pt-6 sm:px-8 sm:pt-10 lg:px-12 lg:pt-12"
       >
         {/* ── KPI cards (the chosen month) ──────────────────────────────────── */}
@@ -211,6 +207,7 @@ export function LawyerEarningsView({ isDemo }: { isDemo: boolean }) {
           />
         </motion.section>
 
+        {/* Same divider and spacing as the lawyer Dashboard (the page's 32px gap on each side). */}
         <motion.div variants={DRAW} className="lawyer-dash-groove mx-auto w-[78%]" aria-hidden />
 
         {/* ── Overview ──────────────────────────────────────────────────────── */}

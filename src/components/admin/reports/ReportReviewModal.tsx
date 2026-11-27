@@ -5,7 +5,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { getAdminReportEvidenceAction, moderateReportAction, type ModerationDecisionInput } from '@/app/actions/reportActions';
 import { DEFAULT_SUSPENSION_DAYS, MAX_SUSPENSIONS, SUSPENSION_DAY_OPTIONS } from '@/lib/moderation/constants';
 import type { AdminReportEvidence, AdminReportItem } from '@/types/admin';
-import { NeuAlert, NeuButton, NeuModal, Spinner } from '@/components/shared/neu';
+import { NeuAlert, NeuButton, Spinner } from '@/components/shared/neu';
+import { SubmitModal, useSubmission } from '@/components/shared/feedback';
 import { stamp } from '../overview/activity';
 import { CAPS } from '../table/kit';
 import { ACCOUNT_STATUS, ACTION_LABEL, REPORT_STATUS, isOpenReport, ordinal } from './model';
@@ -14,7 +15,8 @@ import { OffenseMeter } from './OffenseMeter';
 /**
  * Review a report in the shared neumorphic modal: the reported account and its offense record,
  * the report itself, the proof (files and the captured conversation) and, while it is open, the
- * decision. The decision is confirmed inside the dialog before it is saved.
+ * decision. The decision is confirmed inside the dialog before it is saved; saving morphs the
+ * dialog into the submission loader, which then writes a check or an X.
  */
 
 const NOTES_MIN = 10;
@@ -59,8 +61,10 @@ export function ReportReviewModal({
   const [days, setDays] = useState<number>(DEFAULT_SUSPENSION_DAYS);
   const [notes, setNotes] = useState('');
   const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const submission = useSubmission();
+  const busy = submission.processing;
+  /** What the saved decision did (shown on the result card). */
+  const [outcome, setOutcome] = useState('');
 
   const open = isOpenReport(report);
   const target = report.target;
@@ -94,34 +98,29 @@ export function ReportReviewModal({
         ? `${target.name}'s account will be permanently terminated. They are signed out, blocked from signing in, and their active consultations are cancelled.`
         : `${target.name} will be suspended for ${days} days (suspension ${target.suspensionCount + 1} of ${MAX_SUSPENSIONS}). They are signed out, and consultations during the suspension are cancelled.`;
 
-  const submit = async () => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const res = await moderateReportAction(report.id, decision, { days, notes });
-      if (!('success' in res) || !res.success) {
-        setMessage({ tone: 'error', text: ('error' in res && res.error) || 'The decision could not be saved.' });
-        return;
-      }
-      setConfirming(false);
-      setMessage({
-        tone: 'success',
-        text:
+  const submit = () =>
+    void submission.run(async () => {
+      try {
+        const res = await moderateReportAction(report.id, decision, { days, notes });
+        if (!('success' in res) || !res.success) {
+          return { ok: false, error: ('error' in res && res.error) || 'The decision could not be saved.' };
+        }
+        setConfirming(false);
+        setOutcome(
           res.outcome === 'dismissed'
             ? 'Report dismissed. The reporter was notified.'
             : res.outcome === 'suspended'
               ? `Account suspended until ${res.suspendedUntil ? stamp(res.suspendedUntil, Date.now()).full : 'the selected date'}. Both parties were notified.`
               : res.escalated
                 ? `Suspension limit reached, so the account was terminated. Other open reports about ${target.name} were closed.`
-                : `Account terminated. Other open reports about ${target.name} were closed.`,
-      });
-      await onDecided(res.report);
-    } catch {
-      setMessage({ tone: 'error', text: 'The decision could not be saved. Please try again.' });
-    } finally {
-      setBusy(false);
-    }
-  };
+                : `Account terminated. Other open reports about ${target.name} were closed.`
+        );
+        await onDecided(res.report);
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'The decision could not be saved. Please try again.' };
+      }
+    });
 
   const confirmLabel = decision === 'dismiss' ? 'Dismiss report' : terminating ? 'Terminate account' : `Suspend for ${days} days`;
   const steps = [
@@ -130,9 +129,15 @@ export function ReportReviewModal({
   ];
 
   return (
-    <NeuModal
+    <SubmitModal
+      submission={submission}
       onClose={onClose}
-      dismissible={!busy}
+      processing={{
+        title: decision === 'dismiss' ? 'Dismissing the report' : terminating ? 'Terminating the account' : 'Suspending the account',
+        message: `Saving your decision about ${target.name}.`,
+      }}
+      success={{ title: 'Decision saved', message: outcome }}
+      failure={{ title: 'The decision was not saved' }}
       size="2xl"
       title={`Report about ${target.name}`}
       subtitle={
@@ -155,8 +160,8 @@ export function ReportReviewModal({
             <NeuButton onClick={() => setConfirming(false)} disabled={busy}>
               Back
             </NeuButton>
-            <NeuButton variant={decision === 'dismiss' ? 'primary' : terminating ? 'danger' : 'dark'} loading={busy} onClick={submit}>
-              {busy ? 'Saving…' : `Yes, ${confirmLabel.charAt(0).toLowerCase()}${confirmLabel.slice(1)}`}
+            <NeuButton variant={decision === 'dismiss' ? 'primary' : terminating ? 'danger' : 'dark'} disabled={busy} onClick={submit}>
+              {`Yes, ${confirmLabel.charAt(0).toLowerCase()}${confirmLabel.slice(1)}`}
             </NeuButton>
           </>
         ) : (
@@ -424,11 +429,6 @@ export function ReportReviewModal({
         )
       )}
 
-      {message && (
-        <NeuAlert tone={message.tone} onDismiss={() => setMessage(null)}>
-          {message.text}
-        </NeuAlert>
-      )}
-    </NeuModal>
+    </SubmitModal>
   );
 }

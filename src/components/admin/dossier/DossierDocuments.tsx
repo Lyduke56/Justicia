@@ -11,6 +11,8 @@ import {
 import { VERIFICATION_DOCUMENTS, type DocumentReviewStatus } from '@/lib/lawyer/verification';
 import { RISE } from '@/components/lawyer/motion';
 import { CAPS } from '../verification/ApplicationDossier';
+import { SubmissionOverlay, useSubmission } from '@/components/shared/feedback';
+import { useScreenLoading } from '@/components/shared/loading';
 
 /**
  * The lawyer's proof documents inside the admin dossier: one cell per checklist item with the
@@ -60,6 +62,11 @@ export function DossierDocuments({ lawyerId, applicationStatus }: { lawyerId: st
   });
   const [rowError, setRowError] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  // The dossier's loading screen waits for the documents.
+  useScreenLoading(state.phase === 'loading');
+  // Accepting or rejecting a document shows the submission card: loader, then check / X.
+  const submission = useSubmission();
+  const [verdict, setVerdict] = useState<{ decision: 'accepted' | 'rejected'; label: string }>({ decision: 'accepted', label: 'Document' });
   const [rejecting, setRejecting] = useState<{ id: string; note: string } | null>(null);
 
   const fetchDocs = useCallback(async () => {
@@ -115,19 +122,20 @@ export function DossierDocuments({ lawyerId, applicationStatus }: { lawyerId: st
   const review = async (doc: VerificationDocumentView, decision: 'accepted' | 'rejected', note?: string) => {
     setBusy(doc.id);
     setRowError((e) => ({ ...e, [doc.id]: '' }));
-    try {
-      const res = await reviewVerificationDocumentAction(doc.id, decision, note);
-      if (!res.success) {
-        setRowError((e) => ({ ...e, [doc.id]: res.error }));
-        return;
+    setVerdict({ decision, label: VERIFICATION_DOCUMENTS.find((d) => d.type === doc.docType)?.label ?? 'Document' });
+    const result = await submission.run(async () => {
+      try {
+        const res = await reviewVerificationDocumentAction(doc.id, decision, note);
+        if (!res.success) return { ok: false, error: res.error };
+        setRejecting(null);
+        setState((s) => ({ ...s, docs: s.docs.map((d) => (d.id === doc.id ? res.document : d)) }));
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'The review could not be saved.' };
       }
-      setRejecting(null);
-      setState((s) => ({ ...s, docs: s.docs.map((d) => (d.id === doc.id ? res.document : d)) }));
-    } catch {
-      setRowError((e) => ({ ...e, [doc.id]: 'The review could not be saved.' }));
-    } finally {
-      setBusy(null);
-    }
+    });
+    if (result && !result.ok) setRowError((e) => ({ ...e, [doc.id]: result.error }));
+    setBusy(null);
   };
 
   if (state.phase === 'loading') {
@@ -248,6 +256,17 @@ export function DossierDocuments({ lawyerId, applicationStatus }: { lawyerId: st
           </motion.div>
         );
       })}
+
+      <SubmissionOverlay
+        submission={submission}
+        processing={{ title: verdict.decision === 'accepted' ? 'Accepting the document' : 'Rejecting the document', message: verdict.label }}
+        success={
+          verdict.decision === 'accepted'
+            ? { title: 'Document accepted', message: `${verdict.label} is marked as verified.` }
+            : { title: 'Document rejected', message: 'The applicant will be asked to upload a new file.' }
+        }
+        failure={{ title: 'The review was not saved' }}
+      />
     </div>
   );
 }

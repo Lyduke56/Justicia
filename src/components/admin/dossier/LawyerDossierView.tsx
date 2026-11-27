@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
@@ -15,6 +15,8 @@ import { TONE_COLOR, describeActivity, stamp, timeAgo, waitedFor, type ActivityE
 import { ActivityIcon } from '../overview/OverviewIcons';
 import { CAPS, DECISION_GLYPH } from '../verification/ApplicationDossier';
 import { ReviewDecisionModal, type DossierDecision } from '../verification/ReviewDecisionModal';
+import { useScreenReveal } from '@/components/shared/loading';
+import type { SubmissionResult } from '@/components/shared/feedback';
 import { peso, type LawyerQueueItem } from '../verification/model';
 import { DOSSIER_BACK, type DossierOrigin } from './origin';
 
@@ -167,6 +169,8 @@ export function LawyerDossierView({ lawyer, activity, from = 'directory' }: { la
   const back = DOSSIER_BACK[from] ?? DOSSIER_BACK.directory;
   const router = useRouter();
   const reduceMotion = useReducedMotion();
+  // The entrance plays when the portal's loading screen lifts (not underneath it).
+  const { revealed } = useScreenReveal();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -174,8 +178,6 @@ export function LawyerDossierView({ lawyer, activity, from = 'directory' }: { la
   }, []);
 
   const [decision, setDecision] = useState<DossierDecision | null>(null);
-  const [decisionError, setDecisionError] = useState<string | null>(null);
-  const [submitting, startSubmit] = useTransition();
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
     if (!notice) return;
@@ -231,18 +233,15 @@ export function LawyerDossierView({ lawyer, activity, from = 'directory' }: { la
   const reviewDecisions = allowedReviewDecisions(lawyer.status);
   const postApproval = allowedPostApprovalActions(lawyer.status);
 
-  const confirmDecision = (text: string, exception?: string) => {
-    if (!decision) return;
-    setDecisionError(null);
-    startSubmit(async () => {
+  /** Saves the decision; the dialog shows the loader, then the check or the X. */
+  const confirmDecision = async (text: string, exception?: string): Promise<SubmissionResult> => {
+    if (!decision) return { ok: false, error: 'Choose a decision first.' };
+    try {
       const res =
         decision === 'revoke' || decision === 'reverify'
           ? await postApprovalLawyerAction(lawyer.userId, decision, text)
           : await reviewLawyerApplicationAction(lawyer.userId, decision, text, { exceptionReason: exception });
-      if (res.error) {
-        setDecisionError(res.error);
-        return;
-      }
+      if (res.error) return { ok: false, error: res.error };
       setNotice(
         res.message ||
           (decision === 'approved'
@@ -251,10 +250,17 @@ export function LawyerDossierView({ lawyer, activity, from = 'directory' }: { la
               ? `${lawyer.fullName}'s application was rejected.`
               : `Your request for more information was sent to ${lawyer.fullName}.`)
       );
-      setDecision(null);
-      refreshAdminTabs();
-      router.refresh();
-    });
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'The decision could not be saved. Please try again.' };
+    }
+  };
+
+  /** "Done" on the result card: close it and refresh everything that shows this lawyer. */
+  const finishDecision = () => {
+    setDecision(null);
+    refreshAdminTabs();
+    router.refresh();
   };
 
   return (
@@ -262,7 +268,7 @@ export function LawyerDossierView({ lawyer, activity, from = 'directory' }: { la
       <motion.div
         variants={PAGE}
         initial={reduceMotion ? false : 'hidden'}
-        animate="show"
+        animate={revealed ? 'show' : 'hidden'}
         className="lawyer-page admin-dossier mx-auto flex max-w-[1196px] flex-col gap-8 px-4 pb-14 pt-6 sm:px-8 sm:pt-10 lg:px-12 lg:pt-12"
       >
         {/* ── Back to the screen the dossier was opened from ──────────────────── */}
@@ -440,27 +446,27 @@ export function LawyerDossierView({ lawyer, activity, from = 'directory' }: { la
               {(reviewDecisions.length > 0 || postApproval.length > 0) && (
                 <motion.div variants={RISE} className="flex flex-wrap gap-2.5 [&>*]:min-w-[170px] [&>*]:flex-1">
                   {reviewDecisions.includes('approved') && (
-                    <DecisionButton tone="primary" disabled={submitting} glyph={DECISION_GLYPH.approved} onClick={() => setDecision('approved')}>
+                    <DecisionButton tone="primary" glyph={DECISION_GLYPH.approved} onClick={() => setDecision('approved')}>
                       Approve lawyer
                     </DecisionButton>
                   )}
                   {reviewDecisions.includes('needs_resubmission') && (
-                    <DecisionButton tone="plain" disabled={submitting} glyph={DECISION_GLYPH.needs_resubmission} onClick={() => setDecision('needs_resubmission')}>
+                    <DecisionButton tone="plain" glyph={DECISION_GLYPH.needs_resubmission} onClick={() => setDecision('needs_resubmission')}>
                       Request information
                     </DecisionButton>
                   )}
                   {reviewDecisions.includes('rejected') && (
-                    <DecisionButton tone="danger" disabled={submitting} glyph={DECISION_GLYPH.rejected} onClick={() => setDecision('rejected')}>
+                    <DecisionButton tone="danger" glyph={DECISION_GLYPH.rejected} onClick={() => setDecision('rejected')}>
                       Reject application
                     </DecisionButton>
                   )}
                   {postApproval.includes('reverify') && (
-                    <DecisionButton tone="plain" disabled={submitting} glyph={DECISION_GLYPH.reverify} onClick={() => setDecision('reverify')}>
+                    <DecisionButton tone="plain" glyph={DECISION_GLYPH.reverify} onClick={() => setDecision('reverify')}>
                       Request re-verification
                     </DecisionButton>
                   )}
                   {postApproval.includes('revoke') && (
-                    <DecisionButton tone="danger" disabled={submitting} glyph={DECISION_GLYPH.revoke} onClick={() => setDecision('revoke')}>
+                    <DecisionButton tone="danger" glyph={DECISION_GLYPH.revoke} onClick={() => setDecision('revoke')}>
                       Revoke verification
                     </DecisionButton>
                   )}
@@ -525,10 +531,9 @@ export function LawyerDossierView({ lawyer, activity, from = 'directory' }: { la
             key={decision}
             lawyer={asQueueItem}
             decision={decision}
-            submitting={submitting}
-            error={decisionError}
-            onCancel={() => !submitting && setDecision(null)}
+            onCancel={() => setDecision(null)}
             onConfirm={confirmDecision}
+            onDone={finishDecision}
           />
         )}
       </AnimatePresence>

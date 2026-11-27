@@ -46,7 +46,7 @@ export function AdminReportsView({
   initialFilter?: StatusFilter;
 }) {
   const reduceMotion = useReducedMotion();
-  const { entranceKey, rowsAt } = useEntrance();
+  const { entranceKey, revealed, rowsAt } = useEntrance();
   const [now] = useState(() => Date.now());
 
   const [reports, setReports] = useState(initialReports);
@@ -83,7 +83,7 @@ export function AdminReportsView({
 
   return (
     <MotionConfig reducedMotion="user">
-      <motion.div key={entranceKey} variants={PAGE} initial={reduceMotion ? false : 'hidden'} animate="show" className={`${PAGE_FRAME} admin-reports`}>
+      <motion.div key={entranceKey} variants={PAGE} initial={reduceMotion ? false : 'hidden'} animate={revealed ? 'show' : 'hidden'} className={`${PAGE_FRAME} admin-reports`}>
         <h1 className="sr-only">Reports</h1>
 
         <motion.section variants={EMBOSS} aria-label="Filter reports" className="rounded-[24px] bg-[#E5D8CB] p-4 sm:p-5">

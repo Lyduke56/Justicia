@@ -17,6 +17,7 @@ import {
 import type { MessagingPrivacy, NotificationCategory, NotificationChoices } from '@/lib/account/preferences';
 import type { ConsentStatus } from '@/lib/legal';
 import { leaveToLanding } from '@/lib/auth/leaving';
+import { useScreenLoading } from '@/components/shared/loading/ScreenReadiness';
 
 export const NOTIFICATION_ROWS: Array<{ key: NotificationCategory; title: string; description: string }> = [
   { key: 'consultations', title: 'Consultation updates', description: 'Requests, approvals, reschedules and cancellations.' },
@@ -109,13 +110,17 @@ export function useConsent() {
   const [consent, setConsent] = useState<ConsentStatus | null>(null);
   const [pending, start] = useTransition();
   const [error, setError] = useState('');
+  // The Settings screen's loading screen waits for the consent status.
+  const [checked, setChecked] = useState(false);
+  useScreenLoading(!checked);
   useEffect(() => {
     let cancelled = false;
     getConsentStatusAction()
       .then((res) => {
         if (!cancelled && res.success) setConsent(res.consent);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => !cancelled && setChecked(true));
     return () => {
       cancelled = true;
     };
@@ -127,11 +132,46 @@ export function useConsent() {
       if (!res.success) setError(res.error);
       else setConsent(res.consent);
     });
-  return { consent, pending, error, accept };
+  /** Same as accept, but answers with the result (for the submission card). */
+  const acceptAndReport = async (): Promise<{ ok: true } | { ok: false; error: string }> => {
+    try {
+      const res = await acceptLegalTermsAction();
+      if (!res.success) return { ok: false, error: res.error };
+      setConsent(res.consent);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Your acceptance could not be saved. Please try again.' };
+    }
+  };
+  return { consent, pending, error, accept, acceptAndReport };
 }
 
 export function formatConsentDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+/** Fetches /api/account/export and saves it as a file; answers with what happened. */
+export async function downloadMyData(): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch('/api/account/export', { cache: 'no-store' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      return { ok: false, error: body?.error ?? 'Your data could not be exported. Please try again.' };
+    }
+    const blob = await res.blob();
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'justicia-my-data.json';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'Your data could not be exported. Check your connection and try again.' };
+  }
 }
 
 /** Downloads /api/account/export as a file. */
@@ -141,29 +181,9 @@ export function useDataExport() {
   const run = useCallback(async () => {
     setPending(true);
     setMessage(null);
-    try {
-      const res = await fetch('/api/account/export', { cache: 'no-store' });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        setMessage({ ok: false, text: body?.error ?? 'Your data could not be exported. Please try again.' });
-        return;
-      }
-      const blob = await res.blob();
-      const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'justicia-my-data.json';
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      setMessage({ ok: true, text: 'Your data was downloaded as a JSON file.' });
-    } catch {
-      setMessage({ ok: false, text: 'Your data could not be exported. Check your connection and try again.' });
-    } finally {
-      setPending(false);
-    }
+    const result = await downloadMyData();
+    setMessage(result.ok ? { ok: true, text: 'Your data was downloaded as a JSON file.' } : { ok: false, text: result.error });
+    setPending(false);
   }, []);
   return { pending, message, run, clear: () => setMessage(null) };
 }
@@ -189,8 +209,22 @@ export function useDeleteAccount() {
         setError(res.error);
         return;
       }
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload: no signed-in state may survive
-      window.location.assign('/login');
+      leave();
     });
-  return { open, setOpen, password, setPassword, confirmation, setConfirmation, pending, error, ready, reset, submit };
+  /** Same as submit, but answers with the result and does not leave yet (for the submission card). */
+  const request = async (): Promise<{ ok: true } | { ok: false; error: string }> => {
+    try {
+      const res = await requestAccountDeletionAction({ password, confirmation });
+      return res.success ? { ok: true } : { ok: false, error: res.error };
+    } catch {
+      return { ok: false, error: 'Your request could not be sent. Please try again.' };
+    }
+  };
+  return { open, setOpen, password, setPassword, confirmation, setConfirmation, pending, error, ready, reset, submit, request, leave };
+}
+
+/** After a deletion request: full reload to sign-in, so no signed-in state survives. */
+function leave() {
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload: no signed-in state may survive
+  window.location.assign('/login');
 }

@@ -1,16 +1,16 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import type { EarningsInquiry, EarningsInquiryStatus } from '@/app/actions/consultationActions';
-import { CalendarIcon, EmptyState, SearchIcon } from '@/components/shared/neu';
+import { CalendarIcon, EmptyState } from '@/components/shared/neu';
 import { PanelLoader } from '@/components/shared/loading';
-import { EMBOSS, GROUP, POPOVER, RISE, ROLL, ROW, ROWS, SWAP } from '../motion';
-import { ALL_AREAS, INQUIRY_TABS, MONTHS_SHORT, areasOf, inquiryCounts, visibleInquiries, type InquiryTab } from './model';
+import { EMBOSS, GROUP, RISE, ROW, ROWS, SWAP } from '../motion';
+import { ALL_AREAS, INQUIRY_TABS, MONTHS_SHORT, inquiryCounts, visibleInquiries, type InquiryTab } from './model';
 
 /**
- * Consultation inquiries: status tabs (the caramel highlight glides, counts pop), a client search
- * that filters as you type, a practice-area menu, and the table. The heading follows the tab.
+ * Consultation inquiries at the bottom of Earnings & Payouts: status tabs (the caramel highlight
+ * glides, counts pop) and the table for the chosen tab.
  */
 
 const PAGE_SIZE = 8;
@@ -37,205 +37,26 @@ const initials = (name: string) =>
     .map((w) => w[0].toUpperCase())
     .join('');
 
-const CloseGlyph = () => (
-  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden>
-    <path d="M6 6l12 12M18 6 6 18" />
-  </svg>
-);
-
-function AreaMenu({ areas, value, onChange }: { areas: string[]; value: string; onChange: (a: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const options = [{ key: ALL_AREAS, label: 'All practice areas' }, ...areas.map((a) => ({ key: a, label: a }))];
-  const current = options.find((o) => o.key === value) ?? options[0];
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('pointerdown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  return (
-    <div ref={rootRef} className="relative w-full sm:w-[252px]">
-      <motion.button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        whileTap={{ scale: 0.97 }}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="lawyer-dash-filter flex h-10 w-full items-center gap-2.5 rounded-[12px] pl-3.5 pr-3 text-left"
-      >
-        <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-[#B07A34]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0L7 7ZM17 7l-3 7a3 3 0 0 0 6 0l-3-7ZM8 21h8" />
-        </svg>
-        <span className="min-w-0 flex-1 truncate font-inter text-[11.5px] text-[#341512]/70">
-          Area: <span className="font-semibold text-[#341512]">{current.label}</span>
-        </span>
-        <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ type: 'spring', stiffness: 400, damping: 26 }} className="shrink-0 text-[#5C4535]">
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </motion.span>
-      </motion.button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            role="menu"
-            aria-label="Practice area"
-            variants={POPOVER}
-            initial="hidden"
-            animate="show"
-            exit="exit"
-            style={{ transformOrigin: 'calc(100% - 28px) 0px', transformPerspective: 900 }}
-            className="client-popover client-popover-scroll absolute right-0 top-full z-30 mt-3 max-h-[300px] w-[min(272px,calc(100vw-2rem))] overflow-y-auto p-2"
-          >
-            <span className="client-popover-caret [--caret:22px]" aria-hidden />
-            {options.map((o) => {
-              const active = o.key === value;
-              return (
-                <button
-                  key={o.key}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={active}
-                  onClick={() => {
-                    onChange(o.key);
-                    setOpen(false);
-                  }}
-                  className={`relative isolate flex w-full items-center justify-between gap-3 rounded-[12px] px-3.5 py-2.5 text-left font-inter text-[12px] transition-colors ${
-                    active ? 'font-semibold text-[#341512]' : 'text-[#341512]/70 hover:bg-[#D39758]/12 hover:text-[#341512]'
-                  }`}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="earnings-area-active"
-                      transition={{ type: 'spring', stiffness: 460, damping: 34 }}
-                      className="client-neu-thumb absolute inset-0 -z-10 rounded-[12px]"
-                    />
-                  )}
-                  {o.label}
-                  {active && (
-                    <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#B07A34]" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="m5 12 5 5 9-10" />
-                    </svg>
-                  )}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 export function InquiriesPanel({ inquiries, loading }: { inquiries: EarningsInquiry[] | null; loading: boolean }) {
   const reduce = useReducedMotion();
   const [tab, setTab] = useState<InquiryTab>('all');
-  const [query, setQuery] = useState('');
-  const [area, setArea] = useState(ALL_AREAS);
   const [shown, setShown] = useState(PAGE_SIZE);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const all = useMemo(() => inquiries ?? [], [inquiries]);
   const counts = useMemo(() => inquiryCounts(all), [all]);
-  const areas = useMemo(() => areasOf(all), [all]);
-  const list = useMemo(() => visibleInquiries(all, tab, query, area), [all, tab, query, area]);
+  const list = useMemo(() => visibleInquiries(all, tab, '', ALL_AREAS), [all, tab]);
   const meta = INQUIRY_TABS.find((t) => t.key === tab) ?? INQUIRY_TABS[0];
-  const filtered = query.trim() !== '' || area !== ALL_AREAS;
 
-  // Any filter change starts the list from the top again.
-  const resetPage = <T,>(set: (v: T) => void) => (v: T) => {
+  // Switching tabs starts the list from the top again.
+  const changeTab = (next: InquiryTab) => {
     setShown(PAGE_SIZE);
-    set(v);
+    setTab(next);
   };
-  const changeTab = resetPage(setTab);
-  const changeQuery = resetPage(setQuery);
-  const changeArea = resetPage(setArea);
 
-  const contentKey = !inquiries ? 'loading' : list.length === 0 ? `empty-${tab}` : `list-${tab}-${area}`;
+  const contentKey = !inquiries ? 'loading' : list.length === 0 ? `empty-${tab}` : `list-${tab}`;
 
   return (
-    <motion.section variants={GROUP} aria-labelledby="earnings-inquiries-heading" className="flex flex-col gap-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <motion.div
-          variants={EMBOSS}
-          layout="size"
-          className="inline-flex h-11 max-w-full items-center gap-3 self-start rounded-[20px] pl-6 pr-2"
-          style={{ backgroundColor: 'rgba(211, 151, 88, 0.3)' }}
-        >
-          <span className="relative min-w-0 overflow-hidden">
-            <AnimatePresence mode="popLayout" initial={false}>
-              <motion.h2
-                key={meta.heading}
-                id="earnings-inquiries-heading"
-                variants={ROLL}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                className="truncate font-lora text-[15px] font-semibold tracking-[0.02em] text-[#341512]/85 sm:text-base"
-              >
-                {meta.heading}
-              </motion.h2>
-            </AnimatePresence>
-          </span>
-          <motion.span
-            key={`${contentKey}-${list.length}`}
-            initial={reduce ? false : { scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 520, damping: 22 }}
-            className="neu-inset-banner grid h-7 min-w-7 shrink-0 place-items-center rounded-full px-2 font-inter text-[11px] font-bold text-[#341512]"
-            aria-label={`${list.length} inquiries`}
-          >
-            {inquiries ? list.length : '·'}
-          </motion.span>
-        </motion.div>
-
-        <motion.div variants={RISE} className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-          <label className="lawyer-field flex h-10 w-full min-w-0 items-center gap-2.5 rounded-[12px] pl-3.5 pr-2 sm:w-[260px]">
-            <SearchIcon className="h-4 w-4 shrink-0 text-[#B07A34]" />
-            <span className="sr-only">Search client name</span>
-            <input
-              ref={inputRef}
-              type="search"
-              value={query}
-              onChange={(e) => changeQuery(e.target.value)}
-              placeholder="Search client name"
-              className="h-full min-w-0 flex-1 bg-transparent font-inter text-[12.5px] text-[#341512] placeholder:text-[#9E8E7D] focus:outline-none [&::-webkit-search-cancel-button]:hidden"
-            />
-            <AnimatePresence>
-              {query && (
-                <motion.button
-                  type="button"
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  whileTap={{ scale: 0.85 }}
-                  onClick={() => {
-                    changeQuery('');
-                    inputRef.current?.focus();
-                  }}
-                  aria-label="Clear search"
-                  className="neu-raised-sm grid size-6 shrink-0 place-items-center rounded-full text-[#5C4535] hover:text-[#C58B3C]"
-                >
-                  <CloseGlyph />
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </label>
-          <AreaMenu areas={areas} value={area} onChange={changeArea} />
-        </motion.div>
-      </div>
-
+    <motion.section variants={GROUP} aria-label="Consultation inquiries" className="flex flex-col gap-5">
       {/* Tabs: a row that scrolls sideways on phones, six equal columns from lg */}
       <motion.div
         variants={RISE}
@@ -295,8 +116,8 @@ export function InquiriesPanel({ inquiries, loading }: { inquiries: EarningsInqu
             ) : list.length === 0 ? (
               <EmptyState
                 icon={<CalendarIcon />}
-                title={filtered ? 'No matching inquiries' : meta.empty}
-                description={filtered ? 'Try another name or practice area.' : 'New consultation requests will show up here.'}
+                title={meta.empty}
+                description="New consultation requests will show up here."
               />
             ) : (
               <div role="table" aria-label={meta.heading} className="flex flex-col">

@@ -5,7 +5,7 @@ import { EmptyMedallion } from '@/components/shared/neu/EmptyMedallion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MotionConfig, motion, useReducedMotion } from 'motion/react';
-import { useViewActive } from '@/components/live/LiveProvider';
+import { useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 import { ChevronRightIcon } from '@/components/shared/neu';
 import { getAdminOverviewData, type AdminOverviewData } from '@/app/actions/adminOverview';
 import { CountUp, KpiCard, formatCount } from '@/components/lawyer/KpiCard';
@@ -186,19 +186,16 @@ function MoreLine({ children }: { children: ReactNode }) {
 export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, totalUsersCount, pendingLawyersPreview, recentAuditEntries }: Props) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
-  const viewActive = useViewActive();
   const fitLayout = useFitLayout();
 
-  // Tabs stay mounted; replay the entrance each time this one is shown (as the lawyer dashboard).
-  const [wasActive, setWasActive] = useState(viewActive);
-  const [entranceKey, setEntranceKey] = useState(0);
-  if (viewActive !== wasActive) {
-    setWasActive(viewActive);
-    if (viewActive) setEntranceKey((k) => k + 1);
-  }
+  // The entrance plays when the portal's loading screen lifts (not underneath it), and again on
+  // every visit: the reveal key remounts the animated layout.
+  const { revealed, revealKey: entranceKey } = useScreenReveal();
 
   const [extra, setExtra] = useState<AdminOverviewData | null>(null);
   const [extraFailed, setExtraFailed] = useState(false);
+  // The loading screen also waits for the overview figures (or their failure).
+  useScreenLoading(!extra && !extraFailed);
   const [now, setNow] = useState(() => Date.now());
 
   // Re-read the extras whenever the tab's own data reloads (it polls and listens for admin edits).
@@ -270,7 +267,7 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
         key={entranceKey}
         variants={PAGE}
         initial={reduceMotion ? false : 'hidden'}
-        animate="show"
+        animate={revealed ? 'show' : 'hidden'}
         className="lawyer-dash admin-overview mx-auto flex max-w-[1196px] flex-col gap-8 px-4 pb-14 pt-6 sm:px-8 sm:pt-10 lg:px-12 lg:pt-12"
       >
         <h1 className="sr-only">Platform overview</h1>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { NeuAlert, Spinner } from '@/components/shared/neu';
 import { PanelLoader } from '@/components/shared/loading';
+import { SubmissionOverlay, useSubmission, type SubmissionCopy } from '@/components/shared/feedback';
 import {
   deleteVerificationDocumentAction,
   getMyVerificationDocumentUrlAction,
@@ -25,11 +26,12 @@ import {
  * Styled like the registration form it sits in.
  */
 
+/** Status pills: raised parchment with the system's tone colours (caramel, green, red). */
 const STATUS: Record<DocumentReviewStatus, { label: string; className: string }> = {
-  uploaded: { label: 'Uploaded', className: 'bg-[#E8DCCB] text-[#5C4535] border-[#D8CAAD]' },
-  under_review: { label: 'Under review', className: 'bg-amber-100 text-amber-800 border-amber-300' },
-  accepted: { label: 'Accepted', className: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
-  rejected: { label: 'Needs a new file', className: 'bg-red-100 text-red-800 border-red-300' },
+  uploaded: { label: 'Uploaded', className: 'text-[#5C4535]' },
+  under_review: { label: 'Under review', className: 'text-[#A8742E]' },
+  accepted: { label: 'Accepted', className: 'text-[#1F7A3A]' },
+  rejected: { label: 'Needs a new file', className: 'text-[#B42318]' },
 };
 
 function formatSize(bytes: number | null): string {
@@ -48,7 +50,15 @@ export function VerificationDocumentsPanel({
   const [editable, setEditable] = useState(false);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'failed'>('loading');
   const [loadError, setLoadError] = useState('');
-  const [busyType, setBusyType] = useState<DocumentType | null>(null);
+  // Uploading or removing a document shows the submission card: loader, then check / X.
+  const submission = useSubmission();
+  const [target, setTarget] = useState<DocumentType | null>(null);
+  const busyType = submission.processing ? target : null;
+  const [card, setCard] = useState<{ processing: SubmissionCopy; success: SubmissionCopy; failure: string }>({
+    processing: { title: 'Uploading…' },
+    success: { title: 'Uploaded' },
+    failure: 'Something went wrong',
+  });
   const [errors, setErrors] = useState<Partial<Record<DocumentType, string>>>({});
   const inputs = useRef<Partial<Record<DocumentType, HTMLInputElement | null>>>({});
   const onChangeRef = useRef(onDocumentsChange);
@@ -99,37 +109,51 @@ export function VerificationDocumentsPanel({
       setErrors((e) => ({ ...e, [type]: 'Each document must be 8 MB or smaller.' }));
       return;
     }
-    setBusyType(type);
-    try {
-      const fd = new FormData();
-      fd.set('docType', type);
-      fd.set('file', file);
-      const res = await uploadVerificationDocumentAction(fd);
-      if (!res.success) {
-        setErrors((e) => ({ ...e, [type]: res.error }));
-        return;
+    const label = labelOf(type);
+    setTarget(type);
+    setCard({
+      processing: { title: 'Uploading your document', message: `Uploading your ${label.toLowerCase()} securely.` },
+      success: { title: 'Document uploaded', message: `Your ${label.toLowerCase()} is saved for the review team.` },
+      failure: "We couldn't upload your document",
+    });
+    const result = await submission.run(async () => {
+      try {
+        const fd = new FormData();
+        fd.set('docType', type);
+        fd.set('file', file);
+        const res = await uploadVerificationDocumentAction(fd);
+        if (!res.success) return { ok: false, error: res.error };
+        apply([...docs.filter((d) => d.docType !== type), res.document]);
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'The upload failed. Check your connection and try again.' };
       }
-      apply([...docs.filter((d) => d.docType !== type), res.document]);
-    } catch {
-      setErrors((e) => ({ ...e, [type]: 'The upload failed. Check your connection and try again.' }));
-    } finally {
-      setBusyType(null);
-      const input = inputs.current[type];
-      if (input) input.value = '';
-    }
+    });
+    if (result && !result.ok) setErrors((e) => ({ ...e, [type]: result.error }));
+    const input = inputs.current[type];
+    if (input) input.value = '';
   };
 
   const remove = async (doc: VerificationDocumentView) => {
     const type = doc.docType as DocumentType;
-    setBusyType(type);
+    setTarget(type);
     setErrors((e) => ({ ...e, [type]: '' }));
-    try {
-      const res = await deleteVerificationDocumentAction(doc.id);
-      if (!res.success) setErrors((e) => ({ ...e, [type]: res.error }));
-      else apply(docs.filter((d) => d.id !== doc.id));
-    } finally {
-      setBusyType(null);
-    }
+    setCard({
+      processing: { title: 'Removing your document' },
+      success: { title: 'Document removed', message: `Upload a new ${labelOf(type).toLowerCase()} whenever you're ready.` },
+      failure: "We couldn't remove your document",
+    });
+    const result = await submission.run(async () => {
+      try {
+        const res = await deleteVerificationDocumentAction(doc.id);
+        if (!res.success) return { ok: false, error: res.error };
+        apply(docs.filter((d) => d.id !== doc.id));
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'The document could not be removed. Please try again.' };
+      }
+    });
+    if (result && !result.ok) setErrors((e) => ({ ...e, [type]: result.error }));
   };
 
   const view = async (doc: VerificationDocumentView) => {
@@ -203,7 +227,7 @@ export function VerificationDocumentsPanel({
                   </div>
                 </div>
                 {status ? (
-                  <span className={`shrink-0 inline-flex rounded-full border px-2.5 py-0.5 font-inter text-[11px] font-semibold ${status.className}`}>{status.label}</span>
+                  <span className={`neu-raised-pill shrink-0 inline-flex rounded-full bg-[#E5D8CB] px-2.5 py-0.5 font-inter text-[11px] font-bold ${status.className}`}>{status.label}</span>
                 ) : (
                   <span className="shrink-0 inline-flex rounded-full border border-[#D8CAAD] bg-[#EFE5D8] px-2.5 py-0.5 font-inter text-[11px] font-semibold text-[#A69584]">
                     {req.required ? 'Missing' : 'Optional'}
@@ -261,6 +285,12 @@ export function VerificationDocumentsPanel({
         })}
       </ul>
       <p className="font-inter text-[11px] text-[#A69584]">PDF, PNG or JPG, up to 8 MB each. Files are stored privately and only the Justicia review team can open them.</p>
+
+      <SubmissionOverlay submission={submission} processing={card.processing} success={card.success} failure={{ title: card.failure }} />
     </div>
   );
+}
+
+function labelOf(type: DocumentType): string {
+  return VERIFICATION_DOCUMENTS.find((d) => d.type === type)?.label ?? 'Document';
 }
