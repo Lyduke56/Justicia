@@ -12,7 +12,7 @@ interface NavbarProps {
 
 const signUpClass =
   'font-lora text-[13.5px] font-medium tracking-[0.15em] bg-gradient-to-r from-[#c5944e] to-[#d6a25b] hover:from-[#d6a25b] hover:to-[#e4b574] text-[#160c0d] px-5 py-2 rounded transition-all duration-300 block shadow-sm hover:shadow-[0_4px_16px_rgba(197,148,78,0.35)]';
-const mobileSignUpClass = 'w-full font-lora text-center text-xs font-bold tracking-[0.15em] bg-[#c5944e] text-[#160c0d] py-2.5 rounded';
+const mobileSignUpClass = 'w-full font-lora text-center text-xs font-bold tracking-[0.15em] bg-[#c5944e] text-[#160c0d] py-2.5 rounded transition-colors duration-300 hover:bg-[#d6a25b]';
 
 export function Navbar({ onOpenSignIn, onOpenSignUp }: NavbarProps) {
   const [activeSection, setActiveSection] = useState<'home' | 'about' | 'features'>('home');
@@ -154,7 +154,7 @@ export function Navbar({ onOpenSignIn, onOpenSignUp }: NavbarProps) {
             <button
               onClick={onOpenSignIn}
               id="navbar-mobile-login-btn"
-              className="font-lora text-[11px] font-bold tracking-wider border border-[#c5944e] text-[#c5944e] px-3 py-1.5 rounded cursor-pointer"
+              className="font-lora text-[11px] font-bold tracking-wider border border-[#c5944e] text-[#c5944e] px-3 py-1.5 rounded cursor-pointer transition-colors hover:bg-[#c5944e]/10"
             >
               LOG IN
             </button>
@@ -162,14 +162,14 @@ export function Navbar({ onOpenSignIn, onOpenSignUp }: NavbarProps) {
             <Link
               href="/login"
               id="navbar-mobile-login-btn"
-              className="font-lora text-[11px] font-bold tracking-wider border border-[#c5944e] text-[#c5944e] px-3 py-1.5 rounded"
+              className="font-lora text-[11px] font-bold tracking-wider border border-[#c5944e] text-[#c5944e] px-3 py-1.5 rounded transition-colors hover:bg-[#c5944e]/10"
             >
               LOG IN
             </Link>
           )}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="text-[#c5944e] p-2 focus:outline-none"
+            className="text-[#c5944e] p-2 rounded transition-colors hover:bg-[#c5944e]/10 focus:outline-none"
             aria-label="Toggle Navigation Menu"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

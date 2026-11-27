@@ -80,9 +80,7 @@ export function ScreenLoader({
     >
       <div className={`relative grid place-items-center ${GIF_SIZE[variant]}`} aria-hidden="true">
         {/* Held space + a soft caramel ring while the picture downloads. */}
-        <span
-          className={`screen-loader-ring absolute size-16 rounded-full transition-opacity duration-300 ${loaded ? 'opacity-0' : 'opacity-100'}`}
-        />
+        {!loaded && <span className="screen-loader-ring absolute size-16 rounded-full" />}
         {inBrowser && (
           // eslint-disable-next-line @next/next/no-img-element -- animated GIF, served as-is
           <img

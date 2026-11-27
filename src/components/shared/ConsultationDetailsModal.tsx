@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { NeuModal, NeuModalSheet, NeuButton, NeuAlert, EmptyState, QrIcon } from '@/components/shared/neu';
 import { SubmissionModal, type SubmissionCopy, type SubmissionPhase } from '@/components/shared/feedback';
 import { DefaultAvatarIcon, ProfilePhoto } from '@/components/shared/ProfilePhoto';
+import { CopyButton } from '@/components/shared/CopyButton';
 
 /**
  * Consultation "View Details" modal shared by the client and lawyer portals.
@@ -407,7 +408,10 @@ export function DetailsCaseBlock({ titleId, onSeeMore, previewLines, ...props }:
   if (!truncate) {
     return (
       <div className="space-y-2 pt-0.5">
-        <div className="font-lora font-bold text-[9.5px] sm:text-[10.5px] text-[#C58B3C] uppercase tracking-wider">{props.docket}</div>
+        <div className="flex flex-wrap items-center gap-2 font-lora font-bold text-[9.5px] sm:text-[10.5px] text-[#C58B3C] uppercase tracking-wider">
+          <span className="select-text">{props.docket}</span>
+          {props.docket && <CopyButton key={props.docket} value={props.docket} label="consultation reference" />}
+        </div>
         <h3 id={titleId} className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-snug">
           {props.caseTitle}
         </h3>
@@ -418,7 +422,10 @@ export function DetailsCaseBlock({ titleId, onSeeMore, previewLines, ...props }:
 
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-2 pt-0.5">
-      <div className="font-lora font-bold text-[9.5px] sm:text-[10.5px] text-[#C58B3C] uppercase tracking-wider">{props.docket}</div>
+      <div className="flex flex-wrap items-center gap-2 font-lora font-bold text-[9.5px] sm:text-[10.5px] text-[#C58B3C] uppercase tracking-wider">
+        <span className="select-text">{props.docket}</span>
+        {props.docket && <CopyButton key={props.docket} value={props.docket} label="consultation reference" />}
+      </div>
       <h3 id={titleId} className="font-lora text-base sm:text-lg lg:text-xl font-bold text-[#341512] leading-snug">
         {props.caseTitle}
       </h3>

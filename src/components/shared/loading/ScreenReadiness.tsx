@@ -144,7 +144,8 @@ const MAX_VISIBLE_MS = 12000;
  */
 export function useScreenGate(pathname: string, activeSlot: string) {
   const [store] = useState(createScreenStore);
-  const { loading: navigating, start } = useScreenTransition(pathname);
+  // Readiness must wait for navigation even during the overlay's initial show delay.
+  const { pending: navigating, start } = useScreenTransition(pathname);
   const busy = useSyncExternalStore(
     store.subscribe,
     () => store.isBusy(activeSlot),

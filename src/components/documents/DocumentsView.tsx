@@ -232,7 +232,9 @@ const DOCS_MOTION_CSS = `
 
 .docs-view--forward { animation: docs-view-forward 0.5s var(--docs-ease) backwards; }
 .docs-view--back    { animation: docs-view-back 0.5s var(--docs-ease) backwards; }
-.docs-view--fade    { animation: docs-view-fade 0.4s var(--docs-ease) backwards; }
+/* The toolbar/cards own this screen's entrance; don't also translate/fade their parents. */
+.client-view-enter:has(.docs-root) { animation: none; will-change: auto; }
+.docs-view--fade    { animation: none; }
 .docs-rise          { transform-origin: 50% 100%; animation: docs-rise 0.7s var(--docs-ease) backwards; }
 .docs-deal          { transform-origin: 50% 0%; animation: docs-deal 0.65s var(--docs-ease) backwards; }
 .docs-deal:nth-child(even) { --deal-r: 7deg; }
@@ -1068,8 +1070,10 @@ function DocumentsEmptyState({
 export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const [loadingDocs, setLoadingDocs] = useState<boolean>(true);
+  const { revealed } = useScreenReveal();
   // The portal's loading screen stays up until the folders and files are here.
   useScreenLoading(loadingDocs);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [currentSection, setCurrentSection] = useState<'shared' | 'owned' | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -1123,14 +1127,21 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
     if (!docsLoadedRef.current) setLoadingDocs(true);
     return fetchDocumentFolders(role)
       .then((dbFolders) => {
-        setFolders(dbFolders ?? []);
+        if (dbFolders === null) {
+          setFolders([]);
+          setLoadError('Your session has expired. Sign in again to view your documents.');
+          return;
+        }
+        setFolders(dbFolders);
+        setLoadError(null);
+        docsLoadedRef.current = true;
       })
       .catch((err) => {
         // Keep whatever is on screen; the next live refresh retries.
         console.error('Failed to load documents:', err);
+        setLoadError('Your documents could not be refreshed. Please try again.');
       })
       .finally(() => {
-        docsLoadedRef.current = true;
         setLoadingDocs(false);
       });
   }, [role]);
@@ -1407,6 +1418,14 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
     <div className="docs-root px-5 sm:px-8 lg:px-10 xl:px-14 py-5 sm:py-7 max-w-[1440px] mx-auto bg-[#E5D8CB] min-h-[calc(100vh-4rem)] space-y-6 sm:space-y-7 select-none">
       <style>{DOCS_MOTION_CSS}</style>
 
+      {loadError && (
+        <NeuAlert tone="error" action={
+          <NeuButton size="sm" loading={loadingDocs} onClick={() => { setLoadingDocs(true); void loadDocuments(); }}>
+            Retry
+          </NeuButton>
+        }>{loadError}</NeuAlert>
+      )}
+
       {/* ─── Top Toolbar (Reusing Design System Classes .neu-raised-sm & .neu-recessed) ── */}
       <div className="docs-toolbar flex flex-wrap items-center gap-3 sm:gap-4">
         {/* Left: + New Button (Neumorphic Raised Button) */}
@@ -1549,7 +1568,9 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
 
       {/* ─── Initial load, then directional content transitions ─── */}
       {loadingDocs && !currentFolder ? (
-        <PanelLoader srLabel="Loading your documents" className="min-h-[20rem]" />
+        <div className="min-h-[20rem]" aria-busy="true">
+          {revealed && <PanelLoader srLabel="Loading your documents" className="min-h-[20rem]" />}
+        </div>
       ) : (
         <div key={viewKey} className={`docs-view--${navDirection}`}>
           {/* ─── SCENARIO A: Root Folder Grid View (All Closed by Default) ────────── */}
@@ -1613,7 +1634,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                   })}
 
                   {/* Empty states: no folders yet, or none matching the search */}
-                  {filteredFolders.length === 0 && !loadingDocs && (
+                  {filteredFolders.length === 0 && !loadingDocs && !loadError && (
                     <DocumentsEmptyState
                       kind={searchQuery.trim() ? 'no-folder-matches' : 'no-folders'}
                       role={role}
@@ -1692,7 +1713,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                     );
                   })}
 
-                  {filteredFolders.length === 0 && !loadingDocs && (
+                  {filteredFolders.length === 0 && !loadingDocs && !loadError && (
                     <DocumentsEmptyState
                       kind={searchQuery.trim() ? 'no-folder-matches' : 'no-folders'}
                       role={role}

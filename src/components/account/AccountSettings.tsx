@@ -18,8 +18,8 @@ import {
 } from './useAccountControls';
 
 const cardClass = 'rounded-2xl p-6 bg-[#EFE5D8] shadow-[5px_5px_12px_rgba(0,0,0,0.06),-5px_-5px_12px_rgba(255,255,255,0.85)] border border-[#E8DCCB]/60 space-y-4';
-const quietButtonClass = 'rounded-lg border border-[#D6C4AE] px-4 py-2 text-xs font-medium text-[#34150F] hover:bg-[#E5D7C5] disabled:opacity-50';
-const dangerButtonClass = 'rounded-lg bg-[#9A3B2E] px-4 py-2 text-xs font-medium text-[#F7EDE3] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C58B3C]';
+const quietButtonClass = 'rounded-lg border border-[#D6C4AE] px-4 py-2 text-xs font-medium text-[#34150F] transition-colors hover:bg-[#E5D7C5] disabled:opacity-50';
+const dangerButtonClass = 'rounded-lg bg-[#9A3B2E] px-4 py-2 text-xs font-medium text-[#F7EDE3] transition-colors hover:bg-[#7F2F25] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C58B3C]';
 
 export function AccountSettings({ account }: { account: PersonalAccount }) {
   const prefs = usePreferenceToggles(account);
@@ -96,7 +96,7 @@ export function AccountSettings({ account }: { account: PersonalAccount }) {
           <label className="block">New password<input name="password" type="password" required minLength={8} maxLength={256} autoComplete="new-password" className={accountInputClass} /></label>
           <label className="block">Confirm new password<input name="confirmPassword" type="password" required minLength={8} maxLength={256} autoComplete="new-password" className={accountInputClass} /></label>
         </fieldset>
-        <div className="flex gap-3"><button disabled={changing} className={accountButtonClass}>{changing ? 'Updating…' : 'Update password'}</button><button type="button" disabled={changing} onClick={() => { setPasswordOpen(false); setPasswordError(''); }} className="text-xs text-[#5C4535]">Cancel</button></div>
+<div className="flex gap-3"><button disabled={changing} className={accountButtonClass}>{changing ? 'Updating…' : 'Update password'}</button><button type="button" disabled={changing} onClick={() => { setPasswordOpen(false); setPasswordError(''); }} className="text-xs text-[#5C4535] transition-colors hover:text-[#A8742E]">Cancel</button></div>
         <Link href="/forgot-password" className="inline-block text-xs text-[#946525] underline">Forgot password?</Link>
       </form>}
       {passwordError && <p role="alert" className="text-xs text-red-700">{passwordError}</p>}
@@ -131,7 +131,7 @@ export function AccountSettings({ account }: { account: PersonalAccount }) {
             <label className="block">Type DELETE to confirm<input required autoComplete="off" value={deletion.confirmation} onChange={(e) => deletion.setConfirmation(e.target.value)} className={accountInputClass} /></label>
           </fieldset>
           {deletion.error && <p role="alert" className="text-xs text-red-700">{deletion.error}</p>}
-          <div className="flex gap-3"><button disabled={deletion.pending || !deletion.ready} className={dangerButtonClass}>{deletion.pending ? 'Deleting…' : 'Delete my account'}</button><button type="button" disabled={deletion.pending} onClick={deletion.reset} className="text-xs text-[#5C4535]">Cancel</button></div>
+<div className="flex gap-3"><button disabled={deletion.pending || !deletion.ready} className={dangerButtonClass}>{deletion.pending ? 'Deleting…' : 'Delete my account'}</button><button type="button" disabled={deletion.pending} onClick={deletion.reset} className="text-xs text-[#5C4535] transition-colors hover:text-[#A8742E]">Cancel</button></div>
         </form>}
       </div>
     </div>

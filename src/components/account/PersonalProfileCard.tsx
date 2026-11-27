@@ -8,6 +8,7 @@ import { updateProfileExtrasAction, type ProfileSummary } from '@/app/actions/pr
 import { changeProfilePhotoAction, removeMyProfilePhotoAction } from '@/app/actions/profilePhotoActions';
 import { setMyAvatar, useMyAvatar } from './avatarStore';
 import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
+import { CopyButton } from '@/components/shared/CopyButton';
 import { ResendVerificationButton } from '@/components/auth/ResendVerificationButton';
 import {
   CONSULTATION_LANGUAGES,
@@ -20,7 +21,7 @@ import {
 } from '@/lib/account/profileExtras';
 
 export const accountInputClass = 'mt-1 block w-full rounded-lg border border-[#D6C4AE] bg-[#EFE5D8] px-3 py-2 text-xs text-[#34150F] outline-none focus:border-[#C58B3C] focus:ring-1 focus:ring-[#C58B3C]';
-export const accountButtonClass = 'rounded-lg bg-[#34150F] px-4 py-2 text-xs font-medium text-[#EFE5D8] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C58B3C]';
+export const accountButtonClass = 'rounded-lg bg-[#34150F] px-4 py-2 text-xs font-medium text-[#EFE5D8] transition-colors hover:bg-[#4A2118] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C58B3C]';
 
 export interface ProfileExtrasData {
   extras: ProfileExtras;
@@ -150,7 +151,7 @@ export function PersonalProfileCard({ account, extras: initialExtras = null, ava
       {account.role === 'lawyer' && <p className="text-xs text-[#7D6855]">Legal-name changes require credential verification. Please contact support.</p>}
       <div className="flex gap-3">
         <button disabled={pending} className={accountButtonClass}>{pending ? 'Saving…' : 'Save changes'}</button>
-        <button type="button" disabled={pending} onClick={() => { setEditing(false); setError(''); }} className="px-3 py-2 text-xs text-[#5C4535]">Cancel</button>
+        <button type="button" disabled={pending} onClick={() => { setEditing(false); setError(''); }} className="px-3 py-2 text-xs text-[#5C4535] transition-colors hover:text-[#A8742E]">Cancel</button>
       </div>
     </form> : <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[#E5D7C5] text-xs">
@@ -165,7 +166,10 @@ export function PersonalProfileCard({ account, extras: initialExtras = null, ava
             : []),
         ].map(([label, value]) => <div key={label} className="p-3 rounded-xl bg-[#E8DAC9]/50">
           <span className="text-[10px] uppercase font-bold text-[#7D6855] tracking-wider block">{label}</span>
-          <span className="font-medium text-[#34150F] mt-1 block break-words">{value}</span>
+          <span className="font-medium text-[#34150F] mt-1 block break-words select-text">{value}</span>
+          {(label === 'Email Address' || label === 'Contact Number') && value && (
+            <CopyButton key={value} value={value} label={label.toLowerCase()} />
+          )}
         </div>)}
       </div>
       <button type="button" onClick={() => { setEditing(true); setMessage(''); }} className={accountButtonClass}>Edit profile</button>
