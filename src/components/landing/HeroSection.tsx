@@ -1,21 +1,90 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import {
-  motion,
-  useScroll,
-  useTransform,
-  useSpring,
-  useMotionTemplate,
-  useReducedMotion,
-} from 'motion/react';
+import { motion, useScroll, useTransform, useSpring, useReducedMotion } from 'motion/react';
 import { BookshelfSpotlight } from './LibrarySpotlight';
 
-export function HeroSection() {
+/** One easing curve for the whole entrance, so every piece decelerates the same way. */
+const EASE = [0.22, 1, 0.36, 1] as const;
+
+/**
+ * Entrance sequence, in seconds after the hero is ready (see `ready` below).
+ * Only opacity and transforms are animated, so nothing repaints while it plays.
+ *
+ *   0.00 – 1.60   the library lights up out of black
+ *   0.15 – 1.95   Lady Justice rises into place, her halo warms up behind her
+ *   0.35 – 1.65   headline, line by line
+ *   0.70 – 1.90   subtext
+ *   0.85 – 2.05   call-to-action buttons
+ *   0.90 – 2.00   navbar (timed from LandingPageClient: HERO_NAV_DELAY)
+ *   1.60 →        scroll cue
+ */
+const INTRO = {
+  veil: { delay: 0, duration: 1.6 },
+  statue: { delay: 0.15, duration: 1.8 },
+  halo: { delay: 0.45, duration: 2.4 },
+  lines: { delay: 0.35, stagger: 0.12, duration: 1.3 },
+  subtext: { delay: 0.7, duration: 1.2 },
+  ctas: { delay: 0.85, duration: 1.2 },
+  cue: { delay: 1.6, duration: 1 },
+} as const;
+
+/** Delay (s) for the navbar so it lands with the rest of the sequence. */
+export const HERO_NAV_DELAY = 0.9;
+
+/**
+ * Longest we wait for the images and fonts before starting anyway (ms after mount).
+ * Keeps a slow connection from holding the page on a dark screen.
+ */
+const READY_TIMEOUT = 1400;
+
+interface HeroSectionProps {
+  /** Called once when the entrance starts, so the navbar can join in. */
+  onIntroStart?: () => void;
+}
+
+export function HeroSection({ onIntroStart }: HeroSectionProps) {
   const containerRef = useRef<HTMLElement>(null);
   const prefersReducedMotion = useReducedMotion();
+
+  /**
+   * The entrance waits until the background, the statue and the web fonts are ready.
+   * Otherwise an image can pop in halfway through its fade, or the headline can jump
+   * when its font swaps in mid-animation.
+   */
+  const [ready, setReady] = useState(false);
+  const pendingRef = useRef({ bg: true, statue: true, fonts: true });
+
+  const markReady = useCallback((key: 'bg' | 'statue' | 'fonts') => {
+    pendingRef.current[key] = false;
+    const { bg, statue, fonts } = pendingRef.current;
+    if (!bg && !statue && !fonts) setReady(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    document.fonts?.ready.then(() => {
+      if (!cancelled) markReady('fonts');
+    });
+    const timer = setTimeout(() => setReady(true), READY_TIMEOUT);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [markReady]);
+
+  useEffect(() => {
+    if (ready) onIntroStart?.();
+  }, [ready, onIntroStart]);
+
+  /** Props for one piece of the entrance: hidden until `ready`, then eased into place. */
+  const enter = (step: { delay: number; duration: number }, y = 0) => ({
+    initial: { opacity: 0, y },
+    animate: ready ? { opacity: 1, y: 0 } : { opacity: 0, y },
+    transition: { duration: step.duration, delay: step.delay, ease: EASE },
+  });
 
   // Progress runs 0 → 1 while the whole hero scrolls out of the viewport
   const { scrollYProgress } = useScroll({
@@ -46,15 +115,19 @@ export function HeroSection() {
   const statueScale = useTransform(smoothProgress, [0, 0.85], [1, 1.05]);
   const statueOpacity = useTransform(smoothProgress, [0.12, 0.62], [1, 0]);
 
-  // Layer 3 — copy: moves fastest, defocuses as it fades (reads as "closest to the viewer")
+  // Layer 3 — copy: moves fastest, defocuses as it fades (reads as "closest to the viewer").
+  // The blur resolves to 'none' at rest so the copy isn't kept on a filtered layer.
   const textY = useTransform(smoothProgress, [0, 0.6], [0, -160]);
   const textScale = useTransform(smoothProgress, [0, 0.6], [1, 0.96]);
   const textOpacity = useTransform(smoothProgress, [0.05, 0.42], [1, 0]);
   const textBlur = useTransform(smoothProgress, [0.08, 0.42], [0, 10]);
-  const textFilter = useMotionTemplate`blur(${textBlur}px)`;
+  const textFilter = useTransform(textBlur, (v) => (v < 0.1 ? 'none' : `blur(${v.toFixed(2)}px)`));
 
   // Descent into darkness: matches the Motto section's opening colour (#0d0705)
   const dimOpacity = useTransform(smoothProgress, [0.3, 0.9], [0, 0.85]);
+
+  // Scroll cue disappears as soon as the visitor starts scrolling
+  const cueOpacity = useTransform(scrollYProgress, [0, 0.06], [1, 0]);
 
   return (
     <section
@@ -79,6 +152,8 @@ export function HeroSection() {
               alt="Antique law library bookshelf background"
               fill
               priority
+              onLoad={() => markReady('bg')}
+              onError={() => markReady('bg')}
               className="object-cover object-top filter contrast-110"
               sizes="100vw"
             />
@@ -109,6 +184,40 @@ export function HeroSection() {
             style={{ opacity: prefersReducedMotion ? 0 : dimOpacity }}
             className="absolute inset-0 bg-[#0d0705]"
           />
+
+          {/* Intro veil: the library lights up out of black once everything is ready */}
+          <motion.div
+            initial={{ opacity: 1 }}
+            animate={{ opacity: ready ? 0 : 1 }}
+            transition={{ duration: INTRO.veil.duration, delay: INTRO.veil.delay, ease: [0.45, 0, 0.25, 1] }}
+            className="absolute inset-0 bg-[#0d0705]"
+          />
+
+          {/* Scroll cue */}
+          <motion.div
+            style={{ opacity: cueOpacity }}
+            className="absolute bottom-7 left-1/2 hidden -translate-x-1/2 sm:block"
+          >
+            <motion.div {...enter(INTRO.cue, 8)} className="flex flex-col items-center gap-3">
+              <span className="font-cinzel text-[10px] tracking-[0.38em] text-[#968b7f]">SCROLL</span>
+              <span className="relative h-12 w-px overflow-hidden bg-[#c5944e]/15">
+                {!prefersReducedMotion && ready && (
+                  <motion.span
+                    className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-transparent via-[#e2b36d] to-transparent"
+                    initial={{ y: '-100%' }}
+                    animate={{ y: '200%' }}
+                    transition={{
+                      duration: 2.2,
+                      delay: INTRO.cue.delay + 0.4,
+                      repeat: Infinity,
+                      repeatDelay: 0.4,
+                      ease: [0.65, 0, 0.35, 1],
+                    }}
+                  />
+                )}
+              </span>
+            </motion.div>
+          </motion.div>
         </div>
       </div>
 
@@ -123,26 +232,28 @@ export function HeroSection() {
           }}
           className="relative z-20 lg:col-span-6 xl:col-span-7 flex flex-col justify-center space-y-6 sm:space-y-7 text-left lg:-translate-y-35 xl:-translate-y-40 2xl:-translate-y-71 will-change-transform"
         >
-          {/* Main Headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 35 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-            className="font-lora text-3xl sm:text-4xl md:text-5xl lg:text-[3rem] xl:text-[3.5rem] 2xl:text-[4.15rem] font-medium text-[#ded7cb] leading-[1.14] tracking-tight"
-          >
-            <span className="block sm:whitespace-nowrap">
+          {/* Main Headline: line by line */}
+          <h1 className="font-lora text-3xl sm:text-4xl md:text-5xl lg:text-[3rem] xl:text-[3.5rem] 2xl:text-[4.15rem] font-medium text-[#ded7cb] leading-[1.14] tracking-tight">
+            <motion.span
+              {...enter({ delay: INTRO.lines.delay, duration: INTRO.lines.duration }, 28)}
+              className="block sm:whitespace-nowrap"
+            >
               BE <span className="text-[#c5944e]">AWARE</span> OF YOUR
-            </span>
-            <span className="block sm:whitespace-nowrap">
+            </motion.span>
+            <motion.span
+              {...enter(
+                { delay: INTRO.lines.delay + INTRO.lines.stagger, duration: INTRO.lines.duration },
+                28,
+              )}
+              className="block sm:whitespace-nowrap"
+            >
               RIGHTS, MOVE <span className="text-[#c5944e]">NOW</span>.
-            </span>
-          </motion.h1>
+            </motion.span>
+          </h1>
 
           {/* Subtext description */}
           <motion.p
-            initial={{ opacity: 0, y: 25 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.85, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+            {...enter(INTRO.subtext, 18)}
             className="text-[#a69c8f] text-sm sm:text-base lg:text-[1rem] xl:text-[1.1rem] 2xl:text-[1.23rem] leading-relaxed max-w-xl xl:max-w-none xl:w-[800px] 2xl:w-[860px] text-balance font-inter font-light"
           >
             Understand Philippine laws and jurisprudence with AI-powered legal
@@ -151,17 +262,19 @@ export function HeroSection() {
 
           {/* CTA Action Buttons */}
           <motion.div
-            initial={{ opacity: 0, y: 25 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.85, delay: 0.28, ease: [0.16, 1, 0.3, 1] }}
+            {...enter(INTRO.ctas, 18)}
             className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2"
           >
-            {/* Chat with our AI (Solid Warm Gold) */}
+            {/* Chat with our AI (Solid Warm Gold), with a light sheen on hover */}
             <Link
               href="/chat"
-              className="inline-flex items-center justify-center bg-[#D39758] hover:bg-[#d6a25b] active:scale-[0.98] text-[#160c0d] font-lora font-medium text-[0.9rem] sm:text-sm tracking-[0.14em] px-7 py-3.5 rounded transition-all duration-200 text-center shadow-lg shadow-black/35"
+              className="group relative inline-flex items-center justify-center overflow-hidden bg-[#D39758] hover:bg-[#d6a25b] hover:shadow-[0_10px_30px_-8px_rgba(211,151,88,0.55)] active:scale-[0.98] text-[#160c0d] font-lora font-medium text-[0.9rem] sm:text-sm tracking-[0.14em] px-7 py-3.5 rounded transition-all duration-300 text-center shadow-lg shadow-black/35"
             >
-              Chat with our AI
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -translate-x-[140%] skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-[380%]"
+              />
+              <span className="relative">Chat with our AI</span>
             </Link>
 
             {/* Book a Consultation (Outlined Warm Gold) */}
@@ -184,17 +297,22 @@ export function HeroSection() {
             }}
             className="relative w-full max-w-[480px] sm:max-w-[560px] lg:max-w-none lg:w-[580px] xl:w-[680px] 2xl:w-[780px] lg:-mr-12 xl:-mr-20 2xl:-mr-32 h-auto flex items-center justify-center pointer-events-none will-change-transform"
           >
+            {/* Warm halo behind the statue */}
             <motion.div
-              initial={{ opacity: 0, y: 50, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 1.1, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+              aria-hidden="true"
+              {...enter(INTRO.halo)}
+              className="pointer-events-none absolute left-1/2 top-[36%] -z-10 aspect-square w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(197,148,78,0.15),rgba(197,148,78,0.045)_55%,transparent_78%)]"
+            />
+
+            <motion.div
+              {...enter(INTRO.statue, 40)}
               style={{
                 maskImage:
                   'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 56%, rgba(0,0,0,0.85) 68%, rgba(0,0,0,0.25) 80%, rgba(0,0,0,0) 90%)',
                 WebkitMaskImage:
                   'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 56%, rgba(0,0,0,0.85) 68%, rgba(0,0,0,0.25) 80%, rgba(0,0,0,0) 90%)',
               }}
-              className="w-full h-auto flex items-center justify-center"
+              className="w-full h-auto flex items-center justify-center will-change-transform"
             >
               <Image
                 src="/actual_images/lady_justice.png"
@@ -202,6 +320,8 @@ export function HeroSection() {
                 width={1180}
                 height={2092}
                 priority
+                onLoad={() => markReady('statue')}
+                onError={() => markReady('statue')}
                 className="w-full h-auto object-contain filter drop-shadow-[0_20px_45px_rgba(0,0,0,0.85)]"
               />
             </motion.div>

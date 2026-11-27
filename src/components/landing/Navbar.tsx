@@ -1,28 +1,69 @@
 'use client';
 
 import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface NavbarProps {
   onOpenSignIn?: () => void;
   onOpenSignUp?: () => void;
+  /** The bar stays hidden until this is true, so it can join the page's entrance sequence. */
+  introReady?: boolean;
+  /** Seconds after `introReady` before the bar fades in. */
+  introDelay?: number;
 }
+
+const EASE = [0.22, 1, 0.36, 1] as const;
 
 const signUpClass =
   'font-lora text-[13.5px] font-medium tracking-[0.15em] bg-gradient-to-r from-[#c5944e] to-[#d6a25b] hover:from-[#d6a25b] hover:to-[#e4b574] text-[#160c0d] px-5 py-2 rounded transition-all duration-300 block shadow-sm hover:shadow-[0_4px_16px_rgba(197,148,78,0.35)]';
 const mobileSignUpClass = 'w-full font-lora text-center text-xs font-bold tracking-[0.15em] bg-[#c5944e] text-[#160c0d] py-2.5 rounded transition-colors duration-300 hover:bg-[#d6a25b]';
 
-export function Navbar({ onOpenSignIn, onOpenSignUp }: NavbarProps) {
+/** Below this scroll position the bar is always shown. */
+const ALWAYS_SHOWN_ABOVE = 140;
+/** Scroll distance (px) in one direction before the bar hides or comes back. */
+const DIRECTION_THRESHOLD = 8;
+
+/**
+ * Smooth-scrolls to a section. Pinned sections can set `data-nav-landing` (0 → 1) to land
+ * partway through their pinned track, where their content is already revealed, instead of
+ * at the very top where it hasn't started animating yet.
+ */
+function scrollToSection(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return false;
+  const landing = Math.min(1, Math.max(0, Number(el.dataset.navLanding ?? 0) || 0));
+  const top = el.getBoundingClientRect().top + window.scrollY;
+  const track = Math.max(0, el.offsetHeight - window.innerHeight);
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: top + track * landing, behavior: reduced ? 'instant' : 'smooth' });
+  history.replaceState(null, '', `#${id}`);
+  return true;
+}
+
+export function Navbar({ onOpenSignIn, onOpenSignUp, introReady = true, introDelay = 0 }: NavbarProps) {
   const [activeSection, setActiveSection] = useState<'home' | 'about' | 'features'>('home');
   const [isScrolled, setIsScrolled] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [entered, setEntered] = useState(false);
+  const lastYRef = useRef(0);
 
   useEffect(() => {
     const handleScroll = () => {
       const scrollPos = window.scrollY;
       setIsScrolled(scrollPos > 30);
+
+      // Get out of the way while reading down the page; come back on any scroll up
+      const dy = scrollPos - lastYRef.current;
+      if (scrollPos < ALWAYS_SHOWN_ABOVE) {
+        setHidden(false);
+        lastYRef.current = scrollPos;
+      } else if (Math.abs(dy) >= DIRECTION_THRESHOLD) {
+        setHidden(dy > 0);
+        lastYRef.current = scrollPos;
+      }
 
       const aboutEl = document.getElementById('about');
       const featuresEl = document.getElementById('features');
@@ -37,9 +78,17 @@ export function Navbar({ onOpenSignIn, onOpenSignUp }: NavbarProps) {
       }
     };
 
+    handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  const shown = !hidden || mobileMenuOpen;
+
+  const goTo = (e: React.MouseEvent<HTMLAnchorElement>, id: 'home' | 'about' | 'features') => {
+    if (scrollToSection(id)) e.preventDefault();
+    setActiveSection(id);
+  };
 
   const navLinks = [
     { id: 'home', label: 'HOME', href: '#home' },
@@ -49,9 +98,17 @@ export function Navbar({ onOpenSignIn, onOpenSignUp }: NavbarProps) {
 
   return (
     <motion.header
-      initial={{ y: -40, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      initial={{ y: -16, opacity: 0 }}
+      animate={{ y: !introReady ? -16 : shown ? 0 : '-110%', opacity: introReady ? 1 : 0 }}
+      transition={
+        entered
+          ? { y: { duration: 0.6, ease: EASE }, opacity: { duration: 0.3 } }
+          : { duration: 1.1, delay: introDelay, ease: EASE }
+      }
+      onAnimationComplete={() => {
+        if (introReady && !entered) setEntered(true);
+      }}
+      onFocusCapture={() => setHidden(false)}
       className={`fixed top-0 left-0 right-0 z-50 border-b transition-[background-color,border-color,padding,box-shadow,backdrop-filter] duration-300 ease-out ${
         isScrolled
           ? 'bg-[#140a0c]/90 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.6)] py-4 lg:py-4.5 border-[#3c2a1c]/60'
@@ -77,7 +134,7 @@ export function Navbar({ onOpenSignIn, onOpenSignUp }: NavbarProps) {
               <a
                 key={item.id}
                 href={item.href}
-                onClick={() => setActiveSection(item.id)}
+                onClick={(e) => goTo(e, item.id)}
                 className={`relative py-2 font-lora text-[14.5px] lg:text-[15px] font-normal tracking-[0.2em] uppercase transition-colors duration-250 ${
                   isActive ? 'text-[#c5944e]' : 'text-[#b8ada0] hover:text-[#ded7cb]'
                 }`}
@@ -196,9 +253,9 @@ export function Navbar({ onOpenSignIn, onOpenSignUp }: NavbarProps) {
             <div className="flex flex-col space-y-3 font-lora text-sm tracking-[0.15em]">
               <a
                 href="#home"
-                onClick={() => {
-                  setActiveSection('home');
+                onClick={(e) => {
                   setMobileMenuOpen(false);
+                  goTo(e, 'home');
                 }}
                 className="text-[#ded7cb] hover:text-[#c5944e] py-1 border-b border-[#291b10]"
               >
@@ -206,9 +263,9 @@ export function Navbar({ onOpenSignIn, onOpenSignUp }: NavbarProps) {
               </a>
               <a
                 href="#about"
-                onClick={() => {
-                  setActiveSection('about');
+                onClick={(e) => {
                   setMobileMenuOpen(false);
+                  goTo(e, 'about');
                 }}
                 className="text-[#ded7cb] hover:text-[#c5944e] py-1 border-b border-[#291b10]"
               >
@@ -216,9 +273,9 @@ export function Navbar({ onOpenSignIn, onOpenSignUp }: NavbarProps) {
               </a>
               <a
                 href="#features"
-                onClick={() => {
-                  setActiveSection('features');
+                onClick={(e) => {
                   setMobileMenuOpen(false);
+                  goTo(e, 'features');
                 }}
                 className="text-[#ded7cb] hover:text-[#c5944e] py-1 border-b border-[#291b10]"
               >

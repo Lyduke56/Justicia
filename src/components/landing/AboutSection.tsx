@@ -204,6 +204,8 @@ export function AboutSection() {
     <section
       ref={containerRef}
       id="about"
+      // The navbar's ABOUT link lands here, after the paragraphs have been revealed
+      data-nav-landing={T.paragraph2[1] + 0.02}
       className={`relative ${prefersReducedMotion ? '' : SECTION_HEIGHT}`}
     >
       {/* Sticky viewport frame: locks in place while the full sequence plays */}
