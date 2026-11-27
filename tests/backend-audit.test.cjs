@@ -209,10 +209,38 @@ test('sign-up refuses a used email, an obfuscated existing user and a missing co
   const noTerms = await auth.signUpAction(null, form('fresh@example.com', { terms: false }));
   assert.match(noTerms.error, /agree to the Terms/);
   // Supabase answered with a fake user (no identities): treated as already registered.
-  s.authClient.auth.signUp = async () => ({ data: { user: { id: 'fake', identities: [] } }, error: null });
+  s.db.auth.admin.createUser = async () => ({ data: { user: { id: 'fake', identities: [] } }, error: null });
   const obfuscated = await auth.signUpAction(null, form('fresh@example.com'));
   assert.match(obfuscated.error, /already registered/);
+  // An auth user the app tables do not know about yet.
+  s.db.auth.admin.createUser = async () => ({ data: { user: null }, error: { code: 'email_exists', status: 422, message: 'A user with this email address has already been registered' } });
+  const exists = await auth.signUpAction(null, form('fresh@example.com'));
+  assert.equal(exists.field, 'email');
+  assert.match(exists.error, /already registered/);
   assert.equal(s.db.writes.filter((w) => w.table === 'user_accounts').length, 0, 'nothing written for refused sign-ups');
+});
+
+test('sign-up creates the account unconfirmed (our own verification email confirms it), never through public signUp', async () => {
+  const s = sandbox({ seed: people() });
+  const auth = s.load('@/app/actions/auth');
+  let created = null;
+  s.db.auth.admin.createUser = async (attrs) => {
+    created = attrs;
+    const user = { id: '00000000-0000-4000-8000-0000000000aa', email: attrs.email, identities: [{}], app_metadata: {}, user_metadata: attrs.user_metadata };
+    s.db.authUsers.set(user.id, user);
+    return { data: { user }, error: null };
+  };
+  s.authClient.auth.signUp = async () => { throw new Error('public signUp would sign the person straight in'); };
+  const fd = new FormData();
+  fd.set('full_name', 'Juan Dela Cruz');
+  fd.set('email', 'Fresh@Example.com');
+  fd.set('password', 'longpassword');
+  fd.set('role', 'lawyer');
+  fd.set('accept_terms', 'yes');
+  await assert.rejects(auth.signUpAction(null, fd), (e) => e.url === '/verify-email');
+  assert.equal(created.email, 'fresh@example.com');
+  assert.equal(created.email_confirm, false);
+  assert.equal(created.user_metadata.role, 'lawyer');
 });
 
 // ─── Guards ──────────────────────────────────────────────────────────────────

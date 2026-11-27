@@ -73,6 +73,11 @@ function extraModule(name) {
     case '@/lib/email/notificationEmail':
       // Emails go through the network; the sandboxes only check the bell rows.
       return { queueNotificationEmail: () => {}, sendNotificationEmail: async () => false, appUrl: () => 'https://justicia.ph' };
+    case '@/lib/auth/verificationEmail':
+      // The sign-up verification email goes through the network too.
+      return { sendSignupVerificationEmail: async () => false, resendSignupVerificationEmail: async () => {} };
+    case '@/lib/auth/verifyToken':
+      return loadReal('src/lib/auth/verifyToken.ts');
     case '@/lib/support':
       return { SUPPORT_EMAIL: 'support@justicia.ph', DELETION_GRACE_DAYS: 7 };
     case '@/lib/auth/demo':
