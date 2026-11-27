@@ -19,6 +19,7 @@ import { checkRateLimit, clientIp } from '@/lib/security/rateLimit';
 import { recordConsent } from '@/lib/legal';
 import { DEMO_COOKIE } from '@/lib/auth/demo';
 import { DELETION_GRACE_DAYS } from '@/lib/support';
+import { resendSignupVerificationEmail, sendSignupVerificationEmail } from '@/lib/auth/verificationEmail';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,31 +86,33 @@ export async function signUpAction(
   if (status === 'blocked') return { error: EMAIL_BLOCKED_MESSAGE, field: 'email' };
   if (status === 'in_use') return { error: EMAIL_IN_USE_MESSAGE, field: 'email' };
 
-  const supabase = await createClient();
-
-  const { data: signUpData, error } = await supabase.auth.signUp({
+  // Created unconfirmed through the admin API: Supabase's "Confirm email" is off (its mailer is
+  // rate limited), so a public signUp would sign the person straight in. An unconfirmed account
+  // cannot sign in ("Email not confirmed") until the link in our own email confirms it.
+  const { data: signUpData, error } = await db.auth.admin.createUser({
     email,
     password,
-    options: {
-      data: {
-        full_name: fullName,
-        role,
-      },
-      emailRedirectTo: `${siteUrl()}/auth/callback`,
+    email_confirm: false,
+    user_metadata: {
+      full_name: fullName,
+      role,
     },
   });
 
   if (error) {
-    if (error.message.toLowerCase().includes('already registered') || error.code === 'user_already_exists') {
+    if (
+      error.message.toLowerCase().includes('already registered') ||
+      error.code === 'user_already_exists' ||
+      error.code === 'email_exists'
+    ) {
       return { error: EMAIL_IN_USE_MESSAGE, field: 'email' };
     }
-    if (error.code === 'over_email_send_rate_limit' || error.status === 429) {
+    if (error.status === 429) {
       return { error: 'Too many sign-up attempts. Please wait a few minutes and try again.' };
     }
     return { error: error.message };
   }
 
-  // With email confirmation on, Supabase answers an existing address with a fake user (no identities).
   if (!signUpData?.user || isObfuscatedExistingUser(signUpData.user)) {
     return { error: EMAIL_IN_USE_MESSAGE, field: 'email' };
   }
@@ -131,6 +134,9 @@ export async function signUpAction(
   await syncAuthClaims(db, userId, { role: role as 'client' | 'lawyer' });
   // Consent to the Terms, Privacy Policy and AI disclaimer shown on the sign-up form.
   if (await ensureProfileRow(db, userId)) await recordConsent(db, userId, await clientIp());
+
+  // If it fails, /verify-email offers "send a new link".
+  await sendSignupVerificationEmail(userId, email);
 
   const cookieStore = await cookies();
   cookieStore.set(PENDING_EMAIL_COOKIE, email, {
@@ -169,15 +175,8 @@ export async function resendVerificationEmailAction(input?: { email?: string }):
     const limited = await checkRateLimit('resend_verification', email);
     if (limited) return { success: false, error: limited };
 
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email,
-      options: { emailRedirectTo: `${siteUrl()}/auth/callback` },
-    });
-    if (error && (error.status === 429 || /rate limit|seconds/i.test(error.message))) {
-      return { success: false, error: 'A link was sent recently. Please wait a minute before asking for another.' };
-    }
-    if (error) console.warn('[resendVerificationEmailAction]', error.message);
+    // Our own email (Gmail SMTP), only for an account that is still unconfirmed.
+    await resendSignupVerificationEmail(await serviceDb(), email);
     return {
       success: true,
       message: user

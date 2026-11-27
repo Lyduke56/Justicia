@@ -3,14 +3,15 @@
 /**
  * "Check your inbox" — shown right after sign-up. Same panel as the other auth dialogs: an
  * animated envelope, the three steps to finish, a resend link (with a short cooldown) and the
- * way back to sign in. Verification itself is unchanged: the emailed link goes to /auth/callback.
+ * way back to sign in. The emailed link goes to /auth/verify, which comes back here (?link=…)
+ * when the link has expired, does not work, or was already used.
  */
 import React from 'react';
 import Link from 'next/link';
 import { motion, useReducedMotion, type Variants } from 'motion/react';
 import { AuthPanelHeader } from './AuthPanel';
 import { ResendVerificationButton } from './ResendVerificationButton';
-import { authLinkClass } from './AuthFields';
+import { AuthAlert, authLinkClass } from './AuthFields';
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -54,15 +55,37 @@ function EnvelopeIcon() {
   );
 }
 
-export function VerifyEmailPanel() {
+/** Why /auth/verify sent the person back here instead of signing them in. */
+export type VerifyLinkStatus = 'expired' | 'invalid' | 'verified';
+
+const LINK_NOTICES: Record<VerifyLinkStatus, { tone: 'warning' | 'error' | 'success'; title: string; text: string }> = {
+  expired: { tone: 'warning', title: 'This link has expired', text: 'Verification links work for 24 hours. Send yourself a new one below.' },
+  invalid: { tone: 'error', title: 'This link does not work', text: 'Open the newest email from Justicia, or send yourself a new link below.' },
+  verified: { tone: 'success', title: 'Your email is verified', text: 'Your account is active. Sign in to get started.' },
+};
+
+export function VerifyEmailPanel({ linkStatus }: { linkStatus?: VerifyLinkStatus }) {
+  const notice = linkStatus ? LINK_NOTICES[linkStatus] : null;
   return (
     <>
       <AuthPanelHeader
         titleId="verify-email-title"
         icon={<EnvelopeIcon />}
-        title="Check your inbox"
-        subtitle="We sent a verification link to your email address. Click it to activate your account."
+        title={linkStatus === 'verified' ? 'Email verified' : 'Check your inbox'}
+        subtitle={
+          linkStatus === 'verified'
+            ? 'Thanks for confirming your email address.'
+            : 'We sent a verification link to your email address. Click it to activate your account.'
+        }
       />
+
+      {notice && (
+        <div className="mt-6">
+          <AuthAlert tone={notice.tone} title={notice.title}>
+            {notice.text}
+          </AuthAlert>
+        </div>
+      )}
 
       <motion.ol variants={list} initial="hidden" animate="show" className="mt-7 space-y-3">
         {STEPS.map((step, i) => (

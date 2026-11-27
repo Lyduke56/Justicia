@@ -24,6 +24,7 @@ export const PUBLIC_ROUTES = [
   '/forgot-password',
   '/auth/callback',       // Supabase email confirmation + password reset code exchange
   '/auth/reset-password', // Set new password after reset link
+  '/auth/verify',         // Sign-up verification link from our own email (lib/auth/verificationEmail)
   '/lawyers',             // Public lawyer profiles (/lawyers/[id])
   '/lawyer/register',     // Lawyer registration flow (account creation + application)
   '/api/ai/chat',         // AI chat endpoint
