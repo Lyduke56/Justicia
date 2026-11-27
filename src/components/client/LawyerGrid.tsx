@@ -450,10 +450,10 @@ function FindLawyerCard({
             {/* Full Name in Lora with truncation */}
             <motion.h3
               variants={FADE_UP}
-              title={`${lawyer.fullName}, Ll.B.`}
+              title={lawyer.fullName}
               className="font-lora font-bold text-xs sm:text-[13.5px] lg:text-[14px] text-[#34150F] truncate block w-full group-hover:text-[#C58B3C] transition-colors leading-snug"
             >
-              {lawyer.fullName}, Ll.B.
+              {lawyer.fullName}
             </motion.h3>
 
             {/* Roll No & IBP Chapter in Inter with truncation */}

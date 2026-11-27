@@ -76,10 +76,16 @@ export function useScreenTransition(pathname: string) {
   return { pending: pending !== null, loading: pending !== null && pending.visibleAt !== null, start };
 }
 
-/** Covers its positioned parent with the global loading screen while `show` is true. */
+/**
+ * Covers its positioned parent with the global loading screen while `show` is true.
+ *
+ * `initial={false}`: when the page first loads with the screen covered, the overlay is there in
+ * the server-rendered HTML at full opacity (not faded in after hydration), so it is the one
+ * loading screen from the very first paint. Later shows still fade in.
+ */
 export function ScreenTransitionOverlay({ show, background }: { show: boolean; background?: string }) {
   return (
-    <AnimatePresence>
+    <AnimatePresence initial={false}>
       {show && (
         <motion.div
           key="screen-transition"

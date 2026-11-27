@@ -1344,30 +1344,6 @@ input[type='number']::-webkit-outer-spin-button {
    Skeleton placeholders were retired in favour of these.
    ───────────────────────────────────────────────────────────────────────────── */
 
-/* Ring held in the GIF's place while the picture downloads. */
-@keyframes screenLoaderRing {
-  0% {
-    transform: scale(0.82);
-    opacity: 0.35;
-  }
-  50% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(0.82);
-    opacity: 0.35;
-  }
-}
-
-.screen-loader-ring {
-  border: 3px solid rgba(197, 139, 60, 0.55);
-  box-shadow:
-    4px 4px 10px rgba(206, 194, 183, 0.9),
-    -4px -4px 9px rgba(252, 238, 223, 0.9);
-  animation: screenLoaderRing 1.6s ease-in-out infinite;
-}
-
 /* "Loading..." – the three dots light up in turn. */
 @keyframes screenLoaderDot {
   0%,
@@ -1436,7 +1412,6 @@ input[type='number']::-webkit-outer-spin-button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .screen-loader-ring,
   .screen-loader-dots > span,
   .ink-dots > span {
     animation: none;

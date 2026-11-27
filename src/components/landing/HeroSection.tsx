@@ -315,10 +315,10 @@ export function HeroSection({ onIntroStart }: HeroSectionProps) {
               className="w-full h-auto flex items-center justify-center will-change-transform"
             >
               <Image
-                src="/actual_images/lady_justice.png"
+                src="/actual_images/lady_justice.svg"
                 alt="Statue of Lady Justice holding scales and sword"
-                width={1180}
-                height={2092}
+                width={627}
+                height={1116}
                 priority
                 onLoad={() => markReady('statue')}
                 onError={() => markReady('statue')}

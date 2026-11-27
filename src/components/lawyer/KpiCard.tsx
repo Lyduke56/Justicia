@@ -107,6 +107,7 @@ export function KpiCard({
   actionLabel,
   valueTitle,
   labelClassName = 'font-lora text-[15.5px] font-medium text-[#341512]',
+  singleLine = false,
 }: {
   label: React.ReactNode;
   /** null shows the inline loader. */
@@ -117,9 +118,13 @@ export function KpiCard({
   actionLabel: string;
   /** Exact figure shown on hover (e.g. the full peso amount). */
   valueTitle?: string;
-  /** Typography of the label (the admin Overview uses a formal small-caps style). */
+  /** Typography of the label. */
   labelClassName?: string;
+  /** Keeps the label and the note on one line each, cutting them short with an ellipsis (the full
+   *  text shows on hover) when the card is too narrow. */
+  singleLine?: boolean;
 }) {
+  const clip = singleLine ? 'min-w-0 truncate' : '';
   return (
     <motion.button
       type="button"
@@ -127,11 +132,13 @@ export function KpiCard({
       onClick={onClick}
       whileTap={{ scale: 0.985 }}
       aria-label={`${typeof label === 'string' ? label : ''}. ${actionLabel}`}
-      className="lawyer-dash-kpi group flex h-full flex-col rounded-[18px] bg-[#E5D8CB] px-4 pb-5 pt-4 text-left sm:px-5"
+      className="lawyer-dash-kpi group flex h-full min-w-0 flex-col rounded-[18px] bg-[#E5D8CB] px-4 pb-5 pt-4 text-left sm:px-5"
     >
       <motion.span variants={RISE} className="flex items-center justify-between gap-2">
-        <span className={labelClassName}>{label}</span>
-        <span className="lawyer-dash-kpi-arrow flex items-center gap-1 font-inter text-[10px] font-semibold uppercase tracking-wider text-[#B07A34]" aria-hidden>
+        <span className={`${labelClassName} ${clip}`} title={singleLine && typeof label === 'string' ? label : undefined}>
+          {label}
+        </span>
+        <span className="lawyer-dash-kpi-arrow flex shrink-0 items-center gap-1 font-inter text-[10px] font-semibold uppercase tracking-wider text-[#B07A34]" aria-hidden>
           {actionLabel.split(' ')[0]}
           <ChevronRightIcon className="h-3 w-3" />
         </span>
@@ -143,11 +150,14 @@ export function KpiCard({
       >
         <span className="flex items-center gap-3 text-[#341512]">
           {icon}
-          <span className="font-lora text-[34px] font-semibold leading-none sm:text-[38px]" title={valueTitle}>
+          <span className={`font-lora text-[34px] font-semibold leading-none sm:text-[38px] ${singleLine ? 'whitespace-nowrap' : ''}`} title={valueTitle}>
             {value ?? <InlineLoader className="text-[18px]" label="Loading value" />}
           </span>
         </span>
-        <span className="mt-2.5 block min-h-[1rem] font-inter text-[11px] leading-snug text-[#5C4535]">
+        <span
+          className={`mt-2.5 block min-h-[1rem] font-inter text-[11px] leading-snug text-[#5C4535] ${clip}`}
+          title={singleLine && subtitle ? subtitle : undefined}
+        >
           {subtitle ?? <InlineLoader className="text-[9px]" label="Loading details" />}
         </span>
       </motion.span>

@@ -533,14 +533,6 @@
 }
 .admin-portal .admin-button:hover:not(:disabled) { background: #eddfcc; }
 .admin-portal .admin-button:active:not(:disabled) { box-shadow: var(--admin-pressed); }
-.admin-portal .admin-account-menu {
-  border: 1px solid #c5b29e;
-  border-radius: 16px;
-  background: var(--admin-paper);
-  color: var(--admin-ink);
-  box-shadow: 8px 12px 28px rgba(42, 24, 16, 0.25), inset 1px 1px 1px #fff4e6;
-}
-.admin-portal .admin-account-menu p + p { color: #705744; }
 .admin-portal .admin-status {
   --status-paper: #e4dace;
   --status-ink: #645344;

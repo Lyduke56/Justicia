@@ -20,6 +20,7 @@ import { guardMessage, requireActiveAccount } from '@/lib/auth/guards';
 import { readDatabaseRole, syncAuthClaims } from '@/lib/auth/roles';
 import { applicantCanEdit, applicantCanSubmit, documentGapMessage } from '@/lib/lawyer/verification';
 import { loadCurrentDocuments } from '@/lib/lawyer/documentsServer';
+import { bareAttorneyName } from '@/lib/utils/attorneyName';
 import type { Database } from '@/types/database';
 
 export type LawyerRegState = { error?: string; success?: string; step?: number } | null;
@@ -118,7 +119,8 @@ export async function saveLawyerDraftAction(
 
     await becomeLawyer(ctx.db, ctx.user.id);
 
-    const profileData = profileFromForm(formData, ctx.user.id, text(formData, 'full_name', 120) ?? '', rollNumber);
+    // Stored without a typed title or degree; every display adds a single "Atty.".
+    const profileData = profileFromForm(formData, ctx.user.id, bareAttorneyName(text(formData, 'full_name', 120) ?? ''), rollNumber);
     profileData.verification_status = 'draft';
 
     const { error } = await ctx.db
@@ -155,7 +157,7 @@ export async function submitLawyerApplicationAction(
 
     const rollNumber = text(formData, 'roll_number', 60);
     if (!rollNumber) return { error: 'Roll number is required.' };
-    const fullName = text(formData, 'full_name', 120);
+    const fullName = bareAttorneyName(text(formData, 'full_name', 120) ?? '');
     if (!fullName) return { error: 'Full name is required.' };
 
     const { data: existing } = await ctx.db
