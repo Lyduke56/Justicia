@@ -1,8 +1,9 @@
 'use client';
 
 /**
- * The loading screen of the app: a looping illustration (one of the three GIFs in public/assets,
- * picked at random and never the same twice in a row) with "Loading..." under it.
+ * The loading screen of the app: a looping illustration (one of the three pictures in
+ * public/assets/loading, picked at random and never the same twice in a row) with "Loading..."
+ * under it.
  *
  * Only for whole-screen loads and screen / tab switches. Content loading inside a screen (a tab's
  * data, a list, a chart, a picker) uses PanelLoader, the plain spinner, instead.
@@ -10,14 +11,22 @@
  * Variants
  *  - fullscreen: covers the whole window (e.g. while sign-in hands over to a portal).
  *  - overlay:    covers its positioned parent (the portal's content area during a tab switch).
- *  - page:       fills the portal's content area as a route's loading.tsx fallback. It sits in the
- *                same spot as `overlay`, so the two hand over without a jump.
+ *  - page:       fills the portal's content area (a route's loading.tsx, a tab's first load).
  *
- * The picture is only rendered in the browser (the pick is random), and it fades in once loaded
- * so a slow first download never shows a broken or half-drawn image.
+ * One loading screen at a time: inside a portal shell, the shell's overlay is the loading
+ * screen. A `page` loader there draws nothing of its own while the overlay is up; it only keeps
+ * the overlay up (useScreenLoading) until the real page replaces it. Two pictures can't stack
+ * or cross-fade in different places.
+ *
+ * The picture is only rendered in the browser (the pick is random). The pictures are preloaded
+ * from the document head as soon as any loader renders (on the server too), and the picture
+ * fades in once decoded; until then its space stays empty under "Loading..." (no placeholder
+ * shape that could flash).
  */
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { loaderHidden, loaderShown, pickLoadingGif } from './loadingGifs';
+import { preload } from 'react-dom';
+import { LOADING_GIFS, loaderHidden, loaderShown, pickLoadingGif } from './loadingGifs';
+import { useInScreenSlot, useScreenLoading, useScreenReveal } from './screenSlot';
 
 export type ScreenLoaderVariant = 'fullscreen' | 'overlay' | 'page';
 
@@ -47,13 +56,25 @@ export interface ScreenLoaderProps {
   className?: string;
 }
 
-export function ScreenLoader({
-  variant = 'page',
-  label = 'Loading...',
-  srLabel,
-  background,
-  className = '',
-}: ScreenLoaderProps) {
+export function ScreenLoader(props: ScreenLoaderProps) {
+  const { variant = 'page', background, className = '' } = props;
+  const inSlot = useInScreenSlot();
+  const { revealed } = useScreenReveal();
+  const slotted = variant === 'page' && inSlot;
+  // Inside a shell, keep its loading screen up until this placeholder is replaced.
+  useScreenLoading(slotted);
+
+  if (slotted && !revealed) {
+    // The shell's overlay is showing the loading screen: hold the space, draw nothing.
+    return <div aria-hidden="true" className={`${FRAME.page} ${className}`} style={background ? { backgroundColor: background } : undefined} />;
+  }
+  return <LoaderScreen {...props} />;
+}
+
+function LoaderScreen({ variant = 'page', label = 'Loading...', srLabel, background, className = '' }: ScreenLoaderProps) {
+  // Start fetching every picture right away; on the server this puts preload links in the head.
+  for (const src of LOADING_GIFS) preload(src, { as: 'image', type: 'image/webp' });
+
   // false during SSR and hydration, true afterwards: the random pick never causes a mismatch.
   const inBrowser = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const [gif] = useState(pickLoadingGif);
@@ -78,22 +99,22 @@ export function ScreenLoader({
       className={`flex flex-col items-center justify-center select-none ${FRAME[variant]} ${className}`}
       style={background ? { backgroundColor: background } : undefined}
     >
+      {/* The picture's space is held while it loads, so nothing moves when it appears. */}
       <div className={`relative grid place-items-center ${GIF_SIZE[variant]}`} aria-hidden="true">
-        {/* Held space + a soft caramel ring while the picture downloads. */}
-        {!loaded && <span className="screen-loader-ring absolute size-16 rounded-full" />}
         {inBrowser && (
-          // eslint-disable-next-line @next/next/no-img-element -- animated GIF, served as-is
+          // eslint-disable-next-line @next/next/no-img-element -- animated picture, served as-is
           <img
             src={gif}
             alt=""
             draggable={false}
             decoding="async"
+            fetchPriority="high"
             ref={(img) => {
               // Already cached: `load` may have fired before React attached the handler.
               if (img?.complete && img.naturalWidth > 0 && loadedSrc !== gif) setLoadedSrc(gif);
             }}
             onLoad={() => setLoadedSrc(gif)}
-            className={`relative size-full object-contain transition-[opacity,transform] duration-500 ease-out ${
+            className={`relative size-full object-contain transition-[opacity,transform] duration-300 ease-out ${
               loaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
             }`}
           />

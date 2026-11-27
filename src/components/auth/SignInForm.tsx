@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion, type Variants } from 'motion/react';
 import { signInAction, type AuthState } from '@/app/actions/auth';
-import { ScreenLoader } from '@/components/shared/loading';
+import { ScreenLoader, warmLoadingGifs } from '@/components/shared/loading';
 import { ResendVerificationButton } from './ResendVerificationButton';
 import {
   AuthAlert,
@@ -81,6 +81,10 @@ export function SignInForm({
   const [submitCount, setSubmitCount] = useState(0);
   const [handoffFor, setHandoffFor] = useState(-1);
   const handoff = isPending && handoffFor === submitCount;
+  // The "signing you in" loading screen should have its picture ready when it appears.
+  useEffect(() => {
+    warmLoadingGifs();
+  }, []);
   useEffect(() => {
     if (!isPending) return;
     const timer = setTimeout(() => setHandoffFor(submitCount), HANDOFF_DELAY_MS);

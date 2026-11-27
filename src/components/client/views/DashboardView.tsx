@@ -14,7 +14,7 @@ import { useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 function toLawyerItem(l: PublicLawyerProfile): LawyerItem {
   return {
     id: l.userId,
-    name: `${l.fullName}, Ll.B.`,
+    name: l.fullName,
     rollNumber: l.rollNumber || '58942',
     chapter: l.ibpChapter?.toUpperCase() || 'MAKATI',
     specializations: l.practiceAreas.length ? l.practiceAreas.slice(0, 3) : ['Labor & Employment', 'Corporate', 'Civil Law'],

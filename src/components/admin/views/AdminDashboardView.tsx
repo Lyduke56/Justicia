@@ -62,7 +62,6 @@ const APP_COLS = 'grid-cols-[minmax(0,1fr)_96px_14px] @[30rem]:grid-cols-[minmax
 const ACTIVITY_COLS = 'grid-cols-[minmax(0,1fr)_92px_14px]';
 /** Formal small-caps label used for the KPI titles, panel headings and column headers. */
 const CAPS = 'font-inter font-semibold uppercase tracking-[0.14em]';
-const KPI_LABEL = `text-[11px] text-[#5C4535] ${CAPS}`;
 /** Rows shown when the page flows (phones, short windows) or before the list is measured. */
 const FLOW_ROWS = 5;
 /**
@@ -255,7 +254,7 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
     ? openReports === 0
       ? 'Nothing needs a decision.'
       : reports.underReview > 0
-        ? `${reports.underReview} under review, ${reports.open} not started.`
+        ? `${reports.underReview} in review, ${reports.open} not started.`
         : `${plural(reports.open, 'report')} not yet reviewed.`
     : extra || extraFailed
       ? 'Unavailable right now.'
@@ -276,7 +275,7 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
         <motion.section variants={GROUP} aria-label="Platform figures" className="grid shrink-0 grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
             label="Awaiting Review"
-            labelClassName={KPI_LABEL}
+            singleLine
             value={<CountUp value={pendingLawyersCount} format={formatCount} />}
             subtitle={waiting}
             icon={<QueueShieldIcon className="h-10 w-10 shrink-0" />}
@@ -285,7 +284,7 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
           />
           <KpiCard
             label="Approved Lawyers"
-            labelClassName={KPI_LABEL}
+            singleLine
             value={<CountUp value={approvedLawyersCount} format={formatCount} />}
             subtitle={approved}
             icon={<ScalesIcon className="h-10 w-10 shrink-0" />}
@@ -294,7 +293,7 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
           />
           <KpiCard
             label="Registered Users"
-            labelClassName={KPI_LABEL}
+            singleLine
             value={<CountUp value={totalUsersCount} format={formatCount} />}
             subtitle={users}
             icon={<PeopleIcon className="h-10 w-10 shrink-0" />}
@@ -303,7 +302,7 @@ export function AdminDashboardView({ pendingLawyersCount, approvedLawyersCount, 
           />
           <KpiCard
             label="Open Reports"
-            labelClassName={KPI_LABEL}
+            singleLine
             value={extra ? (openReports === null ? '—' : <CountUp value={openReports} format={formatCount} />) : extraFailed ? '—' : null}
             subtitle={reportsNote}
             icon={<ReportFlagIcon className="h-10 w-10 shrink-0" />}

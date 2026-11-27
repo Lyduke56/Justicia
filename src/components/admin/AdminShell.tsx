@@ -1,20 +1,19 @@
 'use client';
 
 import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { KeepAliveViews, ROUTE_SLOT } from '@/components/live/KeepAliveViews';
 import { adminTabViews } from './AdminTabs';
 import './admin.css';
 import { usePathname, useRouter } from 'next/navigation';
-import { NotificationBell } from '@/components/client/ClientTopbar';
+import { ClientTopbar } from '@/components/client/ClientTopbar';
 import { getAdminNotificationsAction, type AdminNotification } from '@/app/actions/adminNotificationActions';
 import { SignOutConfirmModal } from '@/components/shared/SignOutConfirmModal';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
-import { useMyAvatar, useMyAvatarSync } from '@/components/account/avatarStore';
-import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
+import { useMyAvatarSync } from '@/components/account/avatarStore';
 import { ScreenTransitionOverlay, useScreenGate } from '@/components/shared/loading';
-import { HomeIcon, UserCircleIcon, GearIcon, ShieldCheckIcon, ScaleIcon, UserGroupIcon, DocumentTextIcon, LogoutIcon, FlagIcon, EarningsIcon } from './AdminIcons';
+import { HomeIcon, GearIcon, ShieldCheckIcon, ScaleIcon, UserGroupIcon, DocumentTextIcon, LogoutIcon, FlagIcon, EarningsIcon } from './AdminIcons';
 
 const navigation = [
   { name: 'Overview', href: '/admin/dashboard', icon: HomeIcon, active: (path: string) => path === '/admin/dashboard' },
@@ -31,7 +30,6 @@ const navClass = (active: boolean) => `admin-nav-link flex w-full items-center g
 export function AdminShell({ user, children }: { user: { id: string; email?: string; fullName: string; avatarUrl?: string | null }; children: ReactNode }) {
   useInactivityLogout();
   useMyAvatarSync(user.avatarUrl);
-  const myAvatar = useMyAvatar(user.avatarUrl);
   const pathname = usePathname();
   const router = useRouter();
   // The loading screen covers the content area until the screen has everything it needs; the
@@ -39,14 +37,11 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
   const activeSlot = Object.hasOwn(adminTabViews, pathname) ? pathname : ROUTE_SLOT;
   const { covered: screenLoading, start: startScreenTransition, store: screenStore, revealFor } = useScreenGate(pathname, activeSlot);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const openSignOut = () => {
-    setAccountOpen(false);
     setMobileOpen(false);
     setSignOutOpen(true);
   };
-  const accountRef = useRef<HTMLDivElement>(null);
 
   // ─── Notification bell: reports, lawyer applications and updates, deletion requests ───
   // Built on the server from recent audit events; refreshed every 30 s and when the tab regains focus.
@@ -70,29 +65,15 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
       window.removeEventListener('focus', load);
     };
   }, []);
-  const accountTrigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (!mobileOpen && !accountOpen) return;
+    if (!mobileOpen) return;
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setMobileOpen(false);
-        setAccountOpen(false);
-        if (accountOpen) accountTrigger.current?.focus();
-      }
+      if (event.key === 'Escape') setMobileOpen(false);
     };
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
-  }, [mobileOpen, accountOpen]);
-
-  useEffect(() => {
-    if (!accountOpen) return;
-    const dismiss = (event: PointerEvent) => {
-      if (!accountRef.current?.contains(event.target as Node)) setAccountOpen(false);
-    };
-    document.addEventListener('pointerdown', dismiss);
-    return () => document.removeEventListener('pointerdown', dismiss);
-  }, [accountOpen]);
+  }, [mobileOpen]);
 
   const navigateTab = (event: { preventDefault: () => void }, href: string) => {
     startScreenTransition(href);
@@ -100,7 +81,15 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
     event.preventDefault();
     if (href !== pathname) window.history.pushState(null, '', href);
     setMobileOpen(false);
-    setAccountOpen(false);
+  };
+
+  /** Top bar buttons (home, Settings in the account menu): the same in-place tab switch as the sidebar. */
+  const openTab = (href: string) => {
+    startScreenTransition(href);
+    setMobileOpen(false);
+    if (href === pathname) return;
+    if (Object.hasOwn(adminTabViews, href)) window.history.pushState(null, '', href);
+    else router.push(href);
   };
 
   /** Opens what a notification is about (tabs switch in place, like the sidebar). */
@@ -121,35 +110,22 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
   const settingsActive = pathname === '/admin/settings' || pathname.startsWith('/admin/settings/admin-accounts');
 
   return <div className="admin-portal flex h-dvh flex-col bg-[#EFE5D8] text-[#34150F] selection:bg-[#C58B3C]/30">
-    <header className="z-40 flex h-16 shrink-0 items-center justify-between border-b border-[#352219] bg-[#23150F] px-4 text-[#DED7CB] shadow-md sm:px-8">
-      <div className="flex min-w-0 items-center gap-3">
-        <button type="button" aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileOpen} aria-haspopup="dialog" onClick={() => setMobileOpen((open) => !open)} className="rounded-lg p-2 hover:text-[#C58B3C] focus-visible:outline-2 focus-visible:outline-[#C58B3C] md:hidden">
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={mobileOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'} /></svg>
-        </button>
-        <Link href="/admin/dashboard" onNavigate={(event) => navigateTab(event, "/admin/dashboard")} className="truncate rounded-sm font-cinzel text-sm tracking-[0.16em] hover:text-[#C58B3C] focus-visible:outline-2 focus-visible:outline-[#C58B3C] sm:text-base"><JusticiaLogo className="inline-block w-32 h-auto align-middle" /> <span className="text-[#C58B3C]">ADMIN</span></Link>
-      </div>
-      <div className="flex items-center gap-1 sm:gap-2">
-      <NotificationBell
-        notifications={notifications}
-        seenKey="justicia:admin:notifications-seen-at"
-        onNotificationClick={(n) => openNotification(n as AdminNotification)}
-        emptyHint="Reports, lawyer applications, document and profile updates, and account deletion requests will appear here."
-        popoverClassName="w-[min(400px,calc(100vw-2rem))] -mr-[52px] [--caret:68px] sm:mr-0 sm:[--caret:16px]"
-        badgeRingClassName="ring-[#23150F]"
-      />
-      <div ref={accountRef} className="relative">
-        <button type="button" ref={accountTrigger} aria-label="Account menu" aria-expanded={accountOpen} aria-controls="admin-account-menu" onClick={() => setAccountOpen((open) => !open)} className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-[#352219] focus-visible:outline-2 focus-visible:outline-[#C58B3C]">
-          <span className="hidden max-w-40 truncate text-xs sm:block">{user.fullName}</span><ProfilePhoto src={myAvatar} className="h-7 w-7 ring-2 ring-[#C58B3C]" fallback={<UserCircleIcon className="h-7 w-7 text-[#C58B3C]" />} />
-        </button>
-        {accountOpen && <div id="admin-account-menu" className="admin-account-menu absolute right-0 top-full z-50 mt-3 w-60 max-w-[calc(100vw-32px)] p-3 text-xs">
-          <div className="border-b border-[#CBB6A1] px-3 py-2"><p className="truncate font-semibold">{user.fullName}</p><p className="truncate text-[#A69584]">{user.email}</p></div>
-          <Link href="/admin/profile" onNavigate={() => startScreenTransition('/admin/profile')} onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><UserCircleIcon className="h-4 w-4 text-[#C58B3C]" />My profile</Link>
-          <Link href="/admin/settings" onNavigate={(event) => navigateTab(event, '/admin/settings')} onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><GearIcon className="h-4 w-4 text-[#C58B3C]" />Settings</Link>
-          <div className="border-t border-[#CBB6A1] pt-1"><button type="button" onClick={openSignOut} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><LogoutIcon className="h-4 w-4 text-[#C58B3C]" />Sign out</button></div>
-        </div>}
-      </div>
-      </div>
-    </header>
+    {/* Same top bar as the client and lawyer portals. */}
+    <ClientTopbar
+      user={user}
+      seenKey="justicia:admin:notifications-seen-at"
+      homeActive={pathname === '/admin/dashboard'}
+      notifications={notifications}
+      onHome={() => openTab('/admin/dashboard')}
+      onSettings={() => openTab('/admin/settings')}
+      onProfile={() => openTab('/admin/profile')}
+      onNotificationClick={(n) => openNotification(n as AdminNotification)}
+      mobileMenuOpen={mobileOpen}
+      onToggleMobileMenu={() => setMobileOpen((open) => !open)}
+      notificationsEmptyHint="Reports, lawyer applications, document and profile updates, and account deletion requests will appear here."
+      settingsLabel="Settings"
+      logoTag="ADMIN"
+    />
     <div className="relative flex min-h-0 flex-1">
       <aside aria-label="Admin navigation" className="admin-sidebar hidden shrink-0 flex-col justify-between overflow-y-auto md:flex">
         <div><p className="admin-sidebar-label">Administration</p><nav aria-label="Main navigation" className="space-y-2">{links()}</nav></div>

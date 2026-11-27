@@ -14,74 +14,23 @@
  *
  * Outside a portal shell (modals, public pages) nothing is gated: screens count as revealed.
  */
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useScreenTransition } from './ScreenTransition';
+import {
+  RevealContext,
+  SlotContext,
+  createScreenStore,
+  useInScreenSlot,
+  useScreenLoading,
+  useScreenReveal,
+  type ScreenReveal,
+  type ScreenStore,
+} from './screenSlot';
 
-// ─── Store: what is still loading, per slot ───────────────────────────────────
+// The store, contexts and slot hooks live in ./screenSlot (ScreenLoader reads them too).
+export { createScreenStore, useInScreenSlot, useScreenLoading, useScreenReveal, type ScreenReveal, type ScreenStore };
 
-export interface ScreenStore {
-  set(slot: string, id: string, loading: boolean): void;
-  remove(slot: string, id: string): void;
-  isBusy(slot: string): boolean;
-  subscribe(listener: () => void): () => void;
-  version(): number;
-}
-
-export function createScreenStore(): ScreenStore {
-  const pending = new Map<string, Set<string>>();
-  const listeners = new Set<() => void>();
-  let v = 0;
-  const emit = () => {
-    v += 1;
-    listeners.forEach((l) => l());
-  };
-  return {
-    set(slot, id, loading) {
-      const ids = pending.get(slot) ?? new Set<string>();
-      const had = ids.has(id);
-      if (loading === had) return;
-      if (loading) ids.add(id);
-      else ids.delete(id);
-      pending.set(slot, ids);
-      emit();
-    },
-    remove(slot, id) {
-      const ids = pending.get(slot);
-      if (ids?.delete(id)) emit();
-    },
-    isBusy(slot) {
-      return (pending.get(slot)?.size ?? 0) > 0;
-    },
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    version: () => v,
-  };
-}
-
-// ─── Slot contexts ────────────────────────────────────────────────────────────
-
-const SlotContext = createContext<{ store: ScreenStore; slot: string } | null>(null);
-
-export interface ScreenReveal {
-  /** The loading screen over this screen has lifted. */
-  revealed: boolean;
-  /** Changes every time the screen is revealed: key the entrance with it to replay it. */
-  revealKey: number;
-}
-const RevealContext = createContext<ScreenReveal>({ revealed: true, revealKey: 0 });
+// ─── Slot ─────────────────────────────────────────────────────────────────────
 
 export function ScreenSlot({
   store,
@@ -101,28 +50,6 @@ export function ScreenSlot({
       <RevealContext.Provider value={revealValue}>{children}</RevealContext.Provider>
     </SlotContext.Provider>
   );
-}
-
-/**
- * Reports that this part of the screen is still loading its information. While any part of the
- * active screen reports `true`, the portal keeps its loading screen up.
- */
-export function useScreenLoading(loading: boolean) {
-  const ctx = useContext(SlotContext);
-  const id = useId();
-  // Layout effects: registered before the shell's (parent) effects decide anything.
-  useLayoutEffect(() => {
-    ctx?.store.set(ctx.slot, id, loading);
-  }, [ctx, id, loading]);
-  useLayoutEffect(() => {
-    if (!ctx) return;
-    return () => ctx.store.remove(ctx.slot, id);
-  }, [ctx, id]);
-}
-
-/** Whether this screen has been revealed (its loading screen lifted), and a key per reveal. */
-export function useScreenReveal(): ScreenReveal {
-  return useContext(RevealContext);
 }
 
 // ─── Gate: the shell's loading screen ─────────────────────────────────────────

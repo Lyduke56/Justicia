@@ -37,7 +37,6 @@ import {
  * The platform fee is the convenience fee added to each consultation a lawyer confirms.
  */
 
-const KPI_LABEL = `text-[11px] text-[#5C4535] ${CAPS}`;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /*
@@ -187,8 +186,8 @@ export function AdminEarningsView({ initialData, initialError = null }: { initia
         {/* ── KPI cards ─────────────────────────────────────────────────────── */}
         <motion.section variants={GROUP} aria-label="Platform earnings summary" className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
-            label={`${monthName}'s Platform Fees`}
-            labelClassName={KPI_LABEL}
+            label={`${monthName}'s Fees`}
+            singleLine
             value={data ? <CountUp value={data.monthlyFees[month]} format={formatPeso} /> : error ? '—' : null}
             valueTitle={data ? pesoExact(data.monthlyFees[month]) : undefined}
             subtitle={chart ? earningsNote(chart, month).replace('No paid sessions yet.', 'No fees earned yet.') : error ? 'Unavailable right now.' : null}
@@ -197,8 +196,8 @@ export function AdminEarningsView({ initialData, initialError = null }: { initia
             actionLabel="View the chart"
           />
           <KpiCard
-            label={`${monthName}'s Paid Consultations`}
-            labelClassName={KPI_LABEL}
+            label={`${monthName}'s Sessions`}
+            singleLine
             value={data ? <CountUp value={data.monthlyTransactions[month]} format={formatCount} /> : error ? '—' : null}
             subtitle={data ? `${pesoWhole(data.monthlyGross[month])} paid by clients.` : error ? 'Unavailable right now.' : null}
             icon={<CalendarClockIcon className="h-10 w-10 shrink-0" />}
@@ -207,12 +206,12 @@ export function AdminEarningsView({ initialData, initialError = null }: { initia
           />
           <KpiCard
             label={`${data?.year ?? ''} Platform Fees`.trim()}
-            labelClassName={KPI_LABEL}
+            singleLine
             value={data ? <CountUp value={sum(data.monthlyFees)} format={formatPeso} /> : error ? '—' : null}
             valueTitle={data ? pesoExact(sum(data.monthlyFees)) : undefined}
             subtitle={
               data
-                ? `${plural(sum(data.monthlyTransactions), 'consultation')} at ${pesoWhole(data.platformFeeSetting)} each.`
+                ? `${plural(sum(data.monthlyTransactions), 'session')} at ${pesoWhole(data.platformFeeSetting)} each.`
                 : error
                   ? 'Unavailable right now.'
                   : null
@@ -223,7 +222,7 @@ export function AdminEarningsView({ initialData, initialError = null }: { initia
           />
           <KpiCard
             label="Refunded"
-            labelClassName={KPI_LABEL}
+            singleLine
             value={data ? <CountUp value={data.refundedCount} format={formatCount} /> : error ? '—' : null}
             subtitle={
               data

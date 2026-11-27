@@ -1806,7 +1806,7 @@ export function LawyerDetailView({
                   transition={{ duration: 0.85, delay: 0.5, ease: EASE_OUT }}
                   className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/80 leading-snug"
                 >
-                  {lawyer.fullName}{lawyer.fullName.includes(',') ? '' : ', Ll.B.'}
+                  {lawyer.fullName}
                 </motion.h1>
               </div>
               <motion.p {...enter(0.62)} className="text-xs sm:text-[13px] text-[#341512]/80 font-inter font-normal leading-tight">

@@ -53,6 +53,12 @@ interface ClientTopbarProps {
   onNotificationClick: (n: Notification) => void;
   mobileMenuOpen: boolean;
   onToggleMobileMenu: () => void;
+  /** Shown in the notifications popover when there is nothing to list. */
+  notificationsEmptyHint?: string;
+  /** Account menu entry for `onSettings` (the admin portal's is platform settings). */
+  settingsLabel?: string;
+  /** Small gold tag after the logo (the admin portal shows "ADMIN"). */
+  logoTag?: string;
 }
 
 const SEEN_KEY = 'justicia:client:notifications-seen-at';
@@ -483,6 +489,9 @@ export function ClientTopbar({
   onNotificationClick,
   mobileMenuOpen,
   onToggleMobileMenu,
+  notificationsEmptyHint,
+  settingsLabel = 'Account Settings',
+  logoTag,
 }: ClientTopbarProps) {
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
   const myAvatar = useMyAvatar(user.avatarUrl);
@@ -534,10 +543,11 @@ export function ClientTopbar({
             onClick={onHome}
             whileHover={{ opacity: 0.85 }}
             whileTap={{ scale: 0.97 }}
-            className="rounded-md text-[#E5D8CB] transition-colors hover:text-[#C58B3C]"
+            className="flex items-center gap-2 rounded-md text-[#E5D8CB] transition-colors hover:text-[#C58B3C]"
             aria-label="Go to dashboard"
           >
             <JusticiaLogo />
+            {logoTag && <span className="-translate-y-[3px] font-cinzel text-xs tracking-[0.16em] text-[#C58B3C] sm:text-sm">{logoTag}</span>}
           </motion.button>
         </div>
 
@@ -555,6 +565,7 @@ export function ClientTopbar({
             open={openMenu === 'notifications'}
             onToggle={() => toggle('notifications')}
             onClose={close}
+            emptyHint={notificationsEmptyHint}
           />
 
           {/* Profile */}
@@ -597,7 +608,7 @@ export function ClientTopbar({
                     </motion.button>
                     <motion.button variants={ITEM} type="button" role="menuitem" id="dropdown-settings" onClick={() => { close(); onSettings(); }} className="client-neu-item">
                       <span className="client-neu-chip"><GearIcon className="h-[17px] w-[17px] [stroke-width:2.1]" /></span>
-                      <span className="flex-1">Account Settings</span>
+                      <span className="flex-1">{settingsLabel}</span>
                       <ChevronRightIcon className="client-neu-item-chevron h-4 w-4 [stroke-width:2.2]" />
                     </motion.button>
                   </div>
