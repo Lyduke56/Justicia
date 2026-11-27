@@ -6,23 +6,24 @@ import { DashboardCalendar } from '@/components/client/DashboardCalendar';
 import { DashboardSearchInput } from '@/components/client/DashboardSearchInput';
 import { LawyerGridSection } from '@/components/client/LawyerGridSection';
 import type { LawyerItem } from '@/components/client/LawyerCard';
-import { createClient } from '@/lib/supabase/client';
-import { useScreenReveal } from '@/components/shared/loading';
+import type { PublicLawyerProfile } from '@/components/client/LawyerGrid';
+import { fetchDirectoryLawyers } from '@/components/client/lawyerDirectory';
+import { useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 
-const FALLBACK_LAWYERS: LawyerItem[] = [
-  { id: 'lawyer-1', name: 'Atty. Maria Elena Santos, LL.B.', rollNumber: '58942', chapter: 'MAKATI', specializations: ['Labor & Employment', 'Corporate', 'Civil Law'], isVerified: true },
-  { id: 'lawyer-2', name: 'Atty. Maria Elena Santos, LL.B.', rollNumber: '58942', chapter: 'MAKATI', specializations: ['Labor & Employment', 'Corporate', 'Civil Law'], isVerified: true },
-  { id: 'lawyer-3', name: 'Atty. Maria Elena Santos, LL.B.', rollNumber: '58942', chapter: 'MAKATI', specializations: ['Labor & Employment', 'Corporate', 'Civil Law'], isVerified: true },
-  { id: 'lawyer-4', name: 'Atty. Maria Elena Santos, LL.B.', rollNumber: '58942', chapter: 'MAKATI', specializations: ['Labor & Employment', 'Corporate', 'Civil Law'], isVerified: true },
-  { id: 'lawyer-5', name: 'Atty. Maria Elena Santos, LL.B.', rollNumber: '58942', chapter: 'MAKATI', specializations: ['Labor & Employment', 'Corporate', 'Civil Law'], isVerified: true },
-  { id: 'lawyer-6', name: 'Atty. Maria Elena Santos, LL.B.', rollNumber: '58942', chapter: 'MAKATI', specializations: ['Labor & Employment', 'Corporate', 'Civil Law'], isVerified: true },
-  { id: 'lawyer-7', name: 'Atty. Maria Elena Santos, LL.B.', rollNumber: '58942', chapter: 'MAKATI', specializations: ['Labor & Employment', 'Corporate', 'Civil Law'], isVerified: true },
-  { id: 'lawyer-8', name: 'Atty. Maria Elena Santos, LL.B.', rollNumber: '58942', chapter: 'MAKATI', specializations: ['Labor & Employment', 'Corporate', 'Civil Law'], isVerified: true },
-  { id: 'lawyer-9', name: 'Atty. Maria Elena Santos, LL.B.', rollNumber: '58942', chapter: 'MAKATI', specializations: ['Labor & Employment', 'Corporate', 'Civil Law'], isVerified: true },
-  { id: 'lawyer-10', name: 'Atty. Juan Carlos Reyes, LL.M.', rollNumber: '61204', chapter: 'QUEZON CITY', specializations: ['Family Law', 'Criminal Defense', 'Litigation'], isVerified: true },
-  { id: 'lawyer-11', name: 'Atty. Patricia Ann Lim, J.D.', rollNumber: '64910', chapter: 'MANILA', specializations: ['Intellectual Property', 'Tech & Privacy', 'Commercial'], isVerified: true },
-  { id: 'lawyer-12', name: 'Atty. Rafael Vicente Cruz, LL.B.', rollNumber: '53188', chapter: 'CEBU', specializations: ['Real Estate', 'Agrarian Reform', 'Estate Planning'], isVerified: true },
-];
+/** A Find a Lawyer entry as a dashboard card (same name, roll, chapter and practice areas). */
+function toLawyerItem(l: PublicLawyerProfile): LawyerItem {
+  return {
+    id: l.userId,
+    name: `${l.fullName}, Ll.B.`,
+    rollNumber: l.rollNumber || '58942',
+    chapter: l.ibpChapter?.toUpperCase() || 'MAKATI',
+    specializations: l.practiceAreas.length ? l.practiceAreas.slice(0, 3) : ['Labor & Employment', 'Corporate', 'Civil Law'],
+    hourlyRate: l.feeStandard60min ?? undefined,
+    rating: l.rating,
+    isVerified: true,
+    photoUrl: l.photoUrl,
+  };
+}
 
 // ─── Entrance animation ──────────────────────────────────────────────────────
 // One sequence, in this order:
@@ -82,7 +83,10 @@ interface DashboardViewProps {
 }
 
 export function DashboardView({ firstName }: DashboardViewProps) {
-  const [lawyers, setLawyers] = useState<LawyerItem[]>(FALLBACK_LAWYERS);
+  // Recommended Lawyers = the Find a Lawyer directory (null until it has loaded).
+  const [lawyers, setLawyers] = useState<LawyerItem[] | null>(null);
+  // The portal's loading screen stays up until the recommended lawyers are here.
+  useScreenLoading(lawyers === null);
   // If the user has "reduce motion" turned on in their device, skip the animation.
   const reduceMotion = useReducedMotion();
 
@@ -90,18 +94,17 @@ export function DashboardView({ firstName }: DashboardViewProps) {
   // every visit: the reveal key remounts the animated layout.
   const { revealed, revealKey: entranceKey } = useScreenReveal();
 
+  // Load the directory, and refresh it each time the dashboard is shown again so newly
+  // approved (or hidden) lawyers match Find a Lawyer.
   useEffect(() => {
-    const supabase = createClient();
-    supabase
-      .from('lawyer_profiles')
-      .select('lawyer_id, practice_areas, hourly_rate')
-      .limit(9)
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          // Live data available but mapping kept simple for now
-        }
-      });
-  }, []);
+    let active = true;
+    fetchDirectoryLawyers().then((list) => {
+      if (active) setLawyers(list.map(toLawyerItem));
+    });
+    return () => {
+      active = false;
+    };
+  }, [entranceKey]);
 
   return (
     <motion.div
@@ -158,7 +161,7 @@ export function DashboardView({ firstName }: DashboardViewProps) {
 
       {/* ─── Recommended Lawyers ─────────────────────────────────────────────── */}
       <motion.div variants={fade} className="pt-1">
-        <LawyerGridSection initialLawyers={lawyers} />
+        <LawyerGridSection initialLawyers={lawyers ?? []} loading={lawyers === null} />
       </motion.div>
     </motion.div>
   );

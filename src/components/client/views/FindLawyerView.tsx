@@ -9,6 +9,7 @@ import { LawyerSearchFilters } from '@/components/client/LawyerSearchFilters';
 import { LawyerDetailView } from '@/components/client/LawyerDetailView';
 import { PanelLoader, useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 import type { PublicLawyerProfile } from '@/components/client/LawyerGrid';
+import { DEFAULT_LAWYERS, fetchDirectoryLawyer, recallLawyer } from '@/components/client/lawyerDirectory';
 
 const PAGE_SIZE = 9;
 
@@ -62,315 +63,6 @@ const DEFAULT_LANGUAGES = [
   'Ilocano',
   'Hiligaynon',
   'Mandarin',
-];
-
-const DEFAULT_LAWYERS: PublicLawyerProfile[] = [
-  {
-    userId: '22222222-2222-4222-8222-000000000001',
-    fullName: 'Atty. Maria Elena Santos',
-    rollNumber: '58942',
-    ibpChapter: 'MAKATI',
-    about: 'Specializing in Labor & Employment, Corporate restructuring, and Civil disputes with over 9 years of active litigation and corporate counseling.',
-    practiceAreas: ['Labor & Employment', 'Corporate', 'Civil Law'],
-    languages: ['English', 'Filipino', 'Spanish'],
-    experienceYears: 9,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 800,
-    feeStandard60min: 1500,
-    feeExtended120min: 2800,
-    barPasserYear: 2017,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000002',
-    fullName: 'Atty. Juan Carlos Dela Cruz',
-    rollNumber: '59144',
-    ibpChapter: 'NCR — QUEZON CITY',
-    about: 'Senior labor litigator with extensive experience in NLRC arbitrations, collective bargaining agreements, and wrongful termination defense.',
-    practiceAreas: ['Labor & Employment', 'Civil Law', 'Commercial Law'],
-    languages: ['Tagalog', 'English', 'Ilocano'],
-    experienceYears: 16,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1200,
-    feeStandard60min: 2200,
-    feeExtended120min: 4000,
-    barPasserYear: 2010,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000003',
-    fullName: 'Atty. Jose Maria De Leon',
-    rollNumber: '61209',
-    ibpChapter: 'CEBU CITY',
-    about: 'Cebu-based maritime and commercial law practitioner assisting local enterprises and seafarers with labor standards and maritime arbitration.',
-    practiceAreas: ['Labor & Employment', 'Maritime Law', 'Commercial Law', 'Civil Law'],
-    languages: ['Cebuano', 'Filipino', 'English'],
-    experienceYears: 13,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1200,
-    feeStandard60min: 2200,
-    feeExtended120min: 4000,
-    barPasserYear: 2013,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000004',
-    fullName: 'Atty. Clara Isabella Reyes',
-    rollNumber: '52188',
-    ibpChapter: 'CEBU',
-    about: 'Advising private individuals and developers on Land Registration Act compliance, Torrens title verification, and complex probate settlements in the Visayas.',
-    practiceAreas: ['Real Estate', 'Civil Law', 'Estate Planning'],
-    languages: ['Cebuano', 'English', 'Tagalog'],
-    experienceYears: 15,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1800,
-    feeStandard60min: 3000,
-    feeExtended120min: 5500,
-    barPasserYear: 2011,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000005',
-    fullName: 'Atty. Roberto Emilio Tan',
-    rollNumber: '63412',
-    ibpChapter: 'NCR — MANILA',
-    about: 'Focused on tech startups, SEC registration compliance, trademark filings with the Intellectual Property Office, and BIR tax audits.',
-    practiceAreas: ['Corporate Law', 'Tax Law', 'Intellectual Property'],
-    languages: ['Tagalog', 'English', 'Mandarin'],
-    experienceYears: 11,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1200,
-    feeStandard60min: 2200,
-    feeExtended120min: 4000,
-    barPasserYear: 2015,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000006',
-    fullName: 'Atty. Ramon Manuel Bautista',
-    rollNumber: '65890',
-    ibpChapter: 'QUEZON CITY',
-    about: 'Trial criminal defense counsel handling bail hearings, preliminary investigations, and white-collar defense.',
-    practiceAreas: ['Criminal Law', 'Civil Litigation', 'Litigation'],
-    languages: ['Filipino', 'English'],
-    experienceYears: 9,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1000,
-    feeStandard60min: 1800,
-    feeExtended120min: 3500,
-    barPasserYear: 2017,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000007',
-    fullName: 'Atty. Katrina Isabel Valdez',
-    rollNumber: '68923',
-    ibpChapter: 'MAKATI',
-    about: 'Specialist in labor relations, employment contracts, and workplace dispute mediation.',
-    practiceAreas: ['Labor & Employment', 'Corporate Law', 'Civil Law'],
-    languages: ['English', 'Filipino'],
-    experienceYears: 8,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1000,
-    feeStandard60min: 1800,
-    feeExtended120min: 3200,
-    barPasserYear: 2018,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000008',
-    fullName: 'Atty. Gerardo Patrick Lim',
-    rollNumber: '51092',
-    ibpChapter: 'DAVAO CITY',
-    about: 'Agrarian reform, land title disputes, and ancestral domain legal assistance across Mindanao.',
-    practiceAreas: ['Real Estate', 'Agrarian Reform', 'Civil Law'],
-    languages: ['Cebuano', 'Filipino', 'English'],
-    experienceYears: 14,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1500,
-    feeStandard60min: 2500,
-    feeExtended120min: 4500,
-    barPasserYear: 2012,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000009',
-    fullName: 'Atty. Maria Clara Santos',
-    rollNumber: '54821',
-    ibpChapter: 'PASIG-SAN JUAN',
-    about: 'Specializing in Family Law, Estate Planning, and Civil Litigation with over a decade of practice.',
-    practiceAreas: ['Family Law', 'Estate Planning', 'Civil Law'],
-    languages: ['Filipino', 'English'],
-    experienceYears: 18,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1500,
-    feeStandard60min: 2500,
-    feeExtended120min: 4500,
-    barPasserYear: 2008,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000010',
-    fullName: 'Atty. Patricia Ann Lim',
-    rollNumber: '64910',
-    ibpChapter: 'NCR — MANILA',
-    about: 'Intellectual Property attorney handling patent prosecution, copyright licensing, and data privacy compliance.',
-    practiceAreas: ['Intellectual Property', 'Corporate Law', 'Tech & Privacy'],
-    languages: ['English', 'Filipino', 'Mandarin'],
-    experienceYears: 10,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1200,
-    feeStandard60min: 2000,
-    feeExtended120min: 3800,
-    barPasserYear: 2016,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000011',
-    fullName: 'Atty. Rafael Vicente Cruz',
-    rollNumber: '53188',
-    ibpChapter: 'PAMPANGA',
-    about: 'Commercial litigator advising SMEs and multinational corporations on regulatory compliance and arbitration.',
-    practiceAreas: ['Corporate Law', 'Banking & Finance', 'Commercial Arbitration'],
-    languages: ['Filipino', 'English', 'Kapampangan'],
-    experienceYears: 17,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1500,
-    feeStandard60min: 2800,
-    feeExtended120min: 5000,
-    barPasserYear: 2009,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000012',
-    fullName: 'Atty. Teresa Beatriz Morales',
-    rollNumber: '67455',
-    ibpChapter: 'ILOILO',
-    about: 'Family and matrimonial law advocate with deep compassion for adoption, annulment, and custody proceedings.',
-    practiceAreas: ['Family Law', 'Civil Law', 'Human Rights'],
-    languages: ['Hiligaynon', 'Filipino', 'English'],
-    experienceYears: 7,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 900,
-    feeStandard60min: 1600,
-    feeExtended120min: 3000,
-    barPasserYear: 2019,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000013',
-    fullName: 'Atty. Gabriel Antonio Ramos',
-    rollNumber: '57321',
-    ibpChapter: 'NCR — QUEZON CITY',
-    about: 'Specialist in appellate review, constitutional issues, and certiorari petitions before the Supreme Court.',
-    practiceAreas: ['Constitutional Law', 'Civil Litigation', 'Criminal Law'],
-    languages: ['English', 'Filipino'],
-    experienceYears: 12,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1400,
-    feeStandard60min: 2400,
-    feeExtended120min: 4400,
-    barPasserYear: 2014,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000014',
-    fullName: 'Atty. Carmela Denise Aquino',
-    rollNumber: '62901',
-    ibpChapter: 'MAKATI',
-    about: 'Tax dispute specialist assisting taxpayers with BIR assessments, Court of Tax Appeals litigation, and tax treaties.',
-    practiceAreas: ['Tax Law', 'Corporate Law', 'Banking & Finance'],
-    languages: ['Filipino', 'English', 'Spanish'],
-    experienceYears: 11,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1600,
-    feeStandard60min: 2800,
-    feeExtended120min: 5200,
-    barPasserYear: 2015,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000015',
-    fullName: 'Atty. Leandro Miguel Ocampo',
-    rollNumber: '55432',
-    ibpChapter: 'BATANGAS',
-    about: 'Expert in real estate title transfers, subdivision titling, and DAR land conversion issues in Southern Luzon.',
-    practiceAreas: ['Real Estate', 'Civil Law', 'Agrarian Reform'],
-    languages: ['Tagalog', 'English'],
-    experienceYears: 15,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1100,
-    feeStandard60min: 2000,
-    feeExtended120min: 3800,
-    barPasserYear: 2011,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000016',
-    fullName: 'Atty. Francesca Sophia Villar',
-    rollNumber: '69112',
-    ibpChapter: 'NCR — PASAY',
-    about: 'Immigration lawyer assisting foreigners, dual citizenship applicants, visa conversions, and deportation defense.',
-    practiceAreas: ['Immigration', 'Labor & Employment', 'Civil Law'],
-    languages: ['English', 'Filipino', 'Mandarin'],
-    experienceYears: 6,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 800,
-    feeStandard60min: 1500,
-    feeExtended120min: 2700,
-    barPasserYear: 2020,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000017',
-    fullName: 'Atty. Dominic Salvador Flores',
-    rollNumber: '60128',
-    ibpChapter: 'MISAMIS ORIENTAL',
-    about: 'Environmental, mining, and regulatory compliance counsel for industrial concerns across Northern Mindanao.',
-    practiceAreas: ['Environmental Law', 'Corporate Law', 'Litigation'],
-    languages: ['Cebuano', 'Filipino', 'English'],
-    experienceYears: 13,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1300,
-    feeStandard60min: 2300,
-    feeExtended120min: 4200,
-    barPasserYear: 2013,
-    isFavorite: false,
-  },
-  {
-    userId: '22222222-2222-4222-8222-000000000018',
-    fullName: 'Atty. Bianca Clarisse Navarro',
-    rollNumber: '66340',
-    ibpChapter: 'MAKATI',
-    about: 'Banking regulatory compliance, debt restructuring, fintech licensing, and financial consumer protection.',
-    practiceAreas: ['Banking & Finance', 'Corporate Law', 'Commercial Law'],
-    languages: ['English', 'Filipino'],
-    experienceYears: 9,
-    photoUrl: null,
-    isAvailable: true,
-    feeInitial30min: 1200,
-    feeStandard60min: 2200,
-    feeExtended120min: 4000,
-    barPasserYear: 2017,
-    isFavorite: false,
-  },
 ];
 
 // ─── Motion ──────────────────────────────────────────────────────────────────
@@ -445,6 +137,23 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
   const feeParam = scalar(searchParams.get('fee'));
   const langKey = searchParams.getAll('lang').join(',');
   const pageParam = Math.max(1, Number(scalar(searchParams.get('page'))) || 1);
+  // ?lawyer=<id> (from a dashboard "Recommended Lawyers" card) opens that lawyer's profile.
+  const lawyerParam = scalar(searchParams.get('lawyer'));
+
+  const [selectedLawyer, setSelectedLawyer] = useState<PublicLawyerProfile | null>(() =>
+    lawyerParam ? recallLawyer(lawyerParam) : null
+  );
+  // The linked lawyer still loading (not remembered from the dashboard); cleared on Back.
+  const [linkedLawyerId, setLinkedLawyerId] = useState(lawyerParam);
+  const [dismissedLawyerId, setDismissedLawyerId] = useState('');
+  if (lawyerParam !== linkedLawyerId) {
+    setLinkedLawyerId(lawyerParam);
+    if (lawyerParam) {
+      setDismissedLawyerId('');
+      setSelectedLawyer(recallLawyer(lawyerParam));
+    }
+  }
+  const linkPending = !!lawyerParam && lawyerParam !== dismissedLawyerId && !selectedLawyer;
 
   const filters = useMemo(
     () => ({
@@ -698,11 +407,33 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
     finishFetch(signature);
   }, [queryParam, specParam, chapterParam, feeParam, langKey, pageParam, favoriteIds, finishFetch]);
 
-  const [selectedLawyer, setSelectedLawyer] = useState<PublicLawyerProfile | null>(null);
-
   useEffect(() => {
     fetchLawyers();
   }, [fetchLawyers]);
+
+  // A linked lawyer the dashboard hadn't loaded: fetch it; if it isn't listed, show the list.
+  useEffect(() => {
+    if (!linkPending) return;
+    let active = true;
+    fetchDirectoryLawyer(lawyerParam).then((lawyer) => {
+      if (!active) return;
+      if (lawyer) setSelectedLawyer(lawyer);
+      else setDismissedLawyerId(lawyerParam);
+    });
+    return () => {
+      active = false;
+    };
+  }, [linkPending, lawyerParam]);
+
+  /** Drops ?lawyer= from the address bar (keeps any filters) without reloading the tab. */
+  const clearLawyerParam = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('lawyer')) return;
+    params.delete('lawyer');
+    const qs = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  }, []);
 
   const scrollMainToTop = useCallback((behavior: ScrollBehavior) => {
     if (typeof document === 'undefined') return;
@@ -742,11 +473,26 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
               // The list remounts, so give it the full page entrance again
               setIntroResultsVersion(resultsVersion);
               setIntroDelay(GRID_INTRO_DELAY);
+              if (lawyerParam) {
+                setDismissedLawyerId(lawyerParam);
+                clearLawyerParam();
+              }
               setSelectedLawyer(null);
               scrollMainToTop('smooth');
             }}
             defaultTab="about"
           />
+        </motion.div>
+      ) : linkPending ? (
+        // Opening a lawyer linked from the dashboard
+        <motion.div
+          key="opening"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { delay: 0.3, duration: 0.3 } }}
+          exit={{ opacity: 0, transition: { duration: 0.12 } }}
+          className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-10 max-w-[1300px] mx-auto bg-[#E5D8CB] min-h-[calc(100vh-4rem)]"
+        >
+          <PanelLoader label="Opening profile..." className="min-h-[18rem]" />
         </motion.div>
       ) : (
         <motion.div
