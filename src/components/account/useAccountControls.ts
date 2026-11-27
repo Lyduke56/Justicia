@@ -44,6 +44,7 @@ export function usePreferenceToggles(account: PersonalAccount) {
   const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationChoices>(account.notifications);
   const [messaging, setMessaging] = useState<MessagingPrivacy>(account.messaging);
+  const [emailUpdates, setEmailUpdates] = useState<boolean>(account.emailUpdates);
   const [saving, startSaving] = useTransition();
   const [error, setError] = useState('');
   const [savedTick, setSavedTick] = useState(0);
@@ -55,7 +56,7 @@ export function usePreferenceToggles(account: PersonalAccount) {
   }, [savedTick]);
 
   const save = (
-    patch: { notifications?: Partial<NotificationChoices>; messaging?: Partial<MessagingPrivacy> },
+    patch: { notifications?: Partial<NotificationChoices>; messaging?: Partial<MessagingPrivacy>; emailUpdates?: boolean },
     revert: () => void
   ) => {
     setError('');
@@ -89,7 +90,13 @@ export function usePreferenceToggles(account: PersonalAccount) {
     save({ messaging: { [key]: next } }, () => setMessaging((m) => ({ ...m, [key]: previous })));
   };
 
-  return { notifications, messaging, saving, error, setError, savedTick, toggleNotification, toggleMessaging };
+  const toggleEmailUpdates = (next: boolean) => {
+    const previous = emailUpdates;
+    setEmailUpdates(next);
+    save({ emailUpdates: next }, () => setEmailUpdates(previous));
+  };
+
+  return { notifications, messaging, emailUpdates, saving, error, setError, savedTick, toggleNotification, toggleMessaging, toggleEmailUpdates };
 }
 
 export function useSignOutEverywhere() {

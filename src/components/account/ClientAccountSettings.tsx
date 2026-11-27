@@ -512,9 +512,16 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                 <SettingRow
                   id="notif-email"
                   title="Email updates"
-                  badge={<ComingSoonPill />}
-                  description="Get an email when a consultation is scheduled or changed."
-                  control={<NeuSwitch checked={false} disabled labelledBy="notif-email-label" describedBy="notif-email-desc" />}
+                  description={`Also send the updates you turned on above to ${account.email}.`}
+                  control={
+                    <NeuSwitch
+                      checked={prefs.emailUpdates}
+                      disabled={saving}
+                      onChange={(next) => prefs.toggleEmailUpdates(next)}
+                      labelledBy="notif-email-label"
+                      describedBy="notif-email-desc"
+                    />
+                  }
                 />
                 <SettingRow
                   id="notif-sms"

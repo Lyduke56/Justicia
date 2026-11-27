@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { aiRequestGuard } from '@/lib/security/aiGuard';
+import { geminiApiKeys, withGeminiKeys } from '@/lib/ai/geminiKeys';
 
 interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -155,42 +156,20 @@ function extractSuggestedFilters(text: string, query: string): Record<string, st
   return filters;
 }
 
-async function generateGeminiContentWithRetry(
+/** One generation call. Retries and switching to a fallback key happen in withGeminiKeys. */
+async function generateGeminiContent(
   ai: GoogleGenAI,
   contents: any[],
   model: string = 'gemini-3.8-flash'
 ) {
-  const maxAttempts = 3;
-  let lastError: unknown = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-          systemInstruction: PHILIPPINE_LEGAL_SYSTEM_PROMPT,
-          temperature: 0.25,
-        },
-      });
-      return response;
-    } catch (err: any) {
-      lastError = err;
-      const status = err?.status || err?.code;
-      const isTransient = status === 503 || status === 429 || (err?.message && err.message.includes('high demand'));
-
-      if (isTransient && attempt < maxAttempts) {
-        const delayMs = attempt * 1500;
-        console.warn(`[Gemini API] ${model} is experiencing temporary high demand (503). Retrying in ${delayMs}ms (attempt ${attempt}/${maxAttempts})...`);
-        await new Promise((res) => setTimeout(res, delayMs));
-        continue;
-      }
-
-      break;
-    }
-  }
-
-  throw lastError;
+  return ai.models.generateContent({
+    model,
+    contents,
+    config: {
+      systemInstruction: PHILIPPINE_LEGAL_SYSTEM_PROMPT,
+      temperature: 0.25,
+    },
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -214,11 +193,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(OFFITOPIC_REJECTION);
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (apiKey) {
+    // GEMINI_API_KEY plus up to three fallback keys (GEMINI_API_KEY_2…_4).
+    if (geminiApiKeys().length > 0) {
       try {
-        const ai = new GoogleGenAI({ apiKey });
 
         // Build conversational contents — prepend document text if provided
         const contents = messages.map((m, idx) => {
@@ -234,7 +211,7 @@ export async function POST(request: NextRequest) {
         });
 
         const targetModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-        const response = await generateGeminiContentWithRetry(ai, contents, targetModel);
+        const response = await withGeminiKeys((apiKey) => generateGeminiContent(new GoogleGenAI({ apiKey }), contents, targetModel));
 
         const generatedText = response.text || '';
 
@@ -252,7 +229,7 @@ export async function POST(request: NextRequest) {
       } catch (geminiError: unknown) {
         const errObj = geminiError as any;
         const code = errObj?.status || errObj?.code || 500;
-        console.warn(`[Gemini AI] Upstream model unavailable (${code}). Serving verified Philippine legal KB response.`);
+        console.warn(`[Gemini AI] Upstream model unavailable on every configured key (${code}). Serving verified Philippine legal KB response.`);
         // Fall back to knowledge base answer below
       }
     }

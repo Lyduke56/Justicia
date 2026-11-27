@@ -10,10 +10,25 @@ Written for whoever on the team is on call. Keep it short and current.
    - `NEXT_PUBLIC_SITE_URL` (the production URL, used in email links)
    - `CRON_SECRET`: a long random string. Vercel sends it to `/api/cron/purge-deleted-accounts`
      (daily at 02:00 PHT, see `vercel.json`). Without it the purge job refuses every call.
-   - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `GEMINI_API_KEY` as before.
+   - Email (notification emails, account notices): `GMAIL_USER` (the sending Gmail address) and
+     `GMAIL_APP_PASSWORD` (a 16-letter App Password from https://myaccount.google.com/apppasswords;
+     the Google account needs 2-Step Verification). Optional `EMAIL_FROM_NAME` (default
+     "Justicia"). Without Gmail, `RESEND_API_KEY` + `RESEND_FROM_EMAIL` are used instead. A free
+     Gmail account sends about 500 emails a day. Check the setup with
+     `npm run email:test -- you@example.com`.
+   - AI: `GEMINI_API_KEY`, plus optional fallback keys `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`,
+     `GEMINI_API_KEY_4`. Use keys from different Google Cloud projects; keys in the same project
+     share one quota. `npm run check:gemini` tests each one.
    - Optional: `NEXT_PUBLIC_SUPPORT_EMAIL` (defaults to support@justicia.ph), `REALTIME_TOPIC_SECRET`.
    - Never set `JUSTICIA_DEMO` in production (demo portals are ignored in production builds anyway).
-3. After deploying: open `/api/health` (expects `"status": "ok"`), then run `npm run audit:rls`
+3. Consultation reminders (24 h, 1 h and 15 minutes before; "request still pending" after 12 h)
+   need a scheduler that calls the site every 5 minutes. Vercel's Hobby plan only allows daily
+   cron jobs, so use a free external one (for example cron-job.org):
+   - URL: `https://<your-domain>/api/cron/consultation-reminders`, every 5 minutes, method GET.
+   - Header: `Authorization: Bearer <CRON_SECRET>`.
+   - The response is JSON, for example `{"ok":true,"consultations":2,"meetingAlerts":1,"pendingNudges":0}`.
+   Without the scheduler, reminders are only created when a user opens the app.
+4. After deploying: open `/api/health` (expects `"status": "ok"`), then run `npm run audit:rls`
    from a machine with `.env.local`.
 
 ## Backups and recovery
@@ -74,6 +89,7 @@ team channel, as you go.
 ## Routine checks
 
 - Weekly: `npm run audit:rls` passes; `/api/health` is ok; the purge job's Vercel log shows
-  `"failed": 0`.
+  `"failed": 0`; the reminder scheduler's history shows 200 responses; `email_outbox_dev` has no
+  run of `failed` rows (a Gmail App Password that was revoked shows up there first).
 - Before each release: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`
   (the same checks GitHub Actions runs).

@@ -20,6 +20,7 @@ import { isRegularSlot, slotStartsFor } from '@/lib/lawyer/consultationHours';
 import { loadConsultationHours } from '@/lib/lawyer/consultationHoursServer';
 import { PAYMENT_QR_REQUIRED_MESSAGE, hasOwnPaymentQr } from '@/lib/lawyer/paymentQr';
 import { monthDayMarks, type CalendarDayMark } from '@/lib/consultations/monthAvailability';
+import { queueNotificationEmail } from '@/lib/email/notificationEmail';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -359,7 +360,10 @@ async function notifyUser(
       is_read: false,
     });
     if (error) console.warn('[notifyUser]', type, error.message);
-    else signalLive([userId], ['notifications']);
+    else {
+      signalLive([userId], ['notifications']);
+      queueNotificationEmail({ userId, type, title, body, payload });
+    }
   } catch (err) {
     console.warn('[notifyUser] unexpected', err);
   }

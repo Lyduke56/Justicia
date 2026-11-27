@@ -123,6 +123,20 @@ test('preferences persist in Supabase metadata, preserve unrelated metadata and 
   assert.equal((await failed.actions.getPersonalAccountAction()).account.consultationNotifications, true);
 });
 
+test('the email updates switch is saved on its own and keeps the other choices', async () => {
+  const { actions } = fixture();
+  assert.equal((await actions.getPersonalAccountAction()).account.emailUpdates, true);
+  assert.equal((await actions.updateAccountPreferencesAction({ notifications: { payments: false } })).success, true);
+  assert.equal((await actions.updateAccountPreferencesAction({ emailUpdates: false })).success, true);
+  const account = (await actions.getPersonalAccountAction()).account;
+  assert.equal(account.emailUpdates, false);
+  assert.equal(account.notifications.payments, false);
+  // Changing a category later leaves the email switch alone.
+  assert.equal((await actions.updateAccountPreferencesAction({ notifications: { payments: true } })).success, true);
+  assert.equal((await actions.getPersonalAccountAction()).account.emailUpdates, false);
+  assert.equal((await actions.updateAccountPreferencesAction({ emailUpdates: 'no' })).success, false);
+});
+
 test('password change requires matching new passwords and successful current-password verification', async () => {
   const input = { currentPassword: 'old-password', password: 'new-password', confirmPassword: 'new-password' };
   const wrong = fixture({ currentPasswordValid: false });

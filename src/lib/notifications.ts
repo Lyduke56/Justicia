@@ -4,6 +4,7 @@
  */
 
 import { createServiceClient } from '@/lib/supabase/server';
+import { queueNotificationEmail } from '@/lib/email/notificationEmail';
 
 interface CreateNotificationParams {
   userId: string;
@@ -16,7 +17,7 @@ interface CreateNotificationParams {
 export async function createNotification(params: CreateNotificationParams): Promise<void> {
   try {
     const supabase = await createServiceClient();
-    await supabase.from('notifications').insert({
+    const { error } = await supabase.from('notifications').insert({
       user_id: params.userId,
       type: params.type,
       title: params.title,
@@ -24,6 +25,8 @@ export async function createNotification(params: CreateNotificationParams): Prom
       metadata: params.metadata ?? null,
       is_read: false,
     });
+    if (error) console.error('[Notifications] Failed to create notification:', error.message);
+    else queueNotificationEmail({ userId: params.userId, type: params.type, title: params.title, body: params.body, payload: params.metadata });
   } catch (err) {
     console.error('[Notifications] Failed to create notification:', err);
   }

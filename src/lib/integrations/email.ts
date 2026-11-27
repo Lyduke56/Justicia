@@ -1,19 +1,58 @@
 /**
- * Email service — wraps Resend.
- * SERVER-SIDE ONLY. Never import from client code.
- * If RESEND_API_KEY is missing, logs a warning and skips sending gracefully.
+ * Email service. SERVER-SIDE ONLY. Never import from client code.
+ *
+ * Transport, in order of preference:
+ *  1. Gmail SMTP with an App Password (GMAIL_USER + GMAIL_APP_PASSWORD). Create the password at
+ *     https://myaccount.google.com/apppasswords (the Google account needs 2-Step Verification).
+ *  2. Resend (RESEND_API_KEY + RESEND_FROM_EMAIL).
+ * With neither configured, sending is skipped with a warning; in-app notifications still work.
  */
 
 import { Resend } from 'resend';
+import nodemailer, { type Transporter } from 'nodemailer';
 import { createServiceClient } from '@/lib/supabase/server';
 import { renderEmailHtml } from '@/lib/email/layout';
 
 let _resend: Resend | null = null;
+let _gmail: Transporter | null = null;
 
 function getResend(): Resend | null {
   if (!process.env.RESEND_API_KEY) return null;
   if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
   return _resend;
+}
+
+function gmailCredentials(): { user: string; pass: string } | null {
+  const user = process.env.GMAIL_USER?.trim();
+  // Google shows App Passwords as four groups of four letters; the spaces are not part of it.
+  const pass = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, '');
+  return user && pass ? { user, pass } : null;
+}
+
+function getGmail(): { transport: Transporter; from: string } | null {
+  const creds = gmailCredentials();
+  if (!creds) return null;
+  if (!_gmail) {
+    _gmail = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: creds,
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
+    });
+  }
+  // Gmail only sends as the signed-in address (or a verified alias), so only the name is configurable.
+  const name = (process.env.EMAIL_FROM_NAME || 'Justicia').replace(/["\r\n]/g, '');
+  return { transport: _gmail, from: `"${name}" <${creds.user}>` };
+}
+
+/** Which transport sendEmail will use (for the health check). */
+export function emailTransport(): 'gmail' | 'resend' | 'none' {
+  if (gmailCredentials()) return 'gmail';
+  if (process.env.RESEND_API_KEY) return 'resend';
+  return 'none';
 }
 
 export interface DirectEmailPayload {
@@ -29,9 +68,17 @@ export interface SendResult {
   error?: string;
 }
 
+async function markOutbox(outboxId: string | undefined, fields: { status: string; error?: string }) {
+  if (!outboxId) return;
+  try {
+    const supabase = await createServiceClient();
+    await supabase.from('email_outbox_dev').update(fields).eq('id', outboxId);
+  } catch { /* ignore */ }
+}
+
 /**
- * Sends an email via Resend and writes to email_outbox_dev.
- * Gracefully skips if RESEND_API_KEY is not set.
+ * Sends an email (Gmail SMTP, else Resend) and logs it in email_outbox_dev.
+ * Never throws; skips gracefully when no transport is configured.
  */
 export async function sendEmail(payload: DirectEmailPayload): Promise<SendResult> {
   // Always write to dev outbox first
@@ -49,20 +96,32 @@ export async function sendEmail(payload: DirectEmailPayload): Promise<SendResult
     // Non-fatal
   }
 
+  const gmail = getGmail();
+  if (gmail) {
+    try {
+      const info = await gmail.transport.sendMail({
+        from: gmail.from,
+        to: payload.to,
+        subject: payload.subject,
+        html: payload.html,
+        text: payload.text,
+      });
+      await markOutbox(outboxId, { status: 'sent' });
+      return { sent: true, id: info.messageId };
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.error('[Email] Gmail send failed:', error);
+      await markOutbox(outboxId, { status: 'failed', error });
+      return { sent: false, error };
+    }
+  }
+
   const client = getResend();
 
   if (!client) {
-    console.warn('[Email] RESEND_API_KEY not set — skipping email send. In-app notification still created.');
-    if (outboxId) {
-      try {
-        const supabase = await createServiceClient();
-        await supabase
-          .from('email_outbox_dev')
-          .update({ status: 'failed', error: 'RESEND_API_KEY not configured' })
-          .eq('id', outboxId);
-      } catch { /* ignore */ }
-    }
-    return { sent: false, error: 'RESEND_API_KEY not configured' };
+    console.warn('[Email] No email transport configured (GMAIL_USER/GMAIL_APP_PASSWORD or RESEND_API_KEY) — skipping. In-app notification still created.');
+    await markOutbox(outboxId, { status: 'failed', error: 'No email transport configured' });
+    return { sent: false, error: 'No email transport configured' };
   }
 
   try {

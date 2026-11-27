@@ -12,6 +12,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emitLive } from '@/lib/realtime/live';
 import { attorneyNameOr } from '@/lib/utils/attorneyName';
+import { queueNotificationEmail } from '@/lib/email/notificationEmail';
 
 const HOUR = 60 * 60 * 1000;
 const STARTING_SOON = 15 * 60 * 1000;
@@ -84,7 +85,16 @@ export async function ensureConsultationReminders(db: SupabaseClient, userId: st
         channel: 'in_app',
         is_read: false,
       });
-      if (!error) created++;
+      if (!error) {
+        created++;
+        queueNotificationEmail({
+          userId,
+          type: slot.type,
+          title: slot.title,
+          body: `Your ${kind} with ${other} starts ${slot.when} (${manilaTime(row.scheduled_start)}).`,
+          payload: { consultationId: row.id, threadId: isLawyer ? row.client_id : row.lawyer_id },
+        });
+      }
     }
     if (created) void emitLive([userId], ['notifications']);
   } catch (err) {
