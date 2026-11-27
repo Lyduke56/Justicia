@@ -1,8 +1,20 @@
 'use client';
 
-import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'motion/react';
+/**
+ * Lawyer Profile (owner) dialogs, all in the shared neumorphic modal frame (NeuModal) used by the
+ * booking, cancellation and documents dialogs: raised icon tile, Lora title, scrolling body that
+ * cascades in, and a footer with NeuButtons.
+ *  - EditProfileModal: "Edit Information" for the About tab. Its sections follow the About tab
+ *    top to bottom: About Me, Consultation Rates, Areas of Practice, Legal Experience,
+ *    Consultation Services, Philippine Bar Examination Passer, Educational Background.
+ *  - ConfirmUpdateModal: "Update your lawyer profile?" before the changes go public. Confirming
+ *    morphs it into the submission loader, which then writes a check or an X.
+ *  - ManageCasesModal: "Edit Visible Cases" (list, add, edit, delete). Saving or deleting a case
+ *    morphs the dialog into the loader → check / X, then back to the list.
+ *  - CaseDetailModal: the full case view (clients and the owner).
+ */
+import React, { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import type { PublicLawyerProfile } from '@/components/client/LawyerGrid';
 import {
   updateLawyerProfileAction,
@@ -12,198 +24,230 @@ import {
   type UpdateLawyerProfileInput,
 } from '@/app/actions/lawyerProfileActions';
 import type { LawyerCaseSummaryRow } from '@/types/database';
-import { NeuNumberStepper } from '@/components/shared/neu';
+import { SubmitModal, settle, useSubmission, type SubmissionCopy, type SubmissionState } from '@/components/shared/feedback';
+import {
+  AlertIcon,
+  CheckCircleIcon,
+  ClipboardIcon,
+  EmptyState,
+  InfoIcon,
+  NeuAlert,
+  NeuButton,
+  NeuModal,
+  NeuNumberStepper,
+  PencilIcon,
+  TrashIcon,
+  UserIcon,
+  WalletIcon,
+} from '@/components/shared/neu';
 
-// ─── Shared modal chrome ──────────────────────────────────────────────────────
+// ─── Shared form parts ────────────────────────────────────────────────────────
 
 const EASE_OUT: [number, number, number, number] = [0.22, 1, 0.36, 1];
-const noopSubscribe = () => () => {};
+const CURRENT_YEAR = new Date().getFullYear();
 
-/**
- * Remounts `Inner` every time `open` flips to true so each session starts from fresh state
- * (seeded from the latest saved data) while still letting the close animation play out.
- */
-function useOpenSession(open: boolean): number {
-  const [session, setSession] = useState(0);
-  const [prevOpen, setPrevOpen] = useState(open);
-  if (open !== prevOpen) {
-    setPrevOpen(open);
-    if (open) setSession((s) => s + 1);
-  }
-  return session;
-}
-
+const labelClass = 'block font-lora text-[11px] font-bold uppercase tracking-[0.14em] text-[#946525] mb-2';
 const inputClass =
-  'select-text w-full rounded-[12px] bg-[#E5D8CB] neu-recessed px-3.5 py-2.5 text-xs sm:text-[13px] font-inter text-[#341512] placeholder:text-[#341512]/40 focus:outline-none focus:ring-2 focus:ring-[#D39758]/60 transition-shadow';
-const labelClass = 'block text-[11px] font-semibold uppercase tracking-wider text-[#341512]/70 font-inter mb-1.5';
-const primaryBtn =
-  'inline-flex items-center justify-center gap-2 rounded-[12px] px-6 py-2.5 font-lora text-sm font-bold text-[#341512] bg-[#D9A877] shadow-[4px_4px_10px_rgba(145,110,75,0.35),-3px_-3px_8px_rgba(255,244,232,0.55)] hover:brightness-105 active:translate-y-px disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer';
-const secondaryBtn =
-  'inline-flex items-center justify-center rounded-[12px] px-6 py-2.5 font-lora text-sm font-bold text-[#341512] border border-[#341512]/70 hover:bg-[#D39758]/15 active:translate-y-px disabled:opacity-50 transition cursor-pointer';
-const ghostBtn =
-  'inline-flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-[11px] font-semibold font-inter text-[#341512]/80 hover:text-[#341512] hover:bg-[#D39758]/15 transition cursor-pointer';
+  'neu-input select-text w-full h-11 rounded-xl px-4 font-inter text-[13px] text-[#23150F] disabled:cursor-not-allowed disabled:opacity-60';
+const textareaClass =
+  'neu-input neu-scrollbar-discrete select-text w-full rounded-[18px] px-4 py-3.5 font-inter text-[13px] text-[#23150F] leading-relaxed resize-y disabled:cursor-not-allowed disabled:opacity-60';
+const iconBtnClass =
+  'neu-raised-sm grid size-8 shrink-0 place-items-center rounded-full bg-[#E5D8CB] text-[#5C4535] transition-colors hover:text-[#A8742E] disabled:pointer-events-none disabled:opacity-35 cursor-pointer';
 
-function Spinner({ className = 'w-4 h-4' }: { className?: string }) {
+/** Line icon in the same stroke style as the About tab's card icons. */
+function Glyph({ children, className = 'w-[18px] h-[18px]' }: { children: React.ReactNode; className?: string }) {
   return (
-    <svg className={`${className} animate-spin motion-reduce:animate-none`} viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
     </svg>
   );
 }
 
-function CloseIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+const ICONS = {
+  areas: (
+    <Glyph>
+      <path d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+    </Glyph>
+  ),
+  experience: (
+    <Glyph>
+      <path d="m14 13-7.5 7.5a2.12 2.12 0 1 1-3-3L11 10" />
+      <path d="m16 16 6-6M8 8l6-6M9 7l8 8M21 11l-8-8" />
+    </Glyph>
+  ),
+  services: (
+    <Glyph>
+      <path d="M7.5 8.25h9m-9 3H12m-9.75 6.75 3.19-1.595A3 3 0 0 1 7.234 16H18a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v12.75Z" />
+    </Glyph>
+  ),
+  bar: (
+    <Glyph>
+      <circle cx="12" cy="8" r="5.5" />
+      <path d="M15.5 13.5 17.5 21l-5.5-2.75L6.5 21l2-7.5" />
+      <path d="m9.75 8 1.5 1.5 3-3" />
+    </Glyph>
+  ),
+  education: (
+    <Glyph>
+      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+      <path d="M6 12v5c3 3 9 3 12 0v-5" />
+    </Glyph>
+  ),
+  lock: (
+    <Glyph className="w-3.5 h-3.5">
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </Glyph>
+  ),
+};
+
+function Arrow({ up }: { up: boolean }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round">
-      <path d="M6 6l12 12M18 6L6 18" />
+    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={up ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} />
     </svg>
   );
 }
 
-/** Backdrop + animated dialog panel. Closes on Escape and backdrop click unless `locked`. */
-function ModalFrame({
-  open,
-  onClose,
-  label,
-  locked = false,
-  zIndex = 60,
-  className = 'max-w-3xl',
+/** One titled group of the form: raised icon tile, Lora heading, a hint and an optional action. */
+function FormSection({
+  id,
+  icon,
+  title,
+  hint,
+  action,
   children,
 }: {
-  open: boolean;
-  onClose: () => void;
-  label: string;
-  locked?: boolean;
-  zIndex?: number;
-  className?: string;
+  id: string;
+  icon: React.ReactNode;
+  title: React.ReactNode;
+  hint?: React.ReactNode;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !locked) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, locked, onClose]);
-
-  // Portal to <body>: the shell's view wrapper animates with `transform`, which would otherwise
-  // trap `position: fixed` inside the scrolling content area instead of the viewport.
-  const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
-  if (!mounted) return null;
-
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          key="backdrop"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          onClick={() => !locked && onClose()}
-          style={{ zIndex }}
-          className="fixed inset-0 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4"
-        >
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            aria-label={label}
-            onClick={(e) => e.stopPropagation()}
-            initial={{ opacity: 0, y: 28, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 18, scale: 0.97 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-            className={`w-full ${className} rounded-[28px] sm:rounded-[32px] bg-[#E5D8CB] max-h-[90vh] flex flex-col overflow-hidden text-[#341512]`}
-            style={{ boxShadow: '16px 16px 40px rgba(0,0,0,0.35), -8px -8px 24px rgba(255,255,255,0.55)' }}
-          >
-            {children}
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    document.body
+  return (
+    <section aria-labelledby={id} className="space-y-4">
+      <div className="flex flex-wrap items-start gap-3">
+        <span className="neu-raised-sm grid size-9 shrink-0 place-items-center rounded-xl bg-[#E5D8CB] text-[#C58B3C]">{icon}</span>
+        <div className="min-w-0 flex-1 pt-0.5">
+          <h3 id={id} className="font-lora text-[15px] sm:text-base font-bold leading-tight text-[#341512]">
+            {title}
+          </h3>
+          {hint && <p className="mt-1 font-inter text-[11.5px] leading-relaxed text-[#7D6855]">{hint}</p>}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </div>
+      {children}
+    </section>
   );
 }
 
-function ModalHeader({ title, subtitle, onClose, disabled }: { title: string; subtitle?: string; onClose: () => void; disabled?: boolean }) {
+/** A number field with the raised up / down capsule (and an optional ₱ prefix). */
+function NumberField({
+  id,
+  label,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  min,
+  max,
+  step,
+  fallback,
+  prefix,
+  invalid,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  fallback?: number;
+  prefix?: string;
+  invalid?: boolean;
+}) {
   return (
-    <div className="flex items-start justify-between gap-4 px-6 sm:px-8 pt-6 sm:pt-7 pb-4 border-b border-[#D1BEA8]/80 shrink-0">
-      <div>
-        <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512]/90 leading-tight">{title}</h2>
-        {subtitle && <p className="text-xs text-[#341512]/70 font-inter mt-1">{subtitle}</p>}
+    <div>
+      <label htmlFor={id} className={labelClass}>
+        {label}
+      </label>
+      <div className="relative">
+        {prefix && (
+          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-inter text-[13px] font-semibold text-[#7D6855]">{prefix}</span>
+        )}
+        <input
+          id={id}
+          type="number"
+          inputMode={step && step % 1 !== 0 ? 'decimal' : 'numeric'}
+          min={min}
+          max={max}
+          value={value}
+          disabled={disabled}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          aria-invalid={invalid || undefined}
+          className={`${inputClass} pr-12 ${prefix ? 'pl-8' : ''} ${invalid ? 'neu-input-error' : ''}`}
+        />
+        <NeuNumberStepper value={value} onChange={onChange} min={min} max={max} step={step} fallback={fallback} label={label.toLowerCase()} disabled={disabled} />
       </div>
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        disabled={disabled}
-        className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-[#341512]/70 hover:text-[#341512] hover:bg-[#D39758]/15 transition-colors cursor-pointer disabled:opacity-40"
-      >
-        <CloseIcon />
-      </button>
     </div>
   );
 }
 
-function ErrorBanner({ message }: { message: string | null }) {
-  return (
-    <AnimatePresence initial={false}>
-      {message && (
-        <motion.p
-          role="alert"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.25, ease: EASE_OUT }}
-          className="overflow-hidden rounded-[12px] bg-rose-100/80 border border-rose-300 px-4 py-2.5 text-xs font-medium text-rose-900"
-        >
-          {message}
-        </motion.p>
-      )}
-    </AnimatePresence>
-  );
-}
-
-// ─── Confirmation modal (Figma: "Update Lawyer Profile?") ─────────────────────
+// ─── Confirmation ("Update your lawyer profile?") ─────────────────────────────
 
 export function ConfirmUpdateModal({
   open,
-  pending,
-  onCancel,
+  submission,
+  onClose,
   onConfirm,
-  title = 'Update Lawyer Profile?',
-  message = 'You are about to update your public lawyer profile. Your bio, consultation rates, credentials, professional background and educational background will be saved and shown to clients browsing the Justicia lawyer directory as soon as you confirm. Please make sure every detail is accurate, current, and consistent with the Code of Professional Responsibility and Accountability before you continue.',
-  confirmLabel = 'Update',
+  title = 'Update your lawyer profile?',
+  message = 'Your changes will be shown to clients browsing the Justicia lawyer directory as soon as you confirm. Please make sure every detail is accurate, current, and consistent with the Code of Professional Responsibility and Accountability.',
+  confirmLabel = 'Update Profile',
 }: {
   open: boolean;
-  pending: boolean;
-  onCancel: () => void;
+  submission: SubmissionState;
+  /** Cancel, or close the result card (the caller checks submission.phase). */
+  onClose: () => void;
   onConfirm: () => void;
   title?: string;
   message?: string;
   confirmLabel?: string;
 }) {
   return (
-    <ModalFrame open={open} onClose={onCancel} label={title} locked={pending} zIndex={70} className="max-w-[780px]">
-      <div className="px-6 py-8 sm:px-14 sm:py-10 flex flex-col items-center gap-7 overflow-y-auto">
-        <div className="neu-raised-highlight rounded-[16px] px-8 sm:px-16 py-4 sm:py-5">
-          <h2 className="font-lora text-2xl sm:text-[32px] font-bold text-[#341512]/75 text-center leading-tight">{title}</h2>
-        </div>
-        <p className="font-inter text-[13px] sm:text-[15px] leading-[1.75] text-[#341512]/80 text-justify indent-8 sm:indent-14">
-          {message}
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-5 sm:gap-16 pt-1">
-          <button type="button" onClick={onCancel} disabled={pending} className={`${secondaryBtn} w-36 sm:w-44`}>
-            Cancel
-          </button>
-          <button type="button" onClick={onConfirm} disabled={pending} className={`${primaryBtn} w-36 sm:w-44`}>
-            {pending && <Spinner />}
-            {pending ? 'Updating…' : confirmLabel}
-          </button>
-        </div>
-      </div>
-    </ModalFrame>
+    <AnimatePresence>
+      {open && (
+        <SubmitModal
+          key="confirm-update"
+          submission={submission}
+          onClose={onClose}
+          processing={{ title: 'Updating your profile', message: 'Saving your changes to the lawyer directory.' }}
+          success={{ title: 'Profile updated', message: 'Clients now see your updated information on your Lawyer Profile.' }}
+          failure={{ title: "We couldn't update your profile", retryLabel: 'Try Again' }}
+          size="md"
+          icon={<AlertIcon className="w-5 h-5" />}
+          title={title}
+          subtitle={message}
+          bodyClassName="space-y-4"
+          footer={
+            <>
+              <NeuButton variant="secondary" onClick={onClose} disabled={submission.phase === 'processing'}>
+                Keep Editing
+              </NeuButton>
+              <NeuButton variant="primary" disabled={submission.phase === 'processing'} icon={<CheckCircleIcon className="w-4 h-4" />} onClick={onConfirm}>
+                {confirmLabel}
+              </NeuButton>
+            </>
+          }
+        >
+          <NeuAlert tone="info">Your name and Roll of Attorneys No. are verified credentials. They stay as they are and can only be changed through support.</NeuAlert>
+        </SubmitModal>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -216,8 +260,9 @@ interface FieldDef {
   label: string;
   placeholder?: string;
   required?: boolean;
-  type?: 'text' | 'number' | 'textarea';
-  /** Tailwind col-span inside the 2-col row grid. */
+  type?: 'text' | 'year' | 'textarea';
+  maxLength?: number;
+  /** Spans both columns of the entry grid. */
   wide?: boolean;
 }
 
@@ -229,49 +274,55 @@ function emptyRow(fields: FieldDef[]): Row {
 }
 
 const AREA_FIELDS: FieldDef[] = [
-  { name: 'area', label: 'Practice area', placeholder: 'e.g. Labor & Employment', required: true },
-  { name: 'description', label: 'Description', placeholder: 'Short description of the work you handle' },
+  { name: 'area', label: 'Practice area', placeholder: 'e.g. Labor & Employment', required: true, maxLength: 120 },
+  { name: 'description', label: 'Description', placeholder: 'Short description of the work you handle', maxLength: 1000 },
 ];
 const EXPERIENCE_FIELDS: FieldDef[] = [
-  { name: 'title', label: 'Position / Role', placeholder: 'e.g. Senior Associate', required: true },
-  { name: 'organization', label: 'Firm / Organization', placeholder: 'e.g. Santos & Reyes Law Offices' },
-  { name: 'years', label: 'Years', placeholder: 'e.g. 2019 – Present' },
-  { name: 'description', label: 'Description', placeholder: 'Key responsibilities or achievements' },
+  { name: 'title', label: 'Position / Role', placeholder: 'e.g. Senior Associate', required: true, maxLength: 200 },
+  { name: 'organization', label: 'Firm / Organization', placeholder: 'e.g. Santos & Reyes Law Offices', maxLength: 200 },
+  { name: 'years', label: 'Years', placeholder: 'e.g. 2019 – Present', maxLength: 50 },
+  { name: 'description', label: 'Description', placeholder: 'Key responsibilities or achievements', maxLength: 1000 },
 ];
 const SERVICE_FIELDS: FieldDef[] = [
-  { name: 'name', label: 'Service', placeholder: 'e.g. Contract review', required: true },
-  { name: 'description', label: 'Description', placeholder: 'What the client gets' },
+  { name: 'name', label: 'Service', placeholder: 'e.g. Contract review', required: true, maxLength: 200 },
+  { name: 'description', label: 'Description', placeholder: 'What the client gets', maxLength: 1000 },
 ];
 const EDUCATION_FIELDS: FieldDef[] = [
-  { name: 'degree', label: 'Degree', placeholder: 'e.g. Juris Doctor', required: true },
-  { name: 'school', label: 'School', placeholder: 'e.g. University of the Philippines - Cebu' },
-  { name: 'startYear', label: 'Start year', placeholder: '2017', type: 'number' },
-  { name: 'endYear', label: 'End year', placeholder: '2021', type: 'number' },
-  { name: 'description', label: 'Highlights (one per line)', placeholder: 'Dean’s Lister\nMoot court finalist', type: 'textarea', wide: true },
+  { name: 'degree', label: 'Degree', placeholder: 'e.g. Juris Doctor', required: true, maxLength: 200 },
+  { name: 'school', label: 'School', placeholder: 'e.g. University of the Philippines - Cebu', maxLength: 200 },
+  { name: 'startYear', label: 'Start year', placeholder: '2017', type: 'year' },
+  { name: 'endYear', label: 'End year', placeholder: '2021', type: 'year' },
+  { name: 'description', label: 'Highlights (one per line)', placeholder: 'Dean’s Lister\nMoot court finalist', type: 'textarea', wide: true, maxLength: 2000 },
 ];
 
-function RowListSection({
+function RowList({
+  id,
+  icon,
   title,
   hint,
+  itemLabel,
+  addLabel,
   fields,
   rows,
   onChange,
-  addLabel,
   disabled,
   showErrors = false,
 }: {
+  id: string;
+  icon: React.ReactNode;
   title: string;
   hint?: string;
+  /** Names each entry ("Area 1", "Service 2"…). */
+  itemLabel: string;
+  addLabel: string;
   fields: FieldDef[];
   rows: Row[];
   onChange: (rows: Row[]) => void;
-  addLabel: string;
   disabled?: boolean;
-  /** Outline required fields that are still empty (after a failed save attempt). */
+  /** Mark required fields that are still empty (after a failed save attempt). */
   showErrors?: boolean;
 }) {
-  const update = (key: string, name: string, value: string) =>
-    onChange(rows.map((r) => (r.key === key ? { ...r, [name]: value } : r)));
+  const update = (key: string, name: string, value: string) => onChange(rows.map((r) => (r.key === key ? { ...r, [name]: value } : r)));
   const remove = (key: string) => onChange(rows.filter((r) => r.key !== key));
   const move = (index: number, dir: -1 | 1) => {
     const next = [...rows];
@@ -282,19 +333,19 @@ function RowListSection({
   };
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h3 className="font-lora text-base sm:text-lg font-bold text-[#341512]/85">{title}</h3>
-          {hint && <p className="text-[11px] text-[#341512]/60 font-inter">{hint}</p>}
-        </div>
-        <button type="button" disabled={disabled} onClick={() => onChange([...rows, emptyRow(fields)])} className={ghostBtn}>
-          <span className="text-sm leading-none">+</span> {addLabel}
-        </button>
-      </div>
-
+    <FormSection
+      id={id}
+      icon={icon}
+      title={title}
+      hint={hint}
+      action={
+        <NeuButton size="sm" disabled={disabled} onClick={() => onChange([...rows, emptyRow(fields)])}>
+          <span aria-hidden="true" className="text-sm leading-none">+</span> {addLabel}
+        </NeuButton>
+      }
+    >
       {rows.length === 0 && (
-        <p className="text-xs text-[#341512]/55 font-inter italic px-1">Nothing added yet.</p>
+        <p className="neu-recessed rounded-[18px] px-5 py-4 text-center font-inter text-xs text-[#7D6855]">Nothing added yet.</p>
       )}
 
       <AnimatePresence initial={false}>
@@ -304,64 +355,98 @@ function RowListSection({
             layout
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, height: 0, marginTop: 0 }}
-            transition={{ duration: 0.25, ease: EASE_OUT }}
-            className="neu-raised-sm rounded-[16px] bg-[#E5D8CB] p-4 space-y-3"
+            exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.18 } }}
+            transition={{ duration: 0.28, ease: EASE_OUT }}
+            className="neu-raised-sm rounded-[20px] bg-[#E5D8CB] p-4 sm:p-5 space-y-4"
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-inter text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#7D6855]">
+                {itemLabel} {index + 1}
+              </span>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={disabled || index === 0} onClick={() => move(index, -1)} className={iconBtnClass} aria-label={`Move ${itemLabel.toLowerCase()} ${index + 1} up`}>
+                  <Arrow up />
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled || index === rows.length - 1}
+                  onClick={() => move(index, 1)}
+                  className={iconBtnClass}
+                  aria-label={`Move ${itemLabel.toLowerCase()} ${index + 1} down`}
+                >
+                  <Arrow up={false} />
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => remove(row.key)}
+                  className={`${iconBtnClass} hover:text-[#B42318]!`}
+                  aria-label={`Remove ${itemLabel.toLowerCase()} ${index + 1}`}
+                >
+                  <TrashIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {fields.map((f) => {
-                const id = `${row.key}-${f.name}`;
-                const invalid = showErrors && f.required && !isBlankRow(row, fields) && !row[f.name]?.trim();
-                const ring = invalid ? ' ring-2 ring-rose-400/80' : '';
+                const fieldId = `${row.key}-${f.name}`;
+                const invalid = showErrors && !!f.required && !isBlankRow(row, fields) && !row[f.name]?.trim();
+                const value = row[f.name] ?? '';
+                if (f.type === 'year') {
+                  return (
+                    <NumberField
+                      key={f.name}
+                      id={fieldId}
+                      label={f.label}
+                      value={value}
+                      onChange={(v) => update(row.key, f.name, v)}
+                      disabled={disabled}
+                      placeholder={f.placeholder}
+                      min={1950}
+                      max={CURRENT_YEAR + 8}
+                      fallback={CURRENT_YEAR}
+                    />
+                  );
+                }
                 return (
                   <div key={f.name} className={f.wide || f.type === 'textarea' ? 'sm:col-span-2' : ''}>
-                    <label htmlFor={id} className={labelClass}>
+                    <label htmlFor={fieldId} className={labelClass}>
                       {f.label}
                       {f.required && <span className="text-[#C58B3C]"> *</span>}
                     </label>
                     {f.type === 'textarea' ? (
                       <textarea
-                        id={id}
+                        id={fieldId}
                         rows={3}
-                        value={row[f.name] ?? ''}
+                        maxLength={f.maxLength}
+                        value={value}
                         disabled={disabled}
                         placeholder={f.placeholder}
                         onChange={(e) => update(row.key, f.name, e.target.value)}
-                        aria-invalid={invalid || undefined}
-                        className={`${inputClass} resize-y${ring}`}
+                        className={textareaClass}
                       />
                     ) : (
                       <input
-                        id={id}
-                        type={f.type === 'number' ? 'number' : 'text'}
-                        inputMode={f.type === 'number' ? 'numeric' : undefined}
-                        value={row[f.name] ?? ''}
+                        id={fieldId}
+                        type="text"
+                        maxLength={f.maxLength}
+                        value={value}
                         disabled={disabled}
                         placeholder={f.placeholder}
                         onChange={(e) => update(row.key, f.name, e.target.value)}
                         aria-invalid={invalid || undefined}
-                        className={`${inputClass}${ring}`}
+                        className={`${inputClass} ${invalid ? 'neu-input-error' : ''}`}
                       />
                     )}
                   </div>
                 );
               })}
             </div>
-            <div className="flex items-center justify-end gap-1">
-              <button type="button" disabled={disabled || index === 0} onClick={() => move(index, -1)} className={`${ghostBtn} disabled:opacity-30`} aria-label="Move up">
-                ↑
-              </button>
-              <button type="button" disabled={disabled || index === rows.length - 1} onClick={() => move(index, 1)} className={`${ghostBtn} disabled:opacity-30`} aria-label="Move down">
-                ↓
-              </button>
-              <button type="button" disabled={disabled} onClick={() => remove(row.key)} className={`${ghostBtn} hover:!text-rose-800`}>
-                Remove
-              </button>
-            </div>
           </motion.div>
         ))}
       </AnimatePresence>
-    </section>
+    </FormSection>
   );
 }
 
@@ -454,6 +539,16 @@ interface FormProblem {
 /** Quick client-side check so obvious mistakes are caught before the confirmation step. */
 function validateForm(raw: ProfileFormState): FormProblem | null {
   const form = withoutBlankRows(raw);
+  for (const [label, key] of [
+    ['Initial consultation fee', 'feeInitial30min'],
+    ['Standard consultation fee', 'feeStandard60min'],
+    ['Extended consultation fee', 'feeExtended120min'],
+  ] as const) {
+    const value = form[key];
+    if (value.trim() && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
+      return { message: `${label} must be a positive amount.`, focusId: `profile-${key}` };
+    }
+  }
   if (form.practiceAreas.length === 0) {
     return { message: 'Add at least one area of practice.' };
   }
@@ -462,11 +557,22 @@ function validateForm(raw: ProfileFormState): FormProblem | null {
     [form.practiceAreas, 'area', 'Areas of Practice: enter a practice area name (or remove that entry).'],
     [form.experiences, 'title', 'Legal Experience: enter the Position / Role for each entry (or remove that entry).'],
     [form.services, 'name', 'Consultation Services: enter the Service name for each entry (or remove that entry).'],
-    [form.education, 'degree', 'Educational Background: enter the Degree for each entry (or remove that entry).'],
   ];
   for (const [rows, field, message] of checks) {
     const row = firstMissing(rows, field);
     if (row) return { message, focusId: `${row.key}-${field}` };
+  }
+  const bar = form.barPasserYear.trim();
+  if (bar && (!/^\d{4}$/.test(bar) || Number(bar) < 1901 || Number(bar) > CURRENT_YEAR)) {
+    return { message: `Philippine Bar Examination: enter the year you passed (1901 – ${CURRENT_YEAR}).`, focusId: 'profile-barPasserYear' };
+  }
+  const years = form.experienceYears.trim();
+  if (years && (!/^\d{1,2}$/.test(years) || Number(years) > 80)) {
+    return { message: 'Years of practice must be a whole number from 0 to 80.', focusId: 'profile-experienceYears' };
+  }
+  const missingDegree = firstMissing(form.education, 'degree');
+  if (missingDegree) {
+    return { message: 'Educational Background: enter the Degree for each entry (or remove that entry).', focusId: `${missingDegree.key}-degree` };
   }
   for (const r of form.education) {
     for (const field of ['startYear', 'endYear'] as const) {
@@ -479,22 +585,12 @@ function validateForm(raw: ProfileFormState): FormProblem | null {
       return { message: 'Educational Background: the end year cannot be before the start year.', focusId: `${r.key}-endYear` };
     }
   }
-  for (const [label, key] of [
-    ['Initial consultation fee', 'feeInitial30min'],
-    ['Standard consultation fee', 'feeStandard60min'],
-    ['Extended consultation fee', 'feeExtended120min'],
-  ] as const) {
-    const value = form[key];
-    if (value.trim() && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
-      return { message: `${label} must be a positive amount.`, focusId: `profile-${key}` };
-    }
-  }
   return null;
 }
 
 function focusField(id?: string) {
   if (!id) return;
-  // Wait a frame so newly-applied error rings are rendered before scrolling.
+  // Wait a frame so newly applied error styles are rendered before scrolling.
   requestAnimationFrame(() => {
     const el = document.getElementById(id);
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -510,23 +606,23 @@ interface EditProfileModalProps {
   details: LawyerOwnProfileDetails;
 }
 
-export function EditProfileModal(props: EditProfileModalProps) {
-  const session = useOpenSession(props.open);
-  return <EditProfileModalInner key={session} {...props} />;
+/** Each opening starts from the latest saved profile (the dialog remounts), and its exit plays. */
+export function EditProfileModal({ open, ...props }: EditProfileModalProps) {
+  return <AnimatePresence>{open && <EditProfileDialog key="edit-profile" {...props} />}</AnimatePresence>;
 }
 
-function EditProfileModalInner({ open, onClose, onSaved, lawyer, details }: EditProfileModalProps) {
+function EditProfileDialog({ onClose, onSaved, lawyer, details }: Omit<EditProfileModalProps, 'open'>) {
   const [form, setForm] = useState<ProfileFormState>(() => buildInitialForm(lawyer, details));
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pending, setPending] = useState(false);
+  const submission = useSubmission();
+  // The form is locked while saving and once saved (the dialog closes after "Done").
+  const pending = submission.phase === 'processing' || submission.phase === 'success';
   const [showErrors, setShowErrors] = useState(false);
 
-  const set = <K extends keyof ProfileFormState>(key: K, value: ProfileFormState[K]) =>
-    setForm((f) => ({ ...f, [key]: value }));
+  const set = <K extends keyof ProfileFormState>(key: K, value: ProfileFormState[K]) => setForm((f) => ({ ...f, [key]: value }));
 
-  const handleReview = (e: React.FormEvent) => {
-    e.preventDefault();
+  const review = () => {
     const problem = validateForm(form);
     setError(problem?.message ?? null);
     setShowErrors(!!problem);
@@ -534,152 +630,219 @@ function EditProfileModalInner({ open, onClose, onSaved, lawyer, details }: Edit
       focusField(problem.focusId);
       return;
     }
+    submission.reset();
     setConfirmOpen(true);
   };
 
-  const handleConfirm = async () => {
-    setPending(true);
-    try {
-      const res = await updateLawyerProfileAction(toPayload(form));
-      if (!res.success) {
-        setError(res.error);
-        setConfirmOpen(false);
-        return;
-      }
-      setConfirmOpen(false);
-      onSaved();
-    } catch {
-      setError('Unable to update your profile. Please try again.');
-      setConfirmOpen(false);
-    } finally {
-      setPending(false);
-    }
+  /** The confirmation morphs into the loader, then the check (or the X with the reason). */
+  const confirm = async () => {
+    const result = await submission.run(() => settle(() => updateLawyerProfileAction(toPayload(form)), 'Unable to update your profile. Please try again.'));
+    if (result && !result.ok) setError(result.error);
   };
 
-  const textField = (key: keyof ProfileFormState, label: string, opts: { placeholder?: string; type?: 'number'; prefix?: string } = {}) => (
+  /** "Done" after a success closes everything; otherwise back to the form. */
+  const closeConfirm = () => {
+    if (submission.phase === 'success') onSaved();
+    else setConfirmOpen(false);
+  };
+
+  const textField = (key: 'ibpChapter' | 'languages', label: string, placeholder: string, maxLength = 120) => (
     <div>
-      <label htmlFor={`profile-${key}`} className={labelClass}>{label}</label>
-      <div className="relative">
-        {opts.prefix && (
-          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-[#341512]/60">{opts.prefix}</span>
-        )}
-        <input
-          id={`profile-${key}`}
-          type={opts.type ?? 'text'}
-          inputMode={opts.type === 'number' ? 'decimal' : undefined}
-          min={opts.type === 'number' ? 0 : undefined}
-          value={form[key] as string}
-          disabled={pending}
-          placeholder={opts.placeholder}
-          onChange={(e) => set(key, e.target.value as never)}
-          className={`${inputClass} ${opts.prefix ? 'pl-8' : ''}`}
-        />
-      </div>
+      <label htmlFor={`profile-${key}`} className={labelClass}>
+        {label}
+      </label>
+      <input
+        id={`profile-${key}`}
+        type="text"
+        maxLength={maxLength}
+        value={form[key]}
+        disabled={pending}
+        placeholder={placeholder}
+        onChange={(e) => set(key, e.target.value)}
+        className={inputClass}
+      />
     </div>
   );
 
+  const barYear = form.barPasserYear.trim();
+
   return (
     <>
-      <ModalFrame open={open} onClose={onClose} label="Edit lawyer information" locked={pending || confirmOpen}>
-        <ModalHeader
-          title="Edit Information"
-          subtitle="Update what clients see on your Lawyer Profile. Your name and Roll No. are verified credentials and can only be changed through support."
-          onClose={onClose}
-          disabled={pending}
-        />
-        <form onSubmit={handleReview} className="flex-1 min-h-0 flex flex-col">
-          <div className="flex-1 min-h-0 overflow-y-auto neu-scrollbar-discrete px-6 sm:px-8 py-6 space-y-8">
-            <section className="space-y-2">
-              <h3 className="font-lora text-base sm:text-lg font-bold text-[#341512]/85">About</h3>
-              <label htmlFor="profile-about" className="sr-only">About</label>
-              <textarea
-                id="profile-about"
-                rows={6}
-                maxLength={5000}
-                value={form.about}
-                disabled={pending}
-                onChange={(e) => set('about', e.target.value)}
-                placeholder="Introduce yourself to clients: your practice, approach, and the matters you handle."
-                className={`${inputClass} resize-y leading-relaxed`}
-              />
-              <p className="text-right text-[10px] text-[#341512]/50 font-inter">{form.about.length}/5000</p>
-            </section>
-
-            <section className="space-y-3">
-              <h3 className="font-lora text-base sm:text-lg font-bold text-[#341512]/85">Consultation Rates</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {textField('feeInitial30min', 'Initial (30 mins)', { type: 'number', prefix: '₱', placeholder: '700' })}
-                {textField('feeStandard60min', 'Standard (1 hr)', { type: 'number', prefix: '₱', placeholder: '1500' })}
-                {textField('feeExtended120min', 'Extended (2 hrs)', { type: 'number', prefix: '₱', placeholder: '2300' })}
-              </div>
-            </section>
-
-            <section className="space-y-3">
-              <h3 className="font-lora text-base sm:text-lg font-bold text-[#341512]/85">Credentials</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {textField('ibpChapter', 'IBP Chapter', { placeholder: 'e.g. Makati' })}
-                {textField('languages', 'Languages (comma separated)', { placeholder: 'English, Filipino' })}
-                {textField('experienceYears', 'Years of practice', { type: 'number', placeholder: '9' })}
-                {textField('barPasserYear', 'Bar passer year', { type: 'number', placeholder: '2016' })}
-              </div>
-            </section>
-
-            <RowListSection
-              title="Areas of Practice"
-              hint="Shown on your banner and used by the lawyer directory filters. At least one is required."
-              fields={AREA_FIELDS}
-              rows={form.practiceAreas}
-              onChange={(rows) => set('practiceAreas', rows)}
-              addLabel="Add area"
-              disabled={pending}
-              showErrors={showErrors}
-            />
-            <RowListSection
-              title="Legal Experience"
-              fields={EXPERIENCE_FIELDS}
-              rows={form.experiences}
-              onChange={(rows) => set('experiences', rows)}
-              addLabel="Add experience"
-              disabled={pending}
-              showErrors={showErrors}
-            />
-            <RowListSection
-              title="Consultation Services"
-              fields={SERVICE_FIELDS}
-              rows={form.services}
-              onChange={(rows) => set('services', rows)}
-              addLabel="Add service"
-              disabled={pending}
-              showErrors={showErrors}
-            />
-            <RowListSection
-              title="Educational Background"
-              fields={EDUCATION_FIELDS}
-              rows={form.education}
-              onChange={(rows) => set('education', rows)}
-              addLabel="Add education"
-              disabled={pending}
-              showErrors={showErrors}
-            />
-          </div>
-
-          {/* Footer stays visible, so a save problem is never hidden above the scrolled form. */}
-          <div className="shrink-0 px-6 sm:px-8 py-4 border-t border-[#D1BEA8]/80 space-y-3">
-            <ErrorBanner message={error} />
-            <div className="flex items-center justify-end gap-3">
-              <button type="button" onClick={onClose} disabled={pending} className={secondaryBtn}>Cancel</button>
-              <button type="submit" disabled={pending} className={primaryBtn}>Save Changes</button>
+      <NeuModal
+        onClose={onClose}
+        dismissible={!pending && !confirmOpen}
+        size="xl"
+        icon={<PencilIcon className="w-5 h-5" />}
+        title="Edit Information"
+        subtitle="Update what clients see on the About tab of your Lawyer Profile. Your name and Roll No. are verified credentials and can only be changed through support."
+        bodyClassName="space-y-8 [&>*+*]:border-t [&>*+*]:border-[#CDBCA8]/60 [&>*+*]:pt-8"
+        footerStart={
+          error ? (
+            <span role="alert" className="flex items-start gap-2 text-left font-medium text-[#B42318]">
+              <AlertIcon className="mt-px h-4 w-4 shrink-0" />
+              {error}
+            </span>
+          ) : (
+            'Changes go live on your profile after you confirm.'
+          )
+        }
+        footer={
+          <>
+            <NeuButton variant="secondary" onClick={onClose} disabled={pending}>
+              Cancel
+            </NeuButton>
+            <NeuButton variant="primary" onClick={review} disabled={pending}>
+              Save Changes
+            </NeuButton>
+          </>
+        }
+      >
+        {/* About Me (the bio card) */}
+        <FormSection id="edit-about" icon={<UserIcon className="w-[18px] h-[18px]" />} title="About Me" hint="The introduction at the top of your About tab.">
+          <div>
+            <div className="flex items-baseline justify-between gap-3">
+              <label htmlFor="profile-about" className={labelClass}>
+                Introduction
+              </label>
+              <span className="font-inter text-[10.5px] text-[#7D6855]">{form.about.length}/5000</span>
             </div>
+            <textarea
+              id="profile-about"
+              rows={6}
+              maxLength={5000}
+              value={form.about}
+              disabled={pending}
+              onChange={(e) => set('about', e.target.value)}
+              placeholder="Introduce yourself to clients: your practice, approach, and the matters you handle."
+              className={textareaClass}
+            />
           </div>
-        </form>
-      </ModalFrame>
+          {textField('languages', 'Languages spoken (comma separated)', 'English, Filipino, Cebuano')}
+          <p className="-mt-2 font-inter text-[11px] text-[#7D6855]">Clients can filter the Find a Lawyer directory by language.</p>
+        </FormSection>
 
-      <ConfirmUpdateModal
-        open={open && confirmOpen}
-        pending={pending}
-        onCancel={() => setConfirmOpen(false)}
-        onConfirm={handleConfirm}
-      />
+        {/* Consultation Rates card */}
+        <FormSection id="edit-rates" icon={<WalletIcon className="w-[18px] h-[18px]" />} title="Consultation Rates" hint="Per session. Leave a rate empty to show “Not set”.">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <NumberField id="profile-feeInitial30min" label="Initial (30 mins)" prefix="₱" placeholder="700" min={0} step={50} fallback={500} value={form.feeInitial30min} onChange={(v) => set('feeInitial30min', v)} disabled={pending} />
+            <NumberField id="profile-feeStandard60min" label="Standard (1 hr)" prefix="₱" placeholder="1500" min={0} step={50} fallback={1000} value={form.feeStandard60min} onChange={(v) => set('feeStandard60min', v)} disabled={pending} />
+            <NumberField id="profile-feeExtended120min" label="Extended (2 hrs)" prefix="₱" placeholder="2300" min={0} step={50} fallback={2000} value={form.feeExtended120min} onChange={(v) => set('feeExtended120min', v)} disabled={pending} />
+          </div>
+        </FormSection>
+
+        {/* Professional Background, in the order of its four cards */}
+        <RowList
+          id="edit-areas"
+          icon={ICONS.areas}
+          title="Areas of Practice"
+          hint="Shown on your banner and used by the lawyer directory filters. At least one is required."
+          itemLabel="Area"
+          addLabel="Add area"
+          fields={AREA_FIELDS}
+          rows={form.practiceAreas}
+          onChange={(rows) => set('practiceAreas', rows)}
+          disabled={pending}
+          showErrors={showErrors}
+        />
+        <RowList
+          id="edit-experience"
+          icon={ICONS.experience}
+          title="Legal Experience"
+          itemLabel="Position"
+          addLabel="Add experience"
+          fields={EXPERIENCE_FIELDS}
+          rows={form.experiences}
+          onChange={(rows) => set('experiences', rows)}
+          disabled={pending}
+          showErrors={showErrors}
+        />
+        <RowList
+          id="edit-services"
+          icon={ICONS.services}
+          title="Consultation Services"
+          itemLabel="Service"
+          addLabel="Add service"
+          fields={SERVICE_FIELDS}
+          rows={form.services}
+          onChange={(rows) => set('services', rows)}
+          disabled={pending}
+          showErrors={showErrors}
+        />
+
+        {/* Philippine Bar Examination Passer card */}
+        <FormSection
+          id="edit-bar"
+          icon={ICONS.bar}
+          title="Philippine Bar Examination Passer"
+          hint={
+            <>
+              Shown on your profile as{' '}
+              <strong className="font-semibold text-[#5C4535]">“Philippine Bar Examination Passer{barYear ? ` (${barYear})` : ''}”</strong>, with your Roll No., IBP
+              chapter and years of practice listed under it.
+            </>
+          }
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <NumberField
+              id="profile-barPasserYear"
+              label="Year passed"
+              placeholder="2016"
+              min={1901}
+              max={CURRENT_YEAR}
+              fallback={CURRENT_YEAR - 1}
+              value={form.barPasserYear}
+              onChange={(v) => set('barPasserYear', v)}
+              disabled={pending}
+            />
+            <div>
+              <label htmlFor="profile-rollNumber" className={labelClass}>
+                Roll of Attorneys No.
+              </label>
+              <div className="relative">
+                <input
+                  id="profile-rollNumber"
+                  type="text"
+                  readOnly
+                  value={lawyer.rollNumber || '—'}
+                  aria-describedby="profile-rollNumber-note"
+                  className={`${inputClass} cursor-not-allowed pr-11 text-[#5C4535]`}
+                />
+                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#9A8270]">{ICONS.lock}</span>
+              </div>
+              <p id="profile-rollNumber-note" className="mt-1.5 font-inter text-[10.5px] text-[#7D6855]">
+                Verified credential. Contact support to change it.
+              </p>
+            </div>
+            {textField('ibpChapter', 'IBP Chapter', 'e.g. Makati')}
+            <NumberField
+              id="profile-experienceYears"
+              label="Years of practice"
+              placeholder="9"
+              min={0}
+              max={80}
+              fallback={1}
+              value={form.experienceYears}
+              onChange={(v) => set('experienceYears', v)}
+              disabled={pending}
+            />
+          </div>
+        </FormSection>
+
+        <RowList
+          id="edit-education"
+          icon={ICONS.education}
+          title="Educational Background"
+          itemLabel="School"
+          addLabel="Add education"
+          fields={EDUCATION_FIELDS}
+          rows={form.education}
+          onChange={(rows) => set('education', rows)}
+          disabled={pending}
+          showErrors={showErrors}
+        />
+      </NeuModal>
+
+      <ConfirmUpdateModal open={confirmOpen} submission={submission} onClose={closeConfirm} onConfirm={confirm} />
     </>
   );
 }
@@ -694,49 +857,25 @@ export interface CaseDetailItem {
 }
 
 export function CaseDetailModal({ caseItem, onClose }: { caseItem: CaseDetailItem | null; onClose: () => void }) {
-  // Keep the last case rendered while the close animation plays.
-  const [shown, setShown] = useState<CaseDetailItem | null>(caseItem);
-  if (caseItem && caseItem !== shown) setShown(caseItem);
-  const item = caseItem ?? shown;
-
   return (
-    <ModalFrame open={!!caseItem} onClose={onClose} label={item ? `Case: ${item.title}` : 'Case details'}>
-      {item && (
-        <>
-          <div className="flex items-start justify-between gap-4 px-6 sm:px-9 pt-6 sm:pt-8 pb-4 border-b border-[#D1BEA8]/80 shrink-0">
-            <div className="space-y-1.5 min-w-0">
-              <p className="font-inter font-bold text-[10px] sm:text-[11px] text-[#D39758] uppercase tracking-wider">{item.docket}</p>
-              <h2 className="font-lora text-xl sm:text-2xl font-bold text-[#341512] leading-tight">{item.title}</h2>
-            </div>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-              className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-[#341512]/70 hover:text-[#341512] hover:bg-[#D39758]/15 transition-colors cursor-pointer"
-            >
-              <CloseIcon />
-            </button>
+    <AnimatePresence>
+      {caseItem && (
+        <NeuModal
+          key={`case-${caseItem.id}`}
+          onClose={onClose}
+          size="xl"
+          icon={<ClipboardIcon className="w-5 h-5" />}
+          title={caseItem.title}
+          subtitle={<span className="font-bold uppercase tracking-[0.12em] text-[#946525]">{caseItem.docket}</span>}
+          footerStart="Case summaries are anonymized. No client names, case numbers, or privileged information are disclosed."
+          footer={<NeuButton onClick={onClose}>Close</NeuButton>}
+        >
+          <div className="neu-recessed rounded-[22px] p-5 sm:p-7">
+            <p className="select-text whitespace-pre-line text-justify indent-6 font-inter text-[13px] leading-relaxed text-[#3E2A1E] sm:text-sm">{caseItem.content}</p>
           </div>
-
-          <div className="flex-1 min-h-0 overflow-y-auto neu-scrollbar-discrete px-6 sm:px-9 py-6">
-            <div className="neu-recessed rounded-[20px] bg-[#E5D8CB] p-5 sm:p-7">
-              <p className="select-text font-inter text-[13px] sm:text-sm text-[#341512]/85 leading-relaxed text-justify whitespace-pre-line indent-6">
-                {item.content}
-              </p>
-            </div>
-          </div>
-
-          <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 sm:px-9 py-4 border-t border-[#D1BEA8]/80">
-            <p className="text-[11px] text-[#341512]/60 font-inter">
-              Case summaries are anonymized. No client names, case numbers, or privileged information are disclosed.
-            </p>
-            <button type="button" onClick={onClose} className={`${secondaryBtn} shrink-0`}>
-              Close
-            </button>
-          </div>
-        </>
+        </NeuModal>
       )}
-    </ModalFrame>
+    </AnimatePresence>
   );
 }
 
@@ -765,91 +904,153 @@ interface ManageCasesModalProps {
   onChanged: (message: string) => void;
 }
 
-export function ManageCasesModal(props: ManageCasesModalProps) {
-  const session = useOpenSession(props.open);
-  return <ManageCasesModalInner key={session} {...props} />;
+export function ManageCasesModal({ open, ...props }: ManageCasesModalProps) {
+  return <AnimatePresence>{open && <ManageCasesDialog key="manage-cases" {...props} />}</AnimatePresence>;
 }
 
-function ManageCasesModalInner({ open, onClose, cases, practiceAreaSuggestions, onChanged }: ManageCasesModalProps) {
+const VIEW_SWAP = {
+  initial: (dir: number) => ({ opacity: 0, x: 24 * dir }),
+  animate: { opacity: 1, x: 0, transition: { duration: 0.26, ease: EASE_OUT } },
+  exit: (dir: number) => ({ opacity: 0, x: -24 * dir, transition: { duration: 0.16 } }),
+};
+
+function ManageCasesDialog({ onClose, cases, practiceAreaSuggestions, onChanged }: Omit<ManageCasesModalProps, 'open'>) {
   const [editing, setEditing] = useState<CaseFormState | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const submission = useSubmission();
+  const busy = submission.processing;
+  /** Wording of the result card for the save or delete in progress. */
+  const [copy, setCopy] = useState<{ processing: SubmissionCopy; success: SubmissionCopy; failure: string }>({
+    processing: { title: 'Saving the case' },
+    success: { title: 'Case saved' },
+    failure: "We couldn't save this case",
+  });
+  /** Form problems (missing title or summary). Request errors are shown by the result card. */
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState<{ title?: boolean; summary?: boolean }>({});
 
   const startEdit = (c?: LawyerCaseSummaryRow) => {
     setError(null);
+    setMissing({});
     setPendingDeleteId(null);
     setEditing(
-      c
-        ? { id: c.id, title: c.title, practiceArea: c.practice_area ?? '', year: c.year ? String(c.year) : '', summary: c.anonymized_summary }
-        : { ...EMPTY_CASE }
+      c ? { id: c.id, title: c.title, practiceArea: c.practice_area ?? '', year: c.year ? String(c.year) : '', summary: c.anonymized_summary } : { ...EMPTY_CASE }
     );
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editing) return;
-    if (!editing.title.trim()) return setError('Please enter a case title.');
-    if (!editing.summary.trim()) return setError('Please enter an anonymized case summary.');
-    setBusy(true);
+  const back = () => {
+    setEditing(null);
     setError(null);
-    try {
-      const res = await saveLawyerCaseAction({
-        id: editing.id,
-        title: editing.title,
-        practiceArea: editing.practiceArea,
-        year: editing.year.trim() ? Number(editing.year) : null,
-        summary: editing.summary,
-      });
-      if (!res.success) return setError(res.error);
+    setMissing({});
+  };
+
+  const save = async () => {
+    if (!editing) return;
+    const gaps = { title: !editing.title.trim(), summary: !editing.summary.trim() };
+    setMissing(gaps);
+    if (gaps.title || gaps.summary) {
+      setError(gaps.title ? 'Please enter a case title.' : 'Please enter an anonymized case summary.');
+      focusField(gaps.title ? 'case-title' : 'case-summary');
+      return;
+    }
+    setError(null);
+    const isNew = !editing.id;
+    setCopy({
+      processing: { title: isNew ? 'Adding the case' : 'Saving the case', message: 'Updating the cases on your profile.' },
+      success: { title: isNew ? 'Case added' : 'Case updated', message: 'Clients can now read it on your Cases Handled tab.' },
+      failure: "We couldn't save this case",
+    });
+    const result = await submission.run(() =>
+      settle(
+        () =>
+          saveLawyerCaseAction({
+            id: editing.id,
+            title: editing.title,
+            practiceArea: editing.practiceArea,
+            year: editing.year.trim() ? Number(editing.year) : null,
+            summary: editing.summary,
+          }),
+        'Unable to save this case. Please try again.'
+      )
+    );
+    if (result?.ok) onChanged(isNew ? 'Case added to your profile.' : 'Case updated.');
+  };
+
+  const remove = async (id: string) => {
+    setError(null);
+    setCopy({
+      processing: { title: 'Removing the case', message: 'Taking it off your profile.' },
+      success: { title: 'Case removed', message: 'It no longer appears on your Cases Handled tab.' },
+      failure: "We couldn't remove this case",
+    });
+    const result = await submission.run(() => settle(() => deleteLawyerCaseAction(id), 'Unable to delete this case. Please try again.'));
+    if (result?.ok) onChanged('Case removed from your profile.');
+  };
+
+  /** "Back to Cases" after a success returns to the list; otherwise the dialog closes. */
+  const closeOrContinue = () => {
+    if (submission.phase === 'success') {
       setEditing(null);
-      onChanged(editing.id ? 'Case updated.' : 'Case added to your profile.');
-    } catch {
-      setError('Unable to save this case. Please try again.');
-    } finally {
-      setBusy(false);
+      setPendingDeleteId(null);
+      submission.reset();
+    } else {
+      onClose();
     }
   };
 
-  const handleDelete = async (id: string) => {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await deleteLawyerCaseAction(id);
-      if (!res.success) return setError(res.error);
-      setPendingDeleteId(null);
-      onChanged('Case removed from your profile.');
-    } catch {
-      setError('Unable to delete this case. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  };
+  const dir = editing ? 1 : -1;
 
   return (
-    <ModalFrame open={open} onClose={onClose} label="Edit visible cases" locked={busy}>
-      <ModalHeader
-        title={editing ? (editing.id ? 'Edit Case' : 'Add Case') : 'Edit Visible Cases'}
-        subtitle="Cases listed here are public. Keep summaries anonymized — never include client names, case numbers, or privileged details."
-        onClose={onClose}
-        disabled={busy}
-      />
+    <SubmitModal
+      submission={submission}
+      onClose={closeOrContinue}
+      processing={copy.processing}
+      success={{ ...copy.success, actionLabel: 'Back to Cases' }}
+      failure={{ title: copy.failure }}
+      size="xl"
+      icon={editing ? <PencilIcon className="w-5 h-5" /> : <ClipboardIcon className="w-5 h-5" />}
+      title={editing ? (editing.id ? 'Edit Case' : 'Add Case') : 'Edit Visible Cases'}
+      subtitle="Cases listed here are public. Keep summaries anonymized: never include client names, case numbers, or privileged details."
+      bodyClassName="space-y-5"
+      footerStart={editing ? undefined : `${cases.length} case${cases.length === 1 ? '' : 's'} on your profile`}
+      footer={
+        editing ? (
+          <>
+            <NeuButton key="back" onClick={back} disabled={busy}>
+              Back
+            </NeuButton>
+            <NeuButton key="save" variant="primary" disabled={busy} icon={<CheckCircleIcon className="w-4 h-4" />} onClick={save}>
+              {editing.id ? 'Save Case' : 'Add Case'}
+            </NeuButton>
+          </>
+        ) : (
+          <>
+            <NeuButton key="done" onClick={onClose} disabled={busy}>
+              Done
+            </NeuButton>
+            <NeuButton key="add" variant="primary" onClick={() => startEdit()} disabled={busy}>
+              + Add Case
+            </NeuButton>
+          </>
+        )
+      }
+    >
+      <div className="space-y-5">
+        <AnimatePresence initial={false}>
+          {error && (
+            <NeuAlert key="case-error" tone="error" onDismiss={() => setError(null)}>
+              {error}
+            </NeuAlert>
+          )}
+        </AnimatePresence>
 
-      <AnimatePresence mode="wait" initial={false}>
-        {editing ? (
-          <motion.form
-            key="case-form"
-            onSubmit={handleSave}
-            initial={{ opacity: 0, x: 24 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 24 }}
-            transition={{ duration: 0.25, ease: EASE_OUT }}
-            className="flex-1 min-h-0 flex flex-col"
-          >
-            <div className="flex-1 min-h-0 overflow-y-auto neu-scrollbar-discrete px-6 sm:px-8 py-6 space-y-4">
-              <ErrorBanner message={error} />
+        <AnimatePresence mode="wait" initial={false} custom={dir}>
+          {editing ? (
+            <motion.div key="case-form" custom={dir} variants={VIEW_SWAP} initial="initial" animate="animate" exit="exit" className="space-y-5">
               <div>
-                <label htmlFor="case-title" className={labelClass}>Case title <span className="text-[#C58B3C]">*</span></label>
+                <label htmlFor="case-title" className={labelClass}>
+                  Case title <span className="text-[#C58B3C]">*</span>
+                </label>
                 <input
                   id="case-title"
                   value={editing.title}
@@ -857,12 +1058,15 @@ function ManageCasesModalInner({ open, onClose, cases, practiceAreaSuggestions, 
                   disabled={busy}
                   onChange={(e) => setEditing({ ...editing, title: e.target.value })}
                   placeholder="e.g. Residential Lease Deposit Dispute & Formal Notice to Vacate"
-                  className={inputClass}
+                  aria-invalid={missing.title || undefined}
+                  className={`${inputClass} ${missing.title && !editing.title.trim() ? 'neu-input-error' : ''}`}
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_140px] gap-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_170px]">
                 <div>
-                  <label htmlFor="case-area" className={labelClass}>Subject matter</label>
+                  <label htmlFor="case-area" className={labelClass}>
+                    Subject matter
+                  </label>
                   <input
                     id="case-area"
                     list="case-area-suggestions"
@@ -874,36 +1078,30 @@ function ManageCasesModalInner({ open, onClose, cases, practiceAreaSuggestions, 
                     className={inputClass}
                   />
                   <datalist id="case-area-suggestions">
-                    {practiceAreaSuggestions.map((a) => <option key={a} value={a} />)}
+                    {practiceAreaSuggestions.map((a) => (
+                      <option key={a} value={a} />
+                    ))}
                   </datalist>
                 </div>
-                <div>
-                  <label htmlFor="case-year" className={labelClass}>Year</label>
-                  <div className="relative">
-                    <input
-                      id="case-year"
-                      type="number"
-                      inputMode="numeric"
-                      value={editing.year}
-                      disabled={busy}
-                      onChange={(e) => setEditing({ ...editing, year: e.target.value })}
-                      placeholder={String(new Date().getFullYear())}
-                      className={`${inputClass} pr-12`}
-                    />
-                    <NeuNumberStepper
-                      value={editing.year}
-                      onChange={(year) => setEditing({ ...editing, year })}
-                      min={1900}
-                      max={new Date().getFullYear()}
-                      fallback={new Date().getFullYear()}
-                      label="year"
-                      disabled={busy}
-                    />
-                  </div>
-                </div>
+                <NumberField
+                  id="case-year"
+                  label="Year"
+                  value={editing.year}
+                  onChange={(year) => setEditing({ ...editing, year })}
+                  min={1900}
+                  max={CURRENT_YEAR}
+                  fallback={CURRENT_YEAR}
+                  placeholder={String(CURRENT_YEAR)}
+                  disabled={busy}
+                />
               </div>
               <div>
-                <label htmlFor="case-summary" className={labelClass}>Anonymized summary <span className="text-[#C58B3C]">*</span></label>
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="case-summary" className={labelClass}>
+                    Anonymized summary <span className="text-[#C58B3C]">*</span>
+                  </label>
+                  <span className="font-inter text-[10.5px] text-[#7D6855]">{editing.summary.length}/5000</span>
+                </div>
                 <textarea
                   id="case-summary"
                   rows={8}
@@ -912,81 +1110,87 @@ function ManageCasesModalInner({ open, onClose, cases, practiceAreaSuggestions, 
                   disabled={busy}
                   onChange={(e) => setEditing({ ...editing, summary: e.target.value })}
                   placeholder="Describe the matter, your role, and the outcome without identifying any party."
-                  className={`${inputClass} resize-y leading-relaxed`}
+                  aria-invalid={missing.summary || undefined}
+                  className={`${textareaClass} ${missing.summary && !editing.summary.trim() ? 'neu-input-error' : ''}`}
                 />
               </div>
-            </div>
-            <div className="shrink-0 flex items-center justify-end gap-3 px-6 sm:px-8 py-4 border-t border-[#D1BEA8]/80">
-              <button type="button" onClick={() => { setEditing(null); setError(null); }} disabled={busy} className={secondaryBtn}>
-                Back
-              </button>
-              <button type="submit" disabled={busy} className={primaryBtn}>
-                {busy && <Spinner />}
-                {busy ? 'Saving…' : editing.id ? 'Save Case' : 'Add Case'}
-              </button>
-            </div>
-          </motion.form>
-        ) : (
-          <motion.div
-            key="case-list"
-            initial={{ opacity: 0, x: -24 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -24 }}
-            transition={{ duration: 0.25, ease: EASE_OUT }}
-            className="flex-1 min-h-0 flex flex-col"
-          >
-            <div className="flex-1 min-h-0 overflow-y-auto neu-scrollbar-discrete px-6 sm:px-8 py-6 space-y-3">
-              <ErrorBanner message={error} />
-              {cases.length === 0 && (
-                <p className="py-10 text-center text-xs text-[#341512]/60 font-lora">
-                  You haven’t added any cases yet. Use “Add Case” to showcase the matters you’ve handled.
-                </p>
+              <p className="flex items-start gap-2 font-inter text-[11px] leading-relaxed text-[#7D6855]">
+                <InfoIcon className="mt-px h-3.5 w-3.5 shrink-0 text-[#C58B3C]" />
+                Clients see the subject matter and year above the title, and the full summary when they open the case.
+              </p>
+            </motion.div>
+          ) : (
+            <motion.div key="case-list" custom={dir} variants={VIEW_SWAP} initial="initial" animate="animate" exit="exit" className="space-y-3">
+              {cases.length === 0 ? (
+                <EmptyState
+                  size="sm"
+                  icon={<ClipboardIcon />}
+                  title="No cases on your profile yet"
+                  description="Use “Add Case” to showcase the matters you’ve handled."
+                />
+              ) : (
+                cases.map((c) => {
+                  const confirming = pendingDeleteId === c.id;
+                  return (
+                    <motion.div key={c.id} layout className="neu-raised-sm flex flex-col gap-3 rounded-[20px] bg-[#E5D8CB] p-4 sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-inter text-[10px] font-bold uppercase tracking-[0.12em] text-[#946525]">{caseDocketLabel(c)}</p>
+                        <p className="mt-1 truncate font-lora text-sm font-bold leading-snug text-[#341512] sm:text-[15px]">{c.title}</p>
+                        <p className="mt-0.5 line-clamp-1 font-inter text-[11.5px] text-[#7D6855]">{c.anonymized_summary}</p>
+                      </div>
+                      <AnimatePresence mode="wait" initial={false}>
+                        {confirming ? (
+                          <motion.div
+                            key="confirm"
+                            initial={{ opacity: 0, x: 8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 8 }}
+                            transition={{ duration: 0.18 }}
+                            className="flex shrink-0 flex-wrap items-center gap-2"
+                          >
+                            <span className="font-inter text-[11.5px] font-medium text-[#B42318]">Delete this case?</span>
+                            <NeuButton size="sm" disabled={busy} onClick={() => setPendingDeleteId(null)}>
+                              Keep
+                            </NeuButton>
+                            <NeuButton size="sm" variant="danger" disabled={busy} onClick={() => remove(c.id)}>
+                              Delete
+                            </NeuButton>
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key="actions"
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -8 }}
+                            transition={{ duration: 0.18 }}
+                            className="flex shrink-0 items-center gap-2 self-end sm:self-auto"
+                          >
+                            <button type="button" disabled={busy} onClick={() => startEdit(c)} className={`${iconBtnClass} size-9`} aria-label={`Edit ${c.title}`}>
+                              <PencilIcon className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => {
+                                setError(null);
+                                setPendingDeleteId(c.id);
+                              }}
+                              className={`${iconBtnClass} size-9 hover:text-[#B42318]!`}
+                              aria-label={`Delete ${c.title}`}
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  );
+                })
               )}
-              {cases.map((c) => {
-                const confirming = pendingDeleteId === c.id;
-                return (
-                  <motion.div
-                    key={c.id}
-                    layout
-                    className="neu-raised-sm rounded-[16px] bg-[#E5D8CB] p-4 flex flex-col sm:flex-row sm:items-center gap-3"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="font-inter font-bold text-[10px] text-[#D39758] uppercase tracking-wider truncate">{caseDocketLabel(c)}</p>
-                      <p className="font-lora text-sm sm:text-base font-bold text-[#341512] leading-snug truncate">{c.title}</p>
-                    </div>
-                    {confirming ? (
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[11px] font-inter text-rose-900">Delete this case?</span>
-                        <button type="button" disabled={busy} onClick={() => setPendingDeleteId(null)} className={ghostBtn}>Keep</button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => handleDelete(c.id)}
-                          className="inline-flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-[11px] font-bold font-inter text-white bg-rose-800 hover:bg-rose-900 disabled:opacity-50 transition cursor-pointer"
-                        >
-                          {busy && <Spinner className="w-3 h-3" />} Delete
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button type="button" disabled={busy} onClick={() => startEdit(c)} className={ghostBtn}>Edit</button>
-                        <button type="button" disabled={busy} onClick={() => setPendingDeleteId(c.id)} className={`${ghostBtn} hover:!text-rose-800`}>Delete</button>
-                      </div>
-                    )}
-                  </motion.div>
-                );
-              })}
-            </div>
-            <div className="shrink-0 flex items-center justify-between gap-3 px-6 sm:px-8 py-4 border-t border-[#D1BEA8]/80">
-              <span className="text-xs font-inter text-[#341512]/70">{cases.length} case{cases.length === 1 ? '' : 's'} on your profile</span>
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={onClose} disabled={busy} className={secondaryBtn}>Done</button>
-                <button type="button" onClick={() => startEdit()} disabled={busy} className={primaryBtn}>+ Add Case</button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </ModalFrame>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </SubmitModal>
   );
 }

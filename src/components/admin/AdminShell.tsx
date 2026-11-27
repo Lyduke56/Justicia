@@ -3,7 +3,7 @@
 import { JusticiaLogo } from '@/components/brand/JusticiaLogo';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { KeepAliveViews } from '@/components/live/KeepAliveViews';
+import { KeepAliveViews, ROUTE_SLOT } from '@/components/live/KeepAliveViews';
 import { adminTabViews } from './AdminTabs';
 import './admin.css';
 import { usePathname } from 'next/navigation';
@@ -11,7 +11,7 @@ import { SignOutConfirmModal } from '@/components/shared/SignOutConfirmModal';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import { useMyAvatar, useMyAvatarSync } from '@/components/account/avatarStore';
 import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
-import { ScreenTransitionOverlay, useScreenTransition } from '@/components/shared/loading';
+import { ScreenTransitionOverlay, useScreenGate } from '@/components/shared/loading';
 import { HomeIcon, UserCircleIcon, GearIcon, ShieldCheckIcon, ScaleIcon, UserGroupIcon, DocumentTextIcon, LogoutIcon, FlagIcon, EarningsIcon } from './AdminIcons';
 
 const navigation = [
@@ -31,8 +31,10 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
   useMyAvatarSync(user.avatarUrl);
   const myAvatar = useMyAvatar(user.avatarUrl);
   const pathname = usePathname();
-  // Global loading screen over the content area while the shell switches screens.
-  const { loading: screenLoading, start: startScreenTransition } = useScreenTransition(pathname);
+  // The loading screen covers the content area until the screen has everything it needs; the
+  // screen's entrance plays once it lifts. Kept-alive tabs and the route page are its slots.
+  const activeSlot = Object.hasOwn(adminTabViews, pathname) ? pathname : ROUTE_SLOT;
+  const { covered: screenLoading, start: startScreenTransition, store: screenStore, revealFor } = useScreenGate(pathname, activeSlot);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
@@ -120,7 +122,7 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
       </div>}
       {/* The wrapper positions the screen-transition loader over the content area only. */}
       <div className="relative flex min-w-0 flex-1" data-screen-loading={screenLoading || undefined}>
-        <main id="admin-main-content" aria-busy={screenLoading || undefined} className="admin-content min-w-0 flex-1 overflow-y-auto bg-[#EFE5D8]"><KeepAliveViews activeKey={Object.hasOwn(adminTabViews, pathname) ? pathname : null} views={adminTabViews} fallback={children} fallbackKey={pathname} scrollContainerId="admin-main-content" /></main>
+        <main id="admin-main-content" aria-busy={screenLoading || undefined} className="admin-content min-w-0 flex-1 overflow-y-auto bg-[#EFE5D8]"><KeepAliveViews activeKey={Object.hasOwn(adminTabViews, pathname) ? pathname : null} views={adminTabViews} fallback={children} fallbackKey={pathname} scrollContainerId="admin-main-content" gate={{ store: screenStore, revealFor }} /></main>
         <ScreenTransitionOverlay show={screenLoading} background="#EFE5D8" />
       </div>
     </div>

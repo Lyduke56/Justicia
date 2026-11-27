@@ -5,8 +5,9 @@
  * clients). The report — reason, details, evidence files and optionally the conversation — goes
  * to the admin Reports tab. The reported person is not told who reported them.
  *
- * Styled like the My Documents modals (ParchmentModal): recessed parchment sheet with a caramel
- * rim, Lora labels, .neu-input fields and the .neu-btn-create action.
+ * Styled like the My Documents modals: recessed parchment sheet with a caramel rim, Lora labels,
+ * .neu-input fields and the .neu-btn-create action. Sending morphs the sheet into the submission
+ * loader, which then writes a check (report sent) or an X (SubmissionModal).
  */
 import React, { useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -20,7 +21,8 @@ import {
   REPORT_MAX_TOTAL_BYTES,
   REPORT_REASONS,
 } from '@/lib/moderation/constants';
-import { CloseIcon, FileIcon, NeuAlert, ParchmentModal } from '@/components/shared/neu';
+import { CloseIcon, FileIcon, NeuAlert } from '@/components/shared/neu';
+import { SubmissionModal, settle, useSubmission } from '@/components/shared/feedback';
 
 interface ReportAccountModalProps {
   open: boolean;
@@ -50,21 +52,18 @@ const UploadIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
   </svg>
 );
 
-/** The form itself; mounted fresh each time the modal opens, so it always starts empty. */
-function ReportForm({
-  threadId,
-  targetName,
-  targetRole,
-  onClose,
-  onBusyChange,
-}: Omit<ReportAccountModalProps, 'open'> & { onBusyChange: (busy: boolean) => void }) {
+const TITLE_ID = 'report-account-title';
+
+/** The dialog; mounted fresh each time it opens, so the form always starts empty. */
+function ReportDialog({ threadId, targetName, targetRole, onClose }: Omit<ReportAccountModalProps, 'open'>) {
   const [reasonKey, setReasonKey] = useState<string>('');
   const [details, setDetails] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [includeConversation, setIncludeConversation] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const submission = useSubmission();
+  const submitting = submission.processing;
+  /** Problems with the chosen files (the send error is shown by the submission card). */
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -73,11 +72,6 @@ function ReportForm({
   const trimmed = details.trim();
   const detailsOk = trimmed.length >= REPORT_DETAILS_MIN && trimmed.length <= REPORT_DETAILS_MAX;
   const valid = !!reason && detailsOk;
-
-  const setBusy = (busy: boolean) => {
-    setSubmitting(busy);
-    onBusyChange(busy);
-  };
 
   const addFiles = (list: FileList | File[] | null) => {
     if (!list) return;
@@ -106,74 +100,52 @@ function ReportForm({
     setFiles(next);
   };
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!valid || submitting) return;
-    setBusy(true);
     setError(null);
-    try {
-      const fd = new FormData();
-      fd.append('threadId', threadId);
-      fd.append('reasonKey', reasonKey);
-      fd.append('details', trimmed);
-      fd.append('includeConversation', includeConversation ? 'true' : 'false');
-      files.forEach((f) => fd.append('files', f));
-      const res = await submitAccountReportAction(fd);
-      if (!('success' in res) || !res.success) {
-        setError(('error' in res && res.error) || 'We could not send your report.');
-        return;
-      }
-      setDone(true);
-    } catch {
-      setError('We could not send your report. Please check your connection and try again.');
-    } finally {
-      setBusy(false);
-    }
+    const fd = new FormData();
+    fd.append('threadId', threadId);
+    fd.append('reasonKey', reasonKey);
+    fd.append('details', trimmed);
+    fd.append('includeConversation', includeConversation ? 'true' : 'false');
+    files.forEach((f) => fd.append('files', f));
+    void submission.run(() =>
+      settle(() => submitAccountReportAction(fd), 'We could not send your report. Please check your connection and try again.')
+    );
   };
 
-  if (done) {
-    return (
-      <>
-        <div className="text-center pt-2">
-          <div className="pm-pop mx-auto size-16 rounded-full neu-raised-sm flex items-center justify-center text-[#1F7A3A] mb-4">
-            <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <motion.path
-                d="M5 12.5l4.5 4.5L19 7.5"
-                initial={{ pathLength: 0 }}
-                animate={{ pathLength: 1 }}
-                transition={{ duration: 0.5, delay: 0.35, ease: 'easeOut' }}
-              />
-            </svg>
-          </div>
-          <h2 id="report-account-title" className="font-lora text-2xl sm:text-[26px] font-normal text-[#34150F] leading-tight">
-            Report sent
-          </h2>
-          <p className="font-inter text-xs sm:text-[13px] text-[#7A604D] leading-relaxed mt-3 max-w-sm mx-auto">
-            Thank you. Your report about <strong className="text-[#34150F]">{targetName}</strong> is with the Justicia team. We
-            review every report and will notify you of the decision. {targetName} won&apos;t be told who reported them.
-          </p>
-        </div>
-        <div className="pt-6 flex flex-col items-center">
-          <button
-            type="button"
-            onClick={onClose}
-            className="neu-btn-create w-[220px] text-xs sm:text-sm font-semibold tracking-[0.16em] uppercase py-3 px-6 rounded-[14px] active:translate-y-0.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B9833C]/60"
-          >
-            Done
-          </button>
-        </div>
-      </>
-    );
-  }
-
   return (
-    <>
+    <SubmissionModal
+      phase={submission.phase}
+      titleId={TITLE_ID}
+      size="sm"
+      onClose={onClose}
+      onRetry={submission.reset}
+      error={submission.error}
+      processing={{ title: 'Sending your report', message: 'Sending it securely to the Justicia team.' }}
+      success={{
+        title: 'Report sent',
+        message: `Thank you. We review every report and will notify you of the decision. ${targetName} won't be told who reported them.`,
+      }}
+      failure={{ title: "We couldn't send your report", retryLabel: 'Review Report' }}
+    >
+    <div className="relative min-h-0 flex-1 overflow-y-auto neu-scrollbar-discrete px-6 sm:px-9 pt-8 pb-7 sm:pt-9 sm:pb-8">
+      <button
+        type="button"
+        onClick={onClose}
+        disabled={submitting}
+        aria-label="Close dialog"
+        className="absolute top-4 right-4 sm:top-5 sm:right-5 size-9 rounded-full flex items-center justify-center text-[#5A4537] hover:text-[#34150F] hover:bg-[#D4C1AB]/40 hover:rotate-90 transition-[color,background-color,rotate] duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B9833C]/50 cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+      >
+        <CloseIcon className="w-3 h-3" />
+      </button>
       {/* Header */}
       <div className="text-center mb-5">
         <div className="pm-pop mx-auto size-14 rounded-full neu-raised-sm flex items-center justify-center text-[#B42318] mb-3">
           <FlagIcon />
         </div>
-        <h2 id="report-account-title" className="font-lora text-2xl sm:text-[26px] font-normal text-[#34150F] leading-tight px-6">
+        <h2 id={TITLE_ID} className="font-lora text-2xl sm:text-[26px] font-normal text-[#34150F] leading-tight px-6">
           Report {roleWord}
         </h2>
         <p className="font-inter text-xs text-[#7A604D] mt-2">
@@ -357,7 +329,13 @@ function ReportForm({
           </span>
         </button>
 
-        <AnimatePresence>{error && <NeuAlert key="report-error" tone="error">{error}</NeuAlert>}</AnimatePresence>
+        <AnimatePresence>
+          {(error || (submission.phase === 'idle' && submission.error)) && (
+            <NeuAlert key="report-error" tone="error">
+              {error || submission.error}
+            </NeuAlert>
+          )}
+        </AnimatePresence>
 
         {/* Actions (same as the Documents modals) */}
         <div className="pt-2 flex flex-col items-center">
@@ -366,7 +344,7 @@ function ReportForm({
             disabled={!valid || submitting}
             className="neu-btn-create w-[240px] sm:w-[260px] text-xs sm:text-sm font-semibold tracking-[0.16em] uppercase py-3 sm:py-3.5 px-6 rounded-[14px] active:translate-y-0.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B9833C]/60"
           >
-            {submitting ? 'Sending…' : 'Send Report'}
+            Send Report
           </button>
           <button
             type="button"
@@ -381,22 +359,16 @@ function ReportForm({
           </p>
         </div>
       </form>
-    </>
+    </div>
+    </SubmissionModal>
   );
 }
 
 export function ReportAccountModal({ open, threadId, targetName, targetRole, onClose }: ReportAccountModalProps) {
-  const [busy, setBusy] = useState(false);
   return (
-    <ParchmentModal
-      isOpen={open}
-      onClose={onClose}
-      dismissible={!busy}
-      ariaLabelledBy="report-account-title"
-      maxWidth="max-w-[460px] sm:max-w-[480px]"
-    >
-      <ReportForm threadId={threadId} targetName={targetName} targetRole={targetRole} onClose={onClose} onBusyChange={setBusy} />
-    </ParchmentModal>
+    <AnimatePresence>
+      {open && <ReportDialog key="report-account" threadId={threadId} targetName={targetName} targetRole={targetRole} onClose={onClose} />}
+    </AnimatePresence>
   );
 }
 

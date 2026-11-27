@@ -1,14 +1,16 @@
 'use client';
 
 /**
- * The client's own profile (/client/profile), in the same design as the client Account Settings
- * page: a caramel summary card on the left (photo, name, verification, completeness, activity)
- * and raised sections on the right for personal and contact details.
+ * The personal profile page for clients (/client/profile) and lawyers (/lawyer/account), in the
+ * same design as the Account Settings page: a caramel summary card on the left (photo, name,
+ * verification, completeness, activity) and raised sections on the right for personal and
+ * contact details. Lawyers also get their Payment QR here, and their legal name is read-only
+ * (changing it needs credential verification; the server enforces this too).
  *
- * Behaviour is the same as PersonalProfileCard: the same server actions save the name, phone and
- * contact preferences, and the photo is shared with the top bar, Messages and consultations.
+ * The same server actions save the name, phone and contact preferences, and the photo is shared
+ * with the top bar, Messages and consultations.
  */
-import React, { useEffect, useRef, useState, useTransition } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
@@ -19,7 +21,10 @@ import { setMyAvatar, useMyAvatar } from './avatarStore';
 import { ProfilePhoto } from '@/components/shared/ProfilePhoto';
 import { ResendVerificationButton } from '@/components/auth/ResendVerificationButton';
 import { NeuAlert, NeuButton, EXTRUDE, CheckCircleIcon, PencilIcon, Spinner } from '@/components/shared/neu';
-import { PAGE, RISE_IN, SectionCard, initialsOf } from './ClientAccountSettings';
+import { PAGE, RISE_IN, SectionCard, accountPageClass, initialsOf } from './ClientAccountSettings';
+import { PaymentQrCard } from './PaymentQrCard';
+import { SubmissionOverlay, useSubmission, type SubmissionCopy, type SubmissionResult } from '@/components/shared/feedback';
+import { useScreenReveal } from '@/components/shared/loading';
 import type { ProfileExtrasData } from './PersonalProfileCard';
 import {
   CONSULTATION_LANGUAGES,
@@ -73,6 +78,8 @@ function DetailValue({ label, value }: { label: string; value: string | null | u
 
 /** Ring that fills to the completeness percentage. */
 function CompletenessRing({ percent }: { percent: number }) {
+  // Fills once the portal's loading screen lifts, with the rest of the entrance.
+  const { revealed } = useScreenReveal();
   const r = 22;
   const c = 2 * Math.PI * r;
   return (
@@ -88,7 +95,7 @@ function CompletenessRing({ percent }: { percent: number }) {
         strokeLinecap="round"
         strokeDasharray={c}
         initial={{ strokeDashoffset: c }}
-        animate={{ strokeDashoffset: c * (1 - percent / 100) }}
+        animate={{ strokeDashoffset: revealed ? c * (1 - percent / 100) : c }}
         transition={{ duration: 1.1, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
       />
     </svg>
@@ -106,12 +113,32 @@ export function ClientProfileView({
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
-  const [pending, startTransition] = useTransition();
+  // Saving the profile or changing the photo shows the submission card: loader, then check / X.
+  const submission = useSubmission();
+  const pending = submission.processing;
+  const [overlayCopy, setOverlayCopy] = useState<{ processing: SubmissionCopy; success: SubmissionCopy; failure: string }>({
+    processing: { title: 'Saving your profile' },
+    success: { title: 'Profile saved' },
+    failure: "We couldn't save your profile",
+  });
+  /** Runs a request with the submission card; a failure is also shown on the page. */
+  const runWithCard = async (copy: typeof overlayCopy, task: () => Promise<SubmissionResult>, fallback: string) => {
+    setOverlayCopy(copy);
+    const result = await submission.run(async () => {
+      try {
+        return await task();
+      } catch {
+        return { ok: false, error: fallback };
+      }
+    });
+    if (result && !result.ok) setError(result.error);
+    return result;
+  };
   const [error, setError] = useState('');
   const [savedAt, setSavedAt] = useState(0);
   const [photoMessage, setPhotoMessage] = useState('');
   const [extras, setExtras] = useState<ProfileExtras | null>(initialExtras?.extras ?? null);
-  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoBusy = submission.processing;
   const photoInput = useRef<HTMLInputElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
   // One photo per person, shared with the top bar, Messages and consultation cards.
@@ -122,6 +149,11 @@ export function ClientProfileView({
     ? profileCompleteness({ fullName: account.fullName, phone: account.phone, emailVerified: account.emailVerified, extras: { ...extras!, avatarUrl: photo } })
     : null;
   const summary = initialExtras?.summary ?? null;
+  // Lawyers see the same page with their own wording, links and Payment QR.
+  const isLawyer = account.role === 'lawyer';
+  // The entrance plays when the portal's loading screen lifts (not underneath it).
+  const { revealed } = useScreenReveal();
+  const settingsHref = isLawyer ? '/lawyer/settings' : '/client/settings';
 
   // "Saved" fades after a moment.
   useEffect(() => {
@@ -136,46 +168,48 @@ export function ClientProfileView({
 
   const uploadPhoto = async (file: File | undefined) => {
     if (!file) return;
-    setPhotoBusy(true);
     setError('');
     setPhotoMessage('');
-    try {
-      const fd = new FormData();
-      fd.set('file', file);
-      const res = await changeProfilePhotoAction(fd);
-      if (!res.success) {
-        setError(res.error);
-        return;
-      }
-      setMyAvatar(res.avatarUrl);
-      setExtras((e) => (e ? { ...e, avatarUrl: res.avatarUrl } : e));
-      setPhotoMessage('Your photo has been updated.');
-      router.refresh();
-    } catch {
-      setError('Your photo could not be uploaded. Please try again.');
-    } finally {
-      setPhotoBusy(false);
-      if (photoInput.current) photoInput.current.value = '';
-    }
+    await runWithCard(
+      {
+        processing: { title: 'Uploading your photo', message: 'Updating the photo people see on Justicia.' },
+        success: { title: 'Photo updated', message: 'It now shows in the top bar, Messages and your consultations.' },
+        failure: "We couldn't upload your photo",
+      },
+      async () => {
+        const fd = new FormData();
+        fd.set('file', file);
+        const res = await changeProfilePhotoAction(fd);
+        if (!res.success) return { ok: false, error: res.error };
+        setMyAvatar(res.avatarUrl);
+        setExtras((e) => (e ? { ...e, avatarUrl: res.avatarUrl } : e));
+        router.refresh();
+        return { ok: true };
+      },
+      'Your photo could not be uploaded. Please try again.'
+    );
+    if (photoInput.current) photoInput.current.value = '';
   };
 
   const removePhoto = async () => {
-    setPhotoBusy(true);
     setError('');
     setPhotoMessage('');
-    try {
-      const res = await removeMyProfilePhotoAction();
-      if (!res.success) {
-        setError(res.error);
-        return;
-      }
-      setMyAvatar(null);
-      setExtras((e) => (e ? { ...e, avatarUrl: null } : e));
-      setPhotoMessage('Your photo has been removed.');
-      router.refresh();
-    } finally {
-      setPhotoBusy(false);
-    }
+    await runWithCard(
+      {
+        processing: { title: 'Removing your photo' },
+        success: { title: 'Photo removed', message: 'Your initials show in its place.' },
+        failure: "We couldn't remove your photo",
+      },
+      async () => {
+        const res = await removeMyProfilePhotoAction();
+        if (!res.success) return { ok: false, error: res.error };
+        setMyAvatar(null);
+        setExtras((e) => (e ? { ...e, avatarUrl: null } : e));
+        router.refresh();
+        return { ok: true };
+      },
+      'Your photo could not be removed. Please try again.'
+    );
   };
 
   const save = (event: React.FormEvent<HTMLFormElement>) => {
@@ -187,13 +221,15 @@ export function ClientProfileView({
       return;
     }
     setError('');
-    startTransition(async () => {
-      try {
+    void runWithCard(
+      {
+        processing: { title: 'Saving your profile', message: 'Updating your personal and contact details.' },
+        success: { title: 'Profile saved', message: 'Your details are up to date.' },
+        failure: "We couldn't save your profile",
+      },
+      async () => {
         const result = await updatePersonalAccountAction({ fullName, phone: String(form.get('phone') ?? '') });
-        if (!result.success) {
-          setError(result.error);
-          return;
-        }
+        if (!result.success) return { ok: false, error: result.error };
         if (showExtras) {
           const saved = await updateProfileExtrasAction({
             cityProvince: String(form.get('cityProvince') ?? ''),
@@ -202,19 +238,18 @@ export function ClientProfileView({
             contactTime: String(form.get('contactTime') ?? ''),
           });
           if (!saved.success) {
-            setError(saved.error);
             router.refresh();
-            return;
+            return { ok: false, error: saved.error };
           }
           setExtras(saved.extras);
         }
         setEditing(false);
         setSavedAt(Date.now());
         router.refresh();
-      } catch {
-        setError('Unable to save your profile. Please try again.');
-      }
-    });
+        return { ok: true };
+      },
+      'Unable to save your profile. Please try again.'
+    );
   };
 
   const contactPreference = showExtras
@@ -258,8 +293,8 @@ export function ClientProfileView({
       <motion.div
         variants={PAGE}
         initial="hidden"
-        animate="show"
-        className="px-6 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-12 max-w-[1200px] mx-auto space-y-7 sm:space-y-9 bg-[#E5D8CB]"
+        animate={revealed ? 'show' : 'hidden'}
+        className={accountPageClass(account.role)}
       >
         {/* ─── Heading ─── */}
         <motion.header variants={RISE_IN} className="space-y-1.5">
@@ -271,7 +306,7 @@ export function ClientProfileView({
           </p>
         </motion.header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[330px_minmax(0,1fr)] gap-6 lg:gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)] gap-6 lg:gap-8 items-start">
           {/* ─── Left: profile summary ─── */}
           <motion.aside
             variants={EXTRUDE}
@@ -283,7 +318,7 @@ export function ClientProfileView({
               <div className="relative">
                 <motion.span
                   initial={{ scale: 0.7, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
+                  animate={revealed ? { scale: 1, opacity: 1 } : { scale: 0.7, opacity: 0 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.2 }}
                   className="neu-btn-banner grid size-24 place-items-center overflow-hidden rounded-full font-lora text-2xl font-bold text-[#341512]"
                 >
@@ -306,7 +341,7 @@ export function ClientProfileView({
                 <label
                   htmlFor="profile-photo"
                   title={photo ? 'Change photo' : 'Add a photo'}
-                  className={`absolute -bottom-1 -right-1 grid size-9 place-items-center rounded-full bg-[#E5D8CB] text-[#341512] neu-raised-sm transition-all hover:-translate-y-0.5 hover:text-[#A8742E] peer-focus-visible:ring-2 peer-focus-visible:ring-[#C58B3C]/60 cursor-pointer ${
+                  className={`absolute -bottom-1 -right-1 grid size-9 place-items-center rounded-full bg-[#E5D8CB] text-[#341512] transition-all hover:-translate-y-0.5 hover:text-[#A8742E] peer-focus-visible:ring-2 peer-focus-visible:ring-[#C58B3C]/60 cursor-pointer ${
                     photoBusy ? 'pointer-events-none opacity-60' : ''
                   }`}
                 >
@@ -324,7 +359,7 @@ export function ClientProfileView({
                   {account.emailVerified ? 'Email verified' : 'Email not verified'}
                 </span>
                 <span className="neu-inset-banner inline-flex h-6 items-center rounded-full px-2.5 font-inter text-[10.5px] font-bold text-[#5C4535]">
-                  Client account
+                  {isLawyer ? 'Lawyer account' : 'Client account'}
                 </span>
               </div>
               {!account.emailVerified && (
@@ -371,7 +406,7 @@ export function ClientProfileView({
                     <p className="font-lora text-sm font-bold text-[#341512]">Profile completeness</p>
                     <p className="mt-0.5 font-inter text-[11.5px] leading-relaxed text-[#5C4535]">
                       {completeness.missing.length
-                        ? `Add your ${completeness.missing.slice(0, 2).join(' and ')} to help lawyers reach you.`
+                        ? `Add your ${completeness.missing.slice(0, 2).join(' and ')} to help ${isLawyer ? 'clients' : 'lawyers'} reach you.`
                         : 'Everything is filled in. Nice work.'}
                     </p>
                   </div>
@@ -384,7 +419,8 @@ export function ClientProfileView({
                 {[
                   ['Member since', formatDate(summary.memberSince)],
                   ['Completed', `${summary.consultationsCompleted} consultation${summary.consultationsCompleted === 1 ? '' : 's'}`],
-                  ['Lawyers consulted', String(summary.lawyersConsulted)],
+                  // For lawyers this count is the clients they've served.
+                  [isLawyer ? 'Clients served' : 'Lawyers consulted', String(summary.lawyersConsulted)],
                   ['Upcoming', String(summary.upcomingConsultations)],
                 ].map(([label, value]) => (
                   <div key={label} className="neu-inset-banner rounded-2xl px-3 py-2.5">
@@ -393,6 +429,21 @@ export function ClientProfileView({
                   </div>
                 ))}
               </dl>
+            )}
+
+            {/* Lawyers: their public profile (what clients see) is a separate page. */}
+            {isLawyer && (
+              <div className="mt-5 border-t border-dotted border-[#B8946E]/60 pt-5">
+                <Link
+                  href="/lawyer/profile"
+                  className="neu-btn-banner w-full h-10 rounded-xl inline-flex items-center justify-center gap-2 font-lora text-xs sm:text-[13px] font-bold text-[#341512]"
+                >
+                  View public profile
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
+                </Link>
+              </div>
             )}
           </motion.aside>
 
@@ -431,7 +482,23 @@ export function ClientProfileView({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label htmlFor="profile-fullName" className={labelClass}>Full legal name</label>
-                          <input ref={firstFieldRef} id="profile-fullName" name="fullName" required maxLength={120} autoComplete="name" defaultValue={account.fullName} className={inputClass} />
+                          <input
+                            ref={firstFieldRef}
+                            id="profile-fullName"
+                            name="fullName"
+                            required
+                            maxLength={120}
+                            autoComplete="name"
+                            defaultValue={account.fullName}
+                            readOnly={isLawyer}
+                            aria-describedby={isLawyer ? 'profile-name-note' : undefined}
+                            className={`${inputClass} ${isLawyer ? 'text-[#7D6855]' : ''}`}
+                          />
+                          {isLawyer && (
+                            <p id="profile-name-note" className="mt-1.5 font-inter text-[11px] text-[#7D6855]">
+                              Legal-name changes require credential verification. Please contact support.
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label htmlFor="profile-phone" className={labelClass}>Contact number</label>
@@ -442,7 +509,7 @@ export function ClientProfileView({
                           <input id="profile-email" value={account.email} readOnly aria-describedby="profile-email-note" className={`${inputClass} text-[#7D6855]`} />
                           <p id="profile-email-note" className="mt-1.5 font-inter text-[11px] text-[#7D6855]">
                             This is your sign-in email and can&apos;t be changed here. Notification options are in{' '}
-                            <Link href="/client/settings" className="font-semibold text-[#946525] underline underline-offset-2">Settings</Link>.
+                            <Link href={settingsHref} className="font-semibold text-[#946525] underline underline-offset-2">Settings</Link>.
                           </p>
                         </div>
                       </div>
@@ -480,7 +547,11 @@ export function ClientProfileView({
                               </select>
                             </div>
                           </div>
-                          <p className="font-inter text-[11.5px] text-[#7D6855]">Lawyers you book see your location and contact preferences.</p>
+                          <p className="font-inter text-[11.5px] text-[#7D6855]">
+                            {isLawyer
+                              ? 'Your location, language and how you would like to be reached.'
+                              : 'Lawyers you book see your location and contact preferences.'}
+                          </p>
                         </div>
                       )}
                     </fieldset>
@@ -496,8 +567,8 @@ export function ClientProfileView({
                       >
                         Cancel
                       </NeuButton>
-                      <NeuButton type="submit" variant="primary" loading={pending}>
-                        {pending ? 'Saving…' : 'Save Changes'}
+                      <NeuButton type="submit" variant="primary" disabled={pending}>
+                        Save Changes
                       </NeuButton>
                     </div>
                   </motion.form>
@@ -524,7 +595,7 @@ export function ClientProfileView({
                 labelId="profile-contact"
                 icon={<ChatIcon />}
                 title="Contact preferences"
-                subtitle="Lawyers you book see your location and how you'd like to be reached."
+                subtitle={isLawyer ? 'Your location, language and how you would like to be reached.' : "Lawyers you book see your location and how you'd like to be reached."}
               >
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <DetailValue label="City / Province" value={extras?.cityProvince} />
@@ -535,9 +606,19 @@ export function ClientProfileView({
                 </dl>
               </SectionCard>
             )}
+
+            {/* Lawyers: the QR clients scan to pay for an approved consultation. */}
+            {isLawyer && <PaymentQrCard />}
           </motion.div>
         </div>
       </motion.div>
+
+      <SubmissionOverlay
+        submission={submission}
+        processing={overlayCopy.processing}
+        success={overlayCopy.success}
+        failure={{ title: overlayCopy.failure }}
+      />
     </MotionConfig>
   );
 }

@@ -68,3 +68,15 @@ export function useSubmission() {
 
   return { phase, error, run, reset, processing: phase === 'processing' };
 }
+
+/**
+ * Runs a server action for useSubmission().run: its `{ success, error }` answer becomes the
+ * result, and a thrown error (network, server crash) becomes `fallback` instead of a raw message.
+ */
+export async function settle(call: () => Promise<unknown>, fallback = FALLBACK_ERROR): Promise<SubmissionResult> {
+  try {
+    return toSubmissionResult(await call(), fallback);
+  } catch {
+    return { ok: false, error: fallback };
+  }
+}

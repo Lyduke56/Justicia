@@ -8,6 +8,8 @@ import {
   removeUnavailabilityAction,
   type MyUnavailabilityEntry,
 } from '@/app/actions/availabilityActions';
+import { SubmissionOverlay, useSubmission, type SubmissionCopy } from '@/components/shared/feedback';
+import { NeuAlert } from '@/components/shared/neu';
 
 /**
  * Lawyer Profile → Availability: block off the date selected on the calendar (whole day or a
@@ -38,15 +40,6 @@ function parseSlot(slot: string): { start: number; end: number } | null {
 
 function todayManilaIso(): string {
   return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
-function Spinner({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg className={`${className} animate-spin motion-reduce:animate-none`} viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  );
 }
 
 function OptionCard({
@@ -108,7 +101,15 @@ export function LawyerUnavailabilityManager({
   const [start, setStart] = useState(14 * 60);
   const [end, setEnd] = useState(15 * 60);
   const [reason, setReason] = useState('');
-  const [saving, setSaving] = useState(false);
+  // Marking or removing a date shows the submission card: loader, then check / X.
+  const submission = useSubmission();
+  const [card, setCard] = useState<{ processing: SubmissionCopy; success: SubmissionCopy; failure: string }>({
+    processing: { title: 'Saving…' },
+    success: { title: 'Saved' },
+    failure: 'Something went wrong',
+  });
+  const [pendingKind, setPendingKind] = useState<'add' | 'remove' | null>(null);
+  const saving = submission.processing && pendingKind === 'add';
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -116,7 +117,8 @@ export function LawyerUnavailabilityManager({
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removingTarget, setRemovingTarget] = useState<string | null>(null);
+  const removingId = submission.processing && pendingKind === 'remove' ? removingTarget : null;
 
   // Picking a slot in "Available Time Slots" prefills the range (adjusting state during render).
   const [prevSlot, setPrevSlot] = useState(selectedSlot);
@@ -168,45 +170,56 @@ export function LawyerUnavailabilityManager({
     setNotice(null);
     if (isPastDate) return setError('Choose today or a future date on the calendar.');
     if (!allDay && end <= start) return setError('The end time must be after the start time.');
-    setSaving(true);
-    try {
-      const res = await addUnavailabilityAction({
-        date: selectedDateIso,
-        allDay,
-        startMinutes: allDay ? null : start,
-        endMinutes: allDay ? null : end,
-        reason,
-      });
-      if (!res.success) return setError(res.error);
-      setReason('');
-      setNotice(
-        allDay
-          ? `${selectedDateLabel} is now marked as unavailable.`
-          : `${formatClock(start)} – ${formatClock(end)} on ${selectedDateLabel} is now unavailable.`
-      );
-      await loadEntries();
-      onChanged();
-    } catch {
-      setError('Unable to save your unavailability. Please try again.');
-    } finally {
-      setSaving(false);
-    }
+    const what = allDay ? selectedDateLabel : `${formatClock(start)} – ${formatClock(end)} on ${selectedDateLabel}`;
+    setPendingKind('add');
+    setCard({
+      processing: { title: 'Blocking off the time', message: `Marking ${what} as unavailable.` },
+      success: { title: 'Marked as unavailable', message: `Clients can no longer book ${what}.` },
+      failure: "We couldn't save your unavailability",
+    });
+    const result = await submission.run(async () => {
+      try {
+        const res = await addUnavailabilityAction({
+          date: selectedDateIso,
+          allDay,
+          startMinutes: allDay ? null : start,
+          endMinutes: allDay ? null : end,
+          reason,
+        });
+        if (!res.success) return { ok: false, error: res.error };
+        setReason('');
+        await loadEntries();
+        onChanged();
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'Unable to save your unavailability. Please try again.' };
+      }
+    });
+    if (result && !result.ok) setError(result.error);
   };
 
   const handleRemove = async (id: string) => {
-    setRemovingId(id);
+    setRemovingTarget(id);
+    setPendingKind('remove');
     setListError(null);
-    try {
-      const res = await removeUnavailabilityAction(id);
-      if (!res.success) return setListError(res.error);
-      setConfirmRemoveId(null);
-      setEntries((prev) => prev.filter((e) => e.id !== id));
-      onChanged();
-    } catch {
-      setListError('Unable to remove this entry. Please try again.');
-    } finally {
-      setRemovingId(null);
-    }
+    setCard({
+      processing: { title: 'Removing the block', message: 'Opening this time to bookings again.' },
+      success: { title: 'Time opened up', message: 'Clients can book this time again.' },
+      failure: "We couldn't remove this entry",
+    });
+    const result = await submission.run(async () => {
+      try {
+        const res = await removeUnavailabilityAction(id);
+        if (!res.success) return { ok: false, error: res.error };
+        setConfirmRemoveId(null);
+        setEntries((prev) => prev.filter((e) => e.id !== id));
+        onChanged();
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'Unable to remove this entry. Please try again.' };
+      }
+    });
+    if (result && !result.ok) setListError(result.error);
   };
 
   return (
@@ -228,7 +241,7 @@ export function LawyerUnavailabilityManager({
           </div>
 
           {dayEntries.length > 0 && (
-            <p className="font-inter text-[11px] sm:text-xs text-rose-900/80">
+            <p className="font-inter text-[11px] sm:text-xs text-[#B42318]">
               Already unavailable on this date: {dayEntries.map((e) => (e.startMinutes === null ? 'Entire day' : `${formatClock(e.startMinutes)} – ${formatClock(e.endMinutes!)}`)).join(', ')}
             </p>
           )}
@@ -294,18 +307,13 @@ export function LawyerUnavailabilityManager({
 
           <AnimatePresence initial={false}>
             {(error || notice) && (
-              <motion.p
+              <NeuAlert
                 key={error ? 'err' : 'ok'}
-                role={error ? 'alert' : 'status'}
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className={`overflow-hidden rounded-2xl px-4 py-3 text-xs sm:text-sm ${
-                  error ? 'bg-rose-100/80 border border-rose-300 text-rose-900' : 'bg-amber-100/90 border border-amber-300 text-amber-900'
-                }`}
+                tone={error ? 'error' : 'success'}
+                onDismiss={() => (error ? setError(null) : setNotice(null))}
               >
                 {error || notice}
-              </motion.p>
+              </NeuAlert>
             )}
           </AnimatePresence>
 
@@ -316,8 +324,7 @@ export function LawyerUnavailabilityManager({
               disabled={saving || isPastDate}
               className="neu-raised-sm !bg-[#D39758]/70 inline-flex items-center gap-2 rounded-xl px-7 py-2.5 text-xs sm:text-sm font-lora font-semibold text-[#341512] cursor-pointer select-none active:translate-y-px disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
-              {saving && <Spinner />}
-              {saving ? 'Saving…' : isPastDate ? 'Date has passed' : 'Mark as Unavailable'}
+              {isPastDate ? 'Date has passed' : 'Mark as Unavailable'}
             </button>
           </div>
         </div>
@@ -338,9 +345,9 @@ export function LawyerUnavailabilityManager({
         </div>
         <div className="neu-recessed rounded-[24px] sm:rounded-[28px] p-5 sm:p-7 space-y-3">
           {listError && (
-            <p role="alert" className="rounded-2xl px-4 py-3 text-xs sm:text-sm bg-rose-100/80 border border-rose-300 text-rose-900">
+            <NeuAlert tone="error" onDismiss={() => setListError(null)}>
               {listError}
-            </p>
+            </NeuAlert>
           )}
           {loading ? (
             <p className="py-6 text-center font-lora text-xs text-[#341512]/60">Loading your unavailable dates…</p>
@@ -371,7 +378,7 @@ export function LawyerUnavailabilityManager({
                     </div>
                     {confirming ? (
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[11px] font-inter text-rose-900">Make available again?</span>
+                        <span className="text-[11px] font-inter font-medium text-[#B42318]">Make available again?</span>
                         <button
                           type="button"
                           disabled={removing}
@@ -384,9 +391,9 @@ export function LawyerUnavailabilityManager({
                           type="button"
                           disabled={removing}
                           onClick={() => handleRemove(entry.id)}
-                          className="inline-flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-[11px] font-bold font-inter text-white bg-rose-800 hover:bg-rose-900 disabled:opacity-50 transition cursor-pointer"
+                          className="inline-flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-[11px] font-bold font-inter text-white neu-btn-danger disabled:opacity-50 transition cursor-pointer"
                         >
-                          {removing && <Spinner className="w-3 h-3" />} Remove
+                          Remove
                         </button>
                       </div>
                     ) : (
@@ -401,7 +408,7 @@ export function LawyerUnavailabilityManager({
                         <button
                           type="button"
                           onClick={() => setConfirmRemoveId(entry.id)}
-                          className="rounded-[10px] px-3 py-1.5 text-[11px] font-semibold font-inter text-[#341512]/80 hover:text-rose-800 hover:bg-[#D39758]/15 transition cursor-pointer"
+                          className="rounded-[10px] px-3 py-1.5 text-[11px] font-semibold font-inter text-[#341512]/80 hover:text-[#B42318] hover:bg-[#D39758]/15 transition cursor-pointer"
                         >
                           Remove
                         </button>
@@ -414,6 +421,8 @@ export function LawyerUnavailabilityManager({
           )}
         </div>
       </motion.div>
+
+      <SubmissionOverlay submission={submission} processing={card.processing} success={card.success} failure={{ title: card.failure }} />
     </div>
   );
 }

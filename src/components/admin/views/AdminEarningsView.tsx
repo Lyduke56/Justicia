@@ -119,7 +119,7 @@ function printReport(data: AdminEarningsData) {
 
 export function AdminEarningsView({ initialData, initialError = null }: { initialData: AdminEarningsData | null; initialError?: string | null }) {
   const reduceMotion = useReducedMotion();
-  const { entranceKey, rowsAt } = useEntrance();
+  const { entranceKey, revealed, rowsAt } = useEntrance();
 
   const [data, setData] = useState<AdminEarningsData | null>(initialData);
   const [error, setError] = useState<string | null>(initialError);
@@ -179,7 +179,7 @@ export function AdminEarningsView({ initialData, initialError = null }: { initia
         key={entranceKey}
         variants={PAGE}
         initial={reduceMotion ? false : 'hidden'}
-        animate="show"
+        animate={revealed ? 'show' : 'hidden'}
         className="lawyer-dash admin-earnings mx-auto flex max-w-[1196px] flex-col gap-8 px-4 pb-14 pt-6 sm:px-8 sm:pt-10 lg:px-12 lg:pt-12"
       >
         <h1 className="sr-only">Platform earnings</h1>

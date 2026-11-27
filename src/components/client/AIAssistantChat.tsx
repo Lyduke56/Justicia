@@ -2,6 +2,7 @@
 
 import { Markdown } from '@/components/shared/Markdown';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useScreenReveal } from '@/components/shared/loading';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, useReducedMotion, type Variants } from 'motion/react';
 import {
@@ -102,6 +103,8 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
   const [inputQuery, setInputQuery] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // The greeting's entrance plays when the portal's loading screen lifts.
+  const { revealed } = useScreenReveal();
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [attachedText, setAttachedText] = useState<string>('');
   const [isSubmitHovered, setIsSubmitHovered] = useState(false);
@@ -271,7 +274,7 @@ export function AIAssistantChat({ userFirstName }: AIAssistantChatProps) {
       <motion.div
         variants={pageVariants}
         initial={reduceMotion ? false : 'hidden'}
-        animate="show"
+        animate={revealed ? 'show' : 'hidden'}
         className="min-h-[calc(100vh-4rem)] flex flex-col justify-between px-6 sm:px-10 lg:px-16 py-8 sm:py-12 max-w-[1240px] mx-auto bg-[#E5D8CB]"
       >
         {/* Top Spacer */}

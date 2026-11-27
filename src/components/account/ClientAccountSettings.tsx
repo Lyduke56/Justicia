@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useId, useState, useTransition } from 'react';
+import React, { useId, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react';
 import {
@@ -19,17 +19,19 @@ import {
   NOTIFICATION_ROWS,
   PRIVACY_ROWS,
   formatConsentDate,
+  downloadMyData,
   useConsent,
-  useDataExport,
   useDeleteAccount,
   usePreferenceToggles,
 } from './useAccountControls';
+import { SubmissionOverlay, useSubmission, type SubmissionCopy, type SubmissionResult } from '@/components/shared/feedback';
+import { useScreenReveal } from '@/components/shared/loading';
 
 /**
- * Client "Account Settings" page in the neumorphic parchment style used by the other client
- * screens (Dashboard, Consultations, Messages, Documents). Lawyer settings keep the shared
- * AccountSettings component; this one only renders for client accounts. Its building blocks
- * (section card, setting row, switch, password field) are exported for the admin account pages.
+ * "Account Settings" page for clients and lawyers, in the neumorphic parchment style used across
+ * both portals (Dashboard, Consultations, Messages, Documents). Lawyers get their own account
+ * label, profile link and deletion note; everything else is shared. Its building blocks (section
+ * card, setting row, switch, password field) are exported for the profile and admin account pages.
  */
 
 export const PAGE: Variants = {
@@ -40,6 +42,17 @@ export const RISE_IN: Variants = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE_OUT } },
 };
+
+/**
+ * Page container for Settings / My Profile, with the same margins and width as the other screens
+ * of each portal: the client Dashboard / Consultations container, or the lawyer Dashboard /
+ * Consultations one. (Only the spacing is copied; .lawyer-page would also change the font.)
+ */
+export function accountPageClass(role: PersonalAccount['role']): string {
+  return role === 'lawyer'
+    ? 'mx-auto max-w-[1196px] px-4 pb-14 pt-6 sm:px-8 sm:pt-10 lg:px-12 lg:pt-12 space-y-7 sm:space-y-8 bg-[#E5D8CB]'
+    : 'px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-12 max-w-[1300px] mx-auto space-y-7 sm:space-y-8 bg-[#E5D8CB]';
+}
 
 // ─── Small building blocks ────────────────────────────────────────────────────
 
@@ -259,6 +272,8 @@ export function initialsOf(name: string) {
 
 export function ClientAccountSettings({ account }: { account: PersonalAccount }) {
   const myAvatar = useMyAvatar();
+  const isLawyer = account.role === 'lawyer';
+  const profileHref = isLawyer ? '/lawyer/account' : '/client/profile';
   // Notification categories and messaging privacy (saved immediately; reverted if the save fails)
   const prefs = usePreferenceToggles(account);
   const { saving, savedTick } = prefs;
@@ -266,12 +281,29 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
   const setPreferenceError = prefs.setError;
   const [signOutAllOpen, setSignOutAllOpen] = useState(false);
   const consent = useConsent();
-  const dataExport = useDataExport();
   const deletion = useDeleteAccount();
+  // The entrance plays when the portal's loading screen lifts (not underneath it).
+  const { revealed } = useScreenReveal();
+
+  // Password, terms, data export and deletion show the submission card: loader, then check / X.
+  const submission = useSubmission();
+  const [card, setCard] = useState<{ kind: 'password' | 'consent' | 'export' | 'delete'; processing: SubmissionCopy; success: SubmissionCopy & { actionLabel?: string }; failure: string }>({
+    kind: 'password',
+    processing: { title: 'Saving…' },
+    success: { title: 'Saved' },
+    failure: 'Something went wrong',
+  });
+  const runWithCard = (next: typeof card, task: () => Promise<SubmissionResult>) => {
+    setCard(next);
+    return submission.run(task);
+  };
+  const exportPending = submission.processing && card.kind === 'export';
+  const consentPending = submission.processing && card.kind === 'consent';
+  const deletePending = submission.processing && card.kind === 'delete';
 
   // Password
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const [changing, startChanging] = useTransition();
+  const changing = submission.processing && card.kind === 'password';
   const [passwordError, setPasswordError] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [current, setCurrent] = useState('');
@@ -289,21 +321,67 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
     event.preventDefault();
     setPasswordError('');
     setPasswordMessage('');
-    startChanging(async () => {
-      try {
-        const result = await changeAccountPasswordAction({ currentPassword: current, password: next, confirmPassword: confirm });
-        if (!result.success) {
-          setPasswordError(result.error);
-          return;
+    void runWithCard(
+      {
+        kind: 'password',
+        processing: { title: 'Updating your password', message: 'Checking your current password and saving the new one.' },
+        success: { title: 'Password updated', message: 'Use your new password the next time you sign in.' },
+        failure: "We couldn't update your password",
+      },
+      async () => {
+        try {
+          const result = await changeAccountPasswordAction({ currentPassword: current, password: next, confirmPassword: confirm });
+          if (!result.success) {
+            setPasswordError(result.error);
+            return { ok: false, error: result.error };
+          }
+          resetPasswordForm();
+          setPasswordOpen(false);
+          return { ok: true };
+        } catch {
+          setPasswordError('Unable to change your password. Please try again.');
+          return { ok: false, error: 'Unable to change your password. Please try again.' };
         }
-        resetPasswordForm();
-        setPasswordOpen(false);
-        setPasswordMessage(result.message);
-      } catch {
-        setPasswordError('Unable to change your password. Please try again.');
       }
-    });
+    );
   };
+
+  const acceptTerms = () =>
+    void runWithCard(
+      {
+        kind: 'consent',
+        processing: { title: 'Saving your acceptance', message: 'Recording that you accepted the current terms and policies.' },
+        success: { title: 'Terms accepted', message: 'Thank you. You have accepted the current versions.' },
+        failure: "We couldn't save your acceptance",
+      },
+      consent.acceptAndReport
+    );
+
+  const exportData = () =>
+    void runWithCard(
+      {
+        kind: 'export',
+        processing: { title: 'Preparing your data', message: 'Gathering your profile, consultations, messages, payments and reviews.' },
+        success: { title: 'Your data is downloaded', message: 'Check your downloads for the JSON file.' },
+        failure: "We couldn't export your data",
+      },
+      downloadMyData
+    );
+
+  const deleteAccount = () =>
+    void runWithCard(
+      {
+        kind: 'delete',
+        processing: { title: 'Deleting your account', message: 'Signing you out on every device.' },
+        success: {
+          title: 'Your account is scheduled for deletion',
+          message: 'Your personal data is erased in 7 days. Sign in before then to restore it.',
+          actionLabel: 'Continue',
+        },
+        failure: "We couldn't delete your account",
+      },
+      deletion.request
+    );
 
   const saveStatus = (
     <AnimatePresence mode="wait" initial={false}>
@@ -338,8 +416,8 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
       <motion.div
         variants={PAGE}
         initial="hidden"
-        animate="show"
-        className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-12 max-w-[1200px] mx-auto space-y-7 sm:space-y-9 bg-[#E5D8CB]"
+        animate={revealed ? 'show' : 'hidden'}
+        className={accountPageClass(account.role)}
       >
         {/* ─── Heading ─── */}
         <motion.header variants={RISE_IN} className="space-y-1.5">
@@ -383,7 +461,7 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                 {account.emailVerified ? 'Email verified' : 'Email not verified'}
               </span>
               <span className="neu-inset-banner inline-flex items-center h-6 px-2.5 rounded-full font-inter text-[10.5px] font-bold text-[#5C4535]">
-                Client account
+                {isLawyer ? 'Lawyer account' : 'Client account'}
               </span>
             </div>
 
@@ -392,7 +470,7 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                 Your name and contact number are managed on your profile.
               </p>
               <Link
-                href="/client/profile"
+                href={profileHref}
                 className="neu-btn-banner w-full h-10 rounded-xl inline-flex items-center justify-center gap-2 font-lora text-xs sm:text-[13px] font-bold text-[#341512]"
               >
                 View my profile
@@ -624,8 +702,8 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                           </AnimatePresence>
 
                           <div className="flex flex-wrap items-center gap-3 pt-1">
-                            <NeuButton type="submit" variant="primary" size="sm" loading={changing}>
-                              {changing ? 'Updating…' : 'Update password'}
+                            <NeuButton type="submit" variant="primary" size="sm" disabled={changing}>
+                              Update password
                             </NeuButton>
                             <NeuButton
                               size="sm"
@@ -679,7 +757,7 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                   }
                   control={
                     consent.consent && !consent.consent.current ? (
-                      <NeuButton size="sm" variant="secondary" loading={consent.pending} onClick={consent.accept}>
+                      <NeuButton size="sm" variant="secondary" disabled={consentPending} onClick={acceptTerms}>
                         Accept
                       </NeuButton>
                     ) : null
@@ -702,7 +780,7 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                   title="Download my data"
                   description="A JSON file with your profile, consultations, messages, payments and reviews. Once a day."
                   control={
-                    <NeuButton size="sm" variant="secondary" loading={dataExport.pending} onClick={() => void dataExport.run()}>
+                    <NeuButton size="sm" variant="secondary" disabled={exportPending} onClick={exportData}>
                       Download
                     </NeuButton>
                   }
@@ -733,15 +811,16 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                         <form
                           onSubmit={(e) => {
                             e.preventDefault();
-                            if (deletion.ready) deletion.submit();
+                            if (deletion.ready) deleteAccount();
                           }}
                           className="px-4 sm:px-5 pb-5 pt-1 space-y-4"
                         >
                           <p className="font-inter text-[12px] leading-relaxed text-[#5C4535]">
                             You can’t delete your account while you have upcoming consultations. After you confirm, you are signed out on
                             every device, and your account is removed in 7 days unless you sign in and restore it.
+                            {isLawyer && ' Your profile leaves Find a Lawyer immediately.'}
                           </p>
-                          <fieldset disabled={deletion.pending} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <fieldset disabled={deletePending} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <PasswordField
                               name="deletePassword"
                               label="Your password"
@@ -770,10 +849,10 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                             )}
                           </AnimatePresence>
                           <div className="flex flex-wrap items-center gap-3 pt-1">
-                            <NeuButton type="submit" variant="danger" size="sm" loading={deletion.pending} disabled={!deletion.ready}>
+                            <NeuButton type="submit" variant="danger" size="sm" disabled={!deletion.ready || deletePending}>
                               Delete my account
                             </NeuButton>
-                            <NeuButton size="sm" variant="secondary" disabled={deletion.pending} onClick={deletion.reset}>
+                            <NeuButton size="sm" variant="secondary" disabled={deletePending} onClick={deletion.reset}>
                               Cancel
                             </NeuButton>
                           </div>
@@ -784,23 +863,19 @@ export function ClientAccountSettings({ account }: { account: PersonalAccount })
                 </div>
               </div>
 
-              <AnimatePresence>
-                {dataExport.message && (
-                  <NeuAlert key="export-msg" tone={dataExport.message.ok ? 'success' : 'error'} onDismiss={dataExport.clear}>
-                    {dataExport.message.text}
-                  </NeuAlert>
-                )}
-                {consent.error && (
-                  <NeuAlert key="consent-error" tone="error">
-                    {consent.error}
-                  </NeuAlert>
-                )}
-              </AnimatePresence>
             </SectionCard>
           </motion.div>
         </div>
       </motion.div>
       <SignOutConfirmModal open={signOutAllOpen} onClose={() => setSignOutAllOpen(false)} everywhere />
+      <SubmissionOverlay
+        submission={submission}
+        processing={card.processing}
+        success={card.success}
+        failure={{ title: card.failure }}
+        // After a deletion request the person is signed out: "Continue" takes them to sign in.
+        onDone={card.kind === 'delete' ? deletion.leave : undefined}
+      />
     </MotionConfig>
   );
 }

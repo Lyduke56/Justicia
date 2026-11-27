@@ -35,7 +35,7 @@ const TARGET = 'hidden @[60rem]:block';
 
 export function AdminSecurityAuditView({ initialLogs = [] }: { initialLogs?: AdminAuditEntry[] }) {
   const reduceMotion = useReducedMotion();
-  const { entranceKey, rowsAt } = useEntrance();
+  const { entranceKey, revealed, rowsAt } = useEntrance();
   const [now] = useState(() => Date.now());
 
   const [logs, setLogs] = useState(initialLogs);
@@ -97,7 +97,7 @@ export function AdminSecurityAuditView({ initialLogs = [] }: { initialLogs?: Adm
 
   return (
     <MotionConfig reducedMotion="user">
-      <motion.div key={entranceKey} variants={PAGE} initial={reduceMotion ? false : 'hidden'} animate="show" className={`${PAGE_FRAME} admin-audit`}>
+      <motion.div key={entranceKey} variants={PAGE} initial={reduceMotion ? false : 'hidden'} animate={revealed ? 'show' : 'hidden'} className={`${PAGE_FRAME} admin-audit`}>
         <h1 className="sr-only">Audit log</h1>
 
         <motion.section variants={EMBOSS} aria-label="Filter events" className="rounded-[24px] bg-[#E5D8CB] p-4 sm:p-5">

@@ -91,6 +91,49 @@ test('"needs action first": requests and payments to review, then upcoming, then
   ]);
 });
 
+// 2026-11-23 10:00 Manila (02:00 UTC)
+const NOW = Date.UTC(2026, 10, 23, 2, 0);
+
+test('"soonest first" (default): the next live consultation first, then the rest latest first', () => {
+  assert.deepEqual(ids(model.visibleConsultations(ALL, 'all', '', 'upcoming', TODAY, () => false, NOW)), [
+    'confirmed-soon',
+    'request-soon',
+    'review',
+    'unpaid',
+    'request-late',
+    'confirmed-later',
+    'cancelled',
+    'declined',
+    'done-new',
+    'confirmed-past',
+    'done-old',
+  ]);
+  assert.equal(model.SORTS[0].key, 'upcoming');
+});
+
+test('"soonest first": a session in progress today leads, and a missed one drops to the past', () => {
+  const inProgress = { ...c('now-2h', 'confirmed', '2026-11-23', '09:00'), timeRange: '9:00 AM - 11:00 AM' };
+  const endedToday = c('ended-today', 'confirmed', '2026-11-23', '08:00');
+  const list = [...ALL, inProgress, endedToday];
+  const order = ids(model.visibleConsultations(list, 'all', '', 'upcoming', TODAY, () => false, NOW));
+  assert.equal(order[0], 'now-2h');
+  assert.ok(order.indexOf('ended-today') > order.indexOf('confirmed-later'));
+  const missed = (x) => x.id === 'confirmed-soon';
+  assert.notEqual(ids(model.visibleConsultations(ALL, 'all', '', 'upcoming', TODAY, missed, NOW))[0], 'confirmed-soon');
+});
+
+test('orderSoonestFirst (client list): today\'s later booking beats tomorrow\'s, finished ones go last', () => {
+  const booking = (id, status, iso, time, timeRange = '') => ({ ...c(id, status, iso, time), timeRange });
+  const items = [
+    booking('tomorrow', 'live', '2026-11-24', '09:00'),
+    booking('later-today', 'live', '2026-11-23', '15:00'),
+    booking('this-morning', 'live', '2026-11-23', '08:00'),
+    booking('declined-future', 'closed', '2026-11-23', '16:00'),
+  ];
+  const order = lib.orderSoonestFirst(items, (x) => x.status === 'live', NOW).map((x) => x.id);
+  assert.deepEqual(order, ['later-today', 'tomorrow', 'declined-future', 'this-morning']);
+});
+
 test('date and name sorts', () => {
   const upcoming = (sort) => ids(model.visibleConsultations(ALL, 'upcoming', '', sort, TODAY));
   assert.deepEqual(upcoming('soonest'), ['confirmed-past', 'confirmed-soon', 'review', 'unpaid', 'confirmed-later']);

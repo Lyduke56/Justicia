@@ -45,7 +45,7 @@ export function AdminUsersView({
   initialSelectedId?: string | null;
 }) {
   const reduceMotion = useReducedMotion();
-  const { entranceKey, rowsAt } = useEntrance();
+  const { entranceKey, revealed, rowsAt } = useEntrance();
 
   const [users, setUsers] = useState(initialUsers);
   const [previousData, setPreviousData] = useState(initialUsers);
@@ -82,7 +82,7 @@ export function AdminUsersView({
 
   return (
     <MotionConfig reducedMotion="user">
-      <motion.div key={entranceKey} variants={PAGE} initial={reduceMotion ? false : 'hidden'} animate="show" className={`${PAGE_FRAME} admin-users`}>
+      <motion.div key={entranceKey} variants={PAGE} initial={reduceMotion ? false : 'hidden'} animate={revealed ? 'show' : 'hidden'} className={`${PAGE_FRAME} admin-users`}>
         <h1 className="sr-only">User accounts</h1>
 
         <motion.section variants={EMBOSS} aria-label="Filter accounts" className="rounded-[24px] bg-[#E5D8CB] p-4 sm:p-5">

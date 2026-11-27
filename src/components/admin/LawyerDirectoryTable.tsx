@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEntrance } from './table/kit';
+import { useMemo, useState, type ReactNode } from 'react';
 import { EmptyMedallion } from '@/components/shared/neu/EmptyMedallion';
 import Link from 'next/link';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
-import { useViewActive } from '@/components/live/LiveProvider';
 import { ChevronRightIcon, NeuButton } from '@/components/shared/neu';
 import { DRAW, EASE_OUT, EMBOSS, PAGE, RISE } from '@/components/lawyer/motion';
 import { QueueToolbar } from './verification/QueueToolbar';
@@ -131,23 +131,8 @@ function DirectoryRows({ lawyers, rowsAt }: { lawyers: LawyerDirectoryItem[]; ro
 
 export function LawyerDirectoryTable({ lawyers }: { lawyers: LawyerDirectoryItem[] }) {
   const reduceMotion = useReducedMotion();
-  const viewActive = useViewActive();
-
-  // Tabs stay mounted; replay the entrance each time this one is shown.
-  const [wasActive, setWasActive] = useState(viewActive);
-  const [entranceKey, setEntranceKey] = useState(0);
-  const [settled, setSettled] = useState(false);
-  if (viewActive !== wasActive) {
-    setWasActive(viewActive);
-    if (viewActive) {
-      setEntranceKey((k) => k + 1);
-      setSettled(false);
-    }
-  }
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSettled(true), 1300);
-    return () => window.clearTimeout(timer);
-  }, [entranceKey]);
+  // The entrance plays when the portal's loading screen lifts, and again on every visit.
+  const { entranceKey, revealed, settled } = useEntrance(1300);
 
   const [tab, setTab] = useState<DirectoryTab>('all');
   const [query, setQuery] = useState('');
@@ -175,7 +160,7 @@ export function LawyerDirectoryTable({ lawyers }: { lawyers: LawyerDirectoryItem
         key={entranceKey}
         variants={PAGE}
         initial={reduceMotion ? false : 'hidden'}
-        animate="show"
+        animate={revealed ? 'show' : 'hidden'}
         className="lawyer-page admin-directory mx-auto flex max-w-[1196px] flex-col gap-8 px-4 pb-14 pt-6 sm:px-8 sm:pt-10 lg:px-12 lg:pt-12"
       >
         <h1 className="sr-only">Lawyer directory</h1>

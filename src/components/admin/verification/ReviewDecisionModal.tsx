@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { NeuAlert, NeuButton, NeuModal, type NeuTone } from '@/components/shared/neu';
+import { NeuButton, type NeuTone } from '@/components/shared/neu';
+import { SubmitModal, useSubmission, type SubmissionCopy, type SubmissionResult } from '@/components/shared/feedback';
 import { getAdminVerificationDocumentsAction } from '@/app/actions/lawyerVerificationDocs';
 import { documentGaps, documentLabel, type PostApprovalAction, type ReviewDecision } from '@/lib/lawyer/verification';
 import { formatAttorneyName } from '@/lib/utils/attorneyName';
@@ -12,18 +13,35 @@ import { stamp } from '../overview/activity';
 /**
  * Confirms a verification decision in the shared neumorphic modal (the same frame as the client
  * and lawyer booking dialogs). Approving needs no note; asking for information or rejecting
- * takes a message the applicant sees on their Application Status page.
+ * takes a message the applicant sees on their Application Status page. Confirming morphs the
+ * dialog into the submission loader, which then writes a check or an X.
  */
 
 export type DossierDecision = ReviewDecision | PostApprovalAction;
 
 const CONFIG: Record<DossierDecision, { title: string; confirm: string; busy: string; tone: NeuTone; variant: 'dark' | 'primary' | 'danger' }> = {
-  approved: { title: 'Approve this lawyer?', confirm: 'Approve lawyer', busy: 'Approving…', tone: 'success', variant: 'dark' },
-  needs_resubmission: { title: 'Request more information?', confirm: 'Send request', busy: 'Sending…', tone: 'caramel', variant: 'primary' },
-  rejected: { title: 'Reject this application?', confirm: 'Reject application', busy: 'Rejecting…', tone: 'danger', variant: 'danger' },
-  reverify: { title: 'Request re-verification?', confirm: 'Send request', busy: 'Sending…', tone: 'caramel', variant: 'primary' },
-  revoke: { title: 'Revoke this verification?', confirm: 'Revoke verification', busy: 'Revoking…', tone: 'danger', variant: 'danger' },
+  approved: { title: 'Approve this lawyer?', confirm: 'Approve lawyer', busy: 'Approving the lawyer', tone: 'success', variant: 'dark' },
+  needs_resubmission: { title: 'Request more information?', confirm: 'Send request', busy: 'Sending your request', tone: 'caramel', variant: 'primary' },
+  rejected: { title: 'Reject this application?', confirm: 'Reject application', busy: 'Rejecting the application', tone: 'danger', variant: 'danger' },
+  reverify: { title: 'Request re-verification?', confirm: 'Send request', busy: 'Sending your request', tone: 'caramel', variant: 'primary' },
+  revoke: { title: 'Revoke this verification?', confirm: 'Revoke verification', busy: 'Revoking the verification', tone: 'danger', variant: 'danger' },
 };
+
+/** The result card once the decision is saved. */
+function doneCopy(decision: DossierDecision, name: string): SubmissionCopy {
+  switch (decision) {
+    case 'approved':
+      return { title: 'Lawyer approved', message: `${name} is now verified and listed in Find a Lawyer.` };
+    case 'needs_resubmission':
+      return { title: 'Request sent', message: `${name} will see your message on their Application Status page.` };
+    case 'rejected':
+      return { title: 'Application rejected', message: `${name} will see your reason on their Application Status page.` };
+    case 'reverify':
+      return { title: 'Re-verification requested', message: `${name} is hidden from Find a Lawyer until you approve new documents.` };
+    case 'revoke':
+      return { title: 'Verification revoked', message: `${name} no longer appears in Find a Lawyer or has portal access.` };
+  }
+}
 
 const DEFAULT_NOTE: Record<DossierDecision, string> = {
   approved: '',
@@ -39,19 +57,25 @@ const MIN_NOTE: Record<DossierDecision, number> = { approved: 0, needs_resubmiss
 export function ReviewDecisionModal({
   lawyer,
   decision,
-  submitting,
-  error,
   onCancel,
   onConfirm,
+  onDone,
 }: {
   lawyer: LawyerQueueItem;
   decision: DossierDecision;
-  submitting: boolean;
-  error: string | null;
   onCancel: () => void;
-  /** `exception` is set when approving with incomplete documents. */
-  onConfirm: (note: string, exception?: string) => void;
+  /** Saves the decision (`exception` is set when approving with incomplete documents). */
+  onConfirm: (note: string, exception?: string) => Promise<SubmissionResult>;
+  /** "Done" after the decision was saved. */
+  onDone: () => void;
 }) {
+  const submission = useSubmission();
+  const submitting = submission.processing;
+  const close = () => {
+    if (submitting) return;
+    if (submission.phase === 'success') onDone();
+    else onCancel();
+  };
   const [note, setNote] = useState(DEFAULT_NOTE[decision]);
   const [exception, setException] = useState('');
   const [now] = useState(() => Date.now());
@@ -95,9 +119,12 @@ export function ReviewDecisionModal({
     docCheck.state !== 'loading';
 
   return (
-    <NeuModal
-      onClose={onCancel}
-      dismissible={!submitting}
+    <SubmitModal
+      submission={submission}
+      onClose={close}
+      processing={{ title: config.busy, message: `${lawyer.full_name} · Roll ${lawyer.roll_number}` }}
+      success={doneCopy(decision, name)}
+      failure={{ title: 'The decision was not saved' }}
       size="md"
       title={config.title}
       subtitle={`${lawyer.full_name} · Roll ${lawyer.roll_number}`}
@@ -109,11 +136,15 @@ export function ReviewDecisionModal({
       }
       footer={
         <>
-          <NeuButton onClick={onCancel} disabled={submitting}>
+          <NeuButton onClick={close} disabled={submitting}>
             Cancel
           </NeuButton>
-          <NeuButton variant={config.variant} loading={submitting} disabled={!noteOk} onClick={() => onConfirm(note, needsException ? exception : undefined)}>
-            {submitting ? config.busy : config.confirm}
+          <NeuButton
+            variant={config.variant}
+            disabled={!noteOk || submitting}
+            onClick={() => void submission.run(() => onConfirm(note, needsException ? exception : undefined))}
+          >
+            {config.confirm}
           </NeuButton>
         </>
       }
@@ -186,11 +217,6 @@ export function ReviewDecisionModal({
         </label>
       )}
 
-      {error && (
-        <NeuAlert tone="error" title="The decision was not saved">
-          {error}
-        </NeuAlert>
-      )}
-    </NeuModal>
+    </SubmitModal>
   );
 }

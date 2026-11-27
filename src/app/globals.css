@@ -1428,9 +1428,11 @@ input[type='number']::-webkit-outer-spin-button {
   animation-delay: 0.3s;
 }
 
-/* A view revealed under the transition overlay starts its entrance once the overlay lifts. */
-[data-screen-loading] .client-view-enter {
-  animation-play-state: paused;
+/* A view revealed under the loading screen starts its entrance once the loading screen lifts:
+   its own fade and every CSS animation inside it wait (motion entrances wait via useScreenReveal). */
+[data-screen-loading] .client-view-enter,
+[data-screen-loading] .client-view-enter * {
+  animation-play-state: paused !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

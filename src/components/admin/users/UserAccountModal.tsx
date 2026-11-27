@@ -4,17 +4,19 @@ import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
 import { sendUserPasswordResetAction, updateUserRoleAction } from '@/app/actions/adminData';
-import { ChevronRightIcon, NeuAlert, NeuButton, NeuModal } from '@/components/shared/neu';
+import { ChevronRightIcon, NeuAlert, NeuButton } from '@/components/shared/neu';
+import { SubmitModal, useSubmission } from '@/components/shared/feedback';
 import type { AdminUserAccount } from '@/types/admin';
 import { stamp } from '../overview/activity';
 import { CAPS } from '../table/kit';
 import { ROLE_META, type UserRole } from './model';
-import { AccountStandingPanel } from './AccountStandingPanel';
+import { AccountStandingPanel, type StatusCardCopy, type SubmissionRunner } from './AccountStandingPanel';
 
 /**
  * Manage an account, in the shared neumorphic modal: its details, a role switch (the caramel
  * thumb glides to the chosen role; changing it asks for confirmation inside the dialog) and a
- * password reset email. Lawyers also get a link to their dossier.
+ * password reset email. Lawyers also get a link to their dossier. Every change morphs the dialog
+ * into the submission loader, which writes a check or an X, then returns to the account.
  */
 
 const ROLES: UserRole[] = ['client', 'lawyer', 'admin'];
@@ -44,14 +46,25 @@ function Cell({ label, children, mono = false }: { label: string; children: Reac
 export function UserAccountModal({ user, onClose, onRoleChanged }: { user: AdminUserAccount; onClose: () => void; onRoleChanged: () => Promise<void> }) {
   const [role, setRole] = useState<UserRole>(user.role);
   const [confirming, setConfirming] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [sending, setSending] = useState(false);
+  const submission = useSubmission();
+  const busy = submission.processing;
+  const [card, setCard] = useState<StatusCardCopy>({ processing: { title: 'Saving…' }, success: { title: 'Saved' }, failure: 'Something went wrong' });
+  /** Runs a change with the dialog's submission card. */
+  const runCard: SubmissionRunner = (copy, task) => {
+    setCard(copy);
+    return submission.run(task);
+  };
+  /** Closes the result card back to the account; closes the dialog otherwise. */
+  const closeOrBack = () => {
+    if (busy) return;
+    if (submission.phase === 'idle') onClose();
+    else submission.reset();
+  };
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const changed = role !== user.role;
   const [now] = useState(() => Date.now());
   const joined = stamp(user.createdAt, now);
-  const busy = saving || sending;
 
   const pick = (next: UserRole) => {
     setRole(next);
@@ -60,44 +73,60 @@ export function UserAccountModal({ user, onClose, onRoleChanged }: { user: Admin
     setNotice(null);
   };
 
-  const saveRole = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      const result = await updateUserRoleAction(user.id, role);
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-      await onRoleChanged();
-      setConfirming(false);
-      setNotice(`${user.fullName} is now ${role === 'admin' ? 'an administrator' : `a ${role}`}.`);
-    } catch {
-      setError('The role could not be changed. Please refresh and try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
+  const roleWord = role === 'admin' ? 'an administrator' : `a ${role}`;
 
-  const sendReset = async () => {
-    setSending(true);
+  const saveRole = () => {
     setError(null);
     setNotice(null);
-    try {
-      const result = await sendUserPasswordResetAction(user.email);
-      if (result.error) setError(result.error);
-      else setNotice(`A password reset link was sent to ${user.email}.`);
-    } catch {
-      setError('The password reset email could not be sent.');
-    } finally {
-      setSending(false);
-    }
+    void runCard(
+      {
+        processing: { title: 'Changing the role', message: `Making ${user.fullName} ${roleWord}.` },
+        success: { title: 'Role changed', message: `${user.fullName} is now ${roleWord}.` },
+        failure: "We couldn't change the role",
+      },
+      async () => {
+        try {
+          const result = await updateUserRoleAction(user.id, role);
+          if (result.error) return { ok: false, error: result.error };
+          await onRoleChanged();
+          setConfirming(false);
+          return { ok: true };
+        } catch {
+          return { ok: false, error: 'The role could not be changed. Please refresh and try again.' };
+        }
+      }
+    );
+  };
+
+  const sendReset = () => {
+    setError(null);
+    setNotice(null);
+    void runCard(
+      {
+        processing: { title: 'Sending the reset link', message: `Emailing ${user.email}.` },
+        success: { title: 'Reset link sent', message: `${user.email} can now choose a new password.` },
+        failure: "We couldn't send the reset link",
+      },
+      async () => {
+        try {
+          const result = await sendUserPasswordResetAction(user.email);
+          return result.error ? { ok: false, error: result.error } : { ok: true };
+        } catch {
+          return { ok: false, error: 'The password reset email could not be sent.' };
+        }
+      }
+    );
   };
 
   return (
-    <NeuModal
-      onClose={onClose}
-      dismissible={!busy}
+    <SubmitModal
+      submission={submission}
+      onClose={closeOrBack}
+      processing={card.processing}
+      success={{ ...card.success, actionLabel: 'Back to Account' }}
+      failure={{ title: card.failure }}
+      // Request errors are shown by the result card, then go away once you are back.
+      errorInSheet={false}
       size="lg"
       title={user.fullName || 'Unnamed account'}
       subtitle={user.email}
@@ -105,11 +134,11 @@ export function UserAccountModal({ user, onClose, onRoleChanged }: { user: Admin
       footer={
         confirming ? (
           <>
-            <NeuButton onClick={() => setConfirming(false)} disabled={saving}>
+            <NeuButton onClick={() => setConfirming(false)} disabled={busy}>
               Back
             </NeuButton>
-            <NeuButton variant="dark" loading={saving} onClick={saveRole}>
-              {saving ? 'Changing…' : 'Confirm change'}
+            <NeuButton variant="dark" disabled={busy} onClick={saveRole}>
+              Confirm change
             </NeuButton>
           </>
         ) : (
@@ -195,11 +224,11 @@ export function UserAccountModal({ user, onClose, onRoleChanged }: { user: Admin
             <p className="font-inter text-[13px] font-semibold text-[#341512]">Password reset</p>
             <p className="mt-0.5 font-inter text-[11.5px] leading-relaxed text-[#7D6855]">Email a link to {user.email} so they can choose a new password.</p>
           </div>
-          <NeuButton size="sm" loading={sending} disabled={saving} onClick={sendReset}>
+          <NeuButton size="sm" disabled={busy} onClick={sendReset}>
             Send link
           </NeuButton>
         </div>
-        {user.role !== 'admin' && <AccountStandingPanel userId={user.id} onChanged={() => void onRoleChanged()} />}
+        {user.role !== 'admin' && <AccountStandingPanel userId={user.id} onChanged={() => void onRoleChanged()} runner={runCard} />}
         {user.role === 'lawyer' && (
           <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5">
             <div className="min-w-0">
@@ -223,7 +252,7 @@ export function UserAccountModal({ user, onClose, onRoleChanged }: { user: Admin
           {error ?? notice}
         </NeuAlert>
       )}
-    </NeuModal>
+    </SubmitModal>
   );
 }
 

@@ -1,5 +1,5 @@
 import type { LawyerConsultation } from '@/app/actions/consultationActions';
-import { startMsOf, toIsoDate } from '@/lib/lawyer/dashboardSchedule';
+import { orderSoonestFirst, startMsOf, toIsoDate } from '@/lib/lawyer/dashboardSchedule';
 
 /** Status tabs of the Consultations screen. */
 export type ConsultationTab = 'all' | 'pending' | 'upcoming' | 'completed' | 'missed' | 'cancelled';
@@ -32,10 +32,17 @@ export function matchesTab(c: LawyerConsultation, tab: ConsultationTab, missed =
 }
 
 /**
- * Sort orders. "action" matches the server's own order: requests and payments to review first
- * (soonest first), then upcoming sessions (soonest first), then past or closed ones (latest first).
+ * Sort orders.
+ *  - "upcoming" (the default): the next consultation to happen first. Live ones (requests,
+ *    unpaid, payment under review, confirmed) that haven't ended yet, earliest start first, then
+ *    everything else (finished, missed, closed), most recent first.
+ *  - "action": requests and payments to review first (soonest first), then upcoming sessions
+ *    (soonest first), then past or closed ones (latest first). Matches the server's own order.
+ *  - "soonest" / "latest": plain session date order; "client": client name A–Z.
  */
-export type SortKey = 'action' | 'soonest' | 'latest' | 'client';
+export type SortKey = 'upcoming' | 'action' | 'soonest' | 'latest' | 'client';
+
+const LIVE_STATUSES = new Set<LawyerConsultation['status']>(['pending', 'payment_review', 'pending_payment', 'confirmed']);
 
 function actionRank(c: LawyerConsultation, today: string): number {
   if (c.status === 'pending' || c.status === 'payment_review') return 0;
@@ -44,8 +51,9 @@ function actionRank(c: LawyerConsultation, today: string): number {
 }
 
 export const SORTS: Array<{ key: SortKey; label: string }> = [
+  { key: 'upcoming', label: 'Soonest first' },
   { key: 'action', label: 'Needs action first' },
-  { key: 'soonest', label: 'Session date: soonest' },
+  { key: 'soonest', label: 'Session date: earliest' },
   { key: 'latest', label: 'Session date: latest' },
   { key: 'client', label: 'Client name: A–Z' },
 ];
@@ -57,10 +65,13 @@ export function visibleConsultations(
   query: string,
   sort: SortKey,
   today: string,
-  isMissed: (c: LawyerConsultation) => boolean = () => false
+  isMissed: (c: LawyerConsultation) => boolean = () => false,
+  now: number = Date.now()
 ): LawyerConsultation[] {
   const q = query.trim().toLowerCase();
   const list = all.filter((c) => matchesTab(c, tab, isMissed(c)) && (!q || c.client.name.toLowerCase().includes(q)));
+  // A missed session is over even if its slot hasn't technically ended.
+  if (sort === 'upcoming') return orderSoonestFirst(list, (c) => LIVE_STATUSES.has(c.status) && !isMissed(c), now);
   const keyed = list.map((c) => ({ c, start: startMsOf(c), rank: actionRank(c, today) }));
   if (sort === 'action') keyed.sort((a, b) => a.rank - b.rank || (a.rank === 2 ? b.start - a.start : a.start - b.start));
   else if (sort === 'soonest') keyed.sort((a, b) => a.start - b.start);

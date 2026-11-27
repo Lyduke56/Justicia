@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { NeuAlert } from '@/components/shared/neu';
 
 export const metadata: Metadata = { title: 'AI Legal Chat' };
 
@@ -31,9 +32,9 @@ export default async function AIConversationPage({ params }: Props) {
       </div>
 
       {/* TODO: <DisclaimerBanner /> */}
-      <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800">
-        ⚠️ <strong>Disclaimer:</strong> AI responses are for informational purposes only and do not constitute legal advice. Consult a licensed attorney for your specific situation.
-      </div>
+      <NeuAlert tone="warning" title="Disclaimer">
+        AI responses are for informational purposes only and do not constitute legal advice. Consult a licensed attorney for your specific situation.
+      </NeuAlert>
 
       <div className="flex-1 rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
         🚧 <strong>Scaffold placeholder</strong> — <code>src/app/(client)/ai-assistant/[conversationId]/page.tsx</code>

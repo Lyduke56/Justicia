@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { LawyerGrid } from '@/components/client/LawyerGrid';
 import { LawyerSearchFilters } from '@/components/client/LawyerSearchFilters';
 import { LawyerDetailView } from '@/components/client/LawyerDetailView';
-import { PanelLoader } from '@/components/shared/loading';
+import { PanelLoader, useScreenLoading, useScreenReveal } from '@/components/shared/loading';
 import type { PublicLawyerProfile } from '@/components/client/LawyerGrid';
 
 const PAGE_SIZE = 9;
@@ -465,10 +465,17 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
   // swapping in fetched cards mid-entrance made the new cards skip the wave and pop in at once.
   const [hasResults, setHasResults] = useState(false);
   const [introDelay, setIntroDelay] = useState(GRID_INTRO_DELAY);
+  // The page entrance (search area, then the cards) plays when the portal's loading screen
+  // lifts; the loading screen itself waits for the first results and the filter options.
+  const { revealed } = useScreenReveal();
+  const revealedRef = useRef(revealed);
   const entranceStartRef = useRef(0);
   useEffect(() => {
-    entranceStartRef.current = performance.now();
-  }, []);
+    revealedRef.current = revealed;
+    if (revealed) entranceStartRef.current = performance.now();
+  }, [revealed]);
+  const [optionsLoaded, setOptionsLoaded] = useState(false);
+  useScreenLoading(!hasResults || !optionsLoaded);
 
   // Results transitions: `refreshing` dims the grid while a new filter/page loads;
   // `resultsVersion` bumps when a *different* result set lands so the grid fades out and re-cascades in.
@@ -532,7 +539,7 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
       }
     }
 
-    loadInitial();
+    loadInitial().finally(() => setOptionsLoaded(true));
   }, [isLoggedIn, userId]);
 
   /**
@@ -542,8 +549,9 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
   const finishFetch = useCallback((signature: string) => {
     if (lastSignatureRef.current === null) {
       // First results: deal the cards in once the search area has landed (or right away if
-      // the fetch took longer than the search area's entrance).
-      const elapsed = (performance.now() - entranceStartRef.current) / 1000;
+      // the fetch took longer than the search area's entrance). Before the reveal the whole
+      // entrance is still ahead.
+      const elapsed = revealedRef.current ? (performance.now() - entranceStartRef.current) / 1000 : 0;
       setIntroDelay(Math.max(GRID_REFRESH_DELAY, GRID_INTRO_DELAY - elapsed));
       setHasResults(true);
     } else if (lastSignatureRef.current !== signature) {
@@ -750,7 +758,7 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
             <motion.div
               variants={pageVariants}
               initial={reduceMotion ? false : 'hidden'}
-              animate="show"
+              animate={revealed ? 'show' : 'hidden'}
               className="px-8 sm:px-12 lg:px-16 xl:px-20 py-6 sm:py-10 max-w-[1300px] mx-auto space-y-6 sm:space-y-7"
             >
               <h1 className="sr-only">Find a Lawyer — Justicia Philippine Legal Intelligence</h1>
@@ -790,7 +798,7 @@ export function FindLawyerView({ isLoggedIn, userId }: FindLawyerViewProps) {
                       >
                         <PanelLoader label="Finding lawyers..." className="min-h-[18rem]" />
                       </motion.div>
-                    ) : (
+                    ) : !revealed ? null : (
                       <motion.div
                         key={resultsVersion}
                         custom={pageDir}

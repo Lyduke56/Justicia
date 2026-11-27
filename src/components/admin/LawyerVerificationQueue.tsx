@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition, type KeyboardEvent, type ReactNode } from 'react';
+import { useEntrance } from './table/kit';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import { EmptyMedallion } from '@/components/shared/neu/EmptyMedallion';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import { refreshAdminTabs } from '@/lib/live/adminRefresh';
 import { reviewLawyerApplicationAction, type ReviewDecision } from '@/app/actions/adminLawyerReview';
-import { useViewActive } from '@/components/live/LiveProvider';
 import { ChevronLeftIcon, ChevronRightIcon, NeuAlert, NeuButton } from '@/components/shared/neu';
 import { CARD_SLIDE, DRAW, EASE_OUT, EMBOSS, GROUP, PAGE, RISE, ROLL } from '@/components/lawyer/motion';
 import { initials, waitedFor, LONG_WAIT_MS, stamp } from './overview/activity';
@@ -14,6 +14,7 @@ import { QueueToolbar } from './verification/QueueToolbar';
 import { useFitRows } from './overview/useFitRows';
 import { ApplicationDossier, CAPS } from './verification/ApplicationDossier';
 import { ReviewDecisionModal } from './verification/ReviewDecisionModal';
+import type { SubmissionResult } from '@/components/shared/feedback';
 import { QUEUE_SORTS, QUEUE_TABS, matchesTab, statusMeta, visibleApplications, type LawyerQueueItem, type QueueSort, type QueueTab } from './verification/model';
 
 export type { LawyerQueueItem } from './verification/model';
@@ -149,23 +150,8 @@ function ApplicationList({
 export function LawyerVerificationQueue({ lawyers: initialLawyers }: { lawyers: LawyerQueueItem[] }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
-  const viewActive = useViewActive();
-
-  // Tabs stay mounted; replay the entrance each time this one is shown.
-  const [wasActive, setWasActive] = useState(viewActive);
-  const [entranceKey, setEntranceKey] = useState(0);
-  const [settled, setSettled] = useState(false);
-  if (viewActive !== wasActive) {
-    setWasActive(viewActive);
-    if (viewActive) {
-      setEntranceKey((k) => k + 1);
-      setSettled(false);
-    }
-  }
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSettled(true), 1200);
-    return () => window.clearTimeout(timer);
-  }, [entranceKey]);
+  // The entrance plays when the portal's loading screen lifts, and again on every visit.
+  const { entranceKey, revealed, settled } = useEntrance(1200);
 
   // Server data (refreshed by the admin tab) with local, optimistic decisions on top.
   const [lawyers, setLawyers] = useState(initialLawyers);
@@ -192,8 +178,6 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: { lawyers: 
   const detailRef = useRef<HTMLElement>(null);
 
   const [review, setReview] = useState<{ lawyer: LawyerQueueItem; decision: ReviewDecision } | null>(null);
-  const [reviewError, setReviewError] = useState<string | null>(null);
-  const [submitting, startSubmit] = useTransition();
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
     if (!notice) return;
@@ -248,16 +232,13 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: { lawyers: 
     resetLimit();
   };
 
-  const confirmReview = (note: string, exception?: string) => {
-    if (!review) return;
+  /** Saves the decision; the dialog shows the loader, then the check or the X. */
+  const confirmReview = async (note: string, exception?: string): Promise<SubmissionResult> => {
+    if (!review) return { ok: false, error: 'Choose a decision first.' };
     const { lawyer, decision } = review;
-    setReviewError(null);
-    startSubmit(async () => {
+    try {
       const res = await reviewLawyerApplicationAction(lawyer.user_id, decision, note, { exceptionReason: exception });
-      if (res.error) {
-        setReviewError(res.error);
-        return;
-      }
+      if (res.error) return { ok: false, error: res.error };
       const trimmed = note.trim();
       setLawyers((prev) =>
         prev.map((item) =>
@@ -280,10 +261,17 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: { lawyers: 
               ? `${lawyer.full_name}'s application was rejected.`
               : `Your request for more information was sent to ${lawyer.full_name}.`)
       );
-      setReview(null);
-      refreshAdminTabs();
-      router.refresh();
-    });
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'The decision could not be saved. Please try again.' };
+    }
+  };
+
+  /** "Done" on the result card: close it and refresh the other admin tabs. */
+  const finishReview = () => {
+    setReview(null);
+    refreshAdminTabs();
+    router.refresh();
   };
 
   const rowsAt = settled ? 0 : ROWS_AT_ENTRANCE;
@@ -295,7 +283,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: { lawyers: 
         key={entranceKey}
         variants={PAGE}
         initial={reduceMotion ? false : 'hidden'}
-        animate="show"
+        animate={revealed ? 'show' : 'hidden'}
         className="lawyer-page admin-queue mx-auto flex max-w-[1196px] flex-col gap-8 px-4 pb-14 pt-6 sm:px-8 sm:pt-10 lg:px-12 lg:pt-12"
       >
         <h1 className="sr-only">Lawyer verification queue</h1>
@@ -489,7 +477,7 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: { lawyers: 
               <AnimatePresence mode="wait" initial={false} custom={dir}>
                 {current ? (
                   <motion.div key={current.user_id} custom={dir} variants={CARD_SLIDE} initial="enter" animate="center" exit="exit">
-                    <ApplicationDossier lawyer={current} now={now} busy={submitting} onDecision={(decision) => { setReviewError(null); setReview({ lawyer: current, decision }); }} />
+                    <ApplicationDossier lawyer={current} now={now} busy={false} onDecision={(decision) => setReview({ lawyer: current, decision })} />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -540,10 +528,9 @@ export function LawyerVerificationQueue({ lawyers: initialLawyers }: { lawyers: 
             key={`${review.lawyer.user_id}-${review.decision}`}
             lawyer={review.lawyer}
             decision={review.decision}
-            submitting={submitting}
-            error={reviewError}
-            onCancel={() => !submitting && setReview(null)}
+            onCancel={() => setReview(null)}
             onConfirm={confirmReview}
+            onDone={finishReview}
           />
         )}
       </AnimatePresence>

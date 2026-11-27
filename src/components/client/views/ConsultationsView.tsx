@@ -14,7 +14,7 @@ import {
 } from 'motion/react';
 import { cancelConsultationAction } from '@/app/actions/consultationActions';
 import { fetchLive } from '@/lib/live/fetchLive';
-import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
+import { useLiveRefresh } from '@/components/live/LiveProvider';
 import {
   submitPaymentProofAction,
   getDocumentAccessUrlAction,
@@ -31,8 +31,8 @@ import type {
   DetailsSummary,
 } from '@/components/shared/ConsultationDetailsModal';
 import type { ViewKey } from '@/components/client/ClientShell';
-import { ScreenLoader } from '@/components/shared/loading';
-import { useSubmission } from '@/components/shared/feedback';
+import { ScreenLoader, useScreenLoading, useScreenReveal } from '@/components/shared/loading';
+import { SubmitModal, settle, useSubmission } from '@/components/shared/feedback';
 import { RescheduleModal, type RescheduleModalMode } from '@/components/shared/RescheduleModal';
 import { CancellationRequestModal, type CancellationModalMode } from '@/components/shared/CancellationRequestModal';
 import { useConsultationExtras } from '@/components/consultations/useConsultationExtras';
@@ -222,6 +222,8 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   useEffect(() => {
     loadAppointments();
   }, [loadAppointments]);
+  // The portal's loading screen stays up until the bookings are here.
+  useScreenLoading(loadingAppointments);
 
   // Approvals, payment confirmations and Meet links appear without reopening the tab.
   useLiveRefresh(['consultations', 'payments'], loadAppointments, { fallbackMs: 30000 });
@@ -229,28 +231,25 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   const [showCancelModal, setShowCancelModal] = useState<boolean>(false);
   const [showDetailsModal, setShowDetailsModal] = useState<boolean>(false);
   const [showMeetModal, setShowMeetModal] = useState<boolean>(false);
-  const [isCancelling, setIsCancelling] = useState<boolean>(false);
-  const [cancelError, setCancelError] = useState<string | null>(null);
+  // Cancelling morphs the dialog into the submission loader, then a check or an X.
+  const cancelSubmission = useSubmission();
+  const isCancelling = cancelSubmission.processing;
+  /** The booking that was cancelled; the list is updated once the result card is closed. */
+  const [cancelledId, setCancelledId] = useState<string | null>(null);
   /** +1 when moving to a later consultation / month, -1 when moving back (drives slide direction). */
   const [slideDir, setSlideDir] = useState<number>(1);
   const [monthDir, setMonthDir] = useState<number>(1);
   /** False until the calendar card has risen in; the first day-wave waits for it. */
   const [calendarIntroDone, setCalendarIntroDone] = useState<boolean>(false);
 
-  // The portal keeps tabs mounted (and preloads them hidden), so mounting alone doesn't mean the
-  // user is looking. Each time this tab becomes visible, bump a key that remounts the animated
-  // layout so the entrance plays again. Data, selection and calendar month live in this
-  // component and are kept. (State adjusted during render, React's pattern for reacting to a
-  // changed value without an effect.)
-  const isViewActive = useViewActive();
-  const [wasViewActive, setWasViewActive] = useState<boolean>(isViewActive);
-  const [entranceKey, setEntranceKey] = useState<number>(0);
-  if (isViewActive !== wasViewActive) {
-    setWasViewActive(isViewActive);
-    if (isViewActive) {
-      setEntranceKey((k) => k + 1);
-      setCalendarIntroDone(false);
-    }
+  // The entrance plays when the portal's loading screen lifts (not underneath it), and again on
+  // every visit: the reveal key remounts the animated layout. Data, selection and calendar month
+  // live in this component and are kept. (State adjusted during render.)
+  const { revealed, revealKey: entranceKey } = useScreenReveal();
+  const [seenEntrance, setSeenEntrance] = useState<number>(entranceKey);
+  if (entranceKey !== seenEntrance) {
+    setSeenEntrance(entranceKey);
+    setCalendarIntroDone(false);
   }
   const [reschedule, setReschedule] = useState<{ mode: RescheduleModalMode; id: string } | null>(null);
   const [rescheduleNotice, setRescheduleNotice] = useState<string | null>(null);
@@ -294,7 +293,6 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
 
   /** Cancel: paid bookings send a request to the attorney; others cancel right away. */
   const startCancel = (a: Appointment) => {
-    setCancelError(null);
     if (a.rawStatus === 'confirmed') setCancelRequest({ mode: 'request', id: a.id });
     else setShowCancelModal(true);
   };
@@ -307,24 +305,22 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
 
   const handleConfirmCancel = async () => {
     if (!currentAppointment || isCancelling) return;
-    setIsCancelling(true);
-    setCancelError(null);
-    try {
-      const res = await cancelConsultationAction(currentAppointment.id);
-      if (!('success' in res) || !res.success) {
-        setCancelError(('error' in res && res.error) || 'We could not cancel this consultation.');
-        return;
-      }
-      const cancelledId = currentAppointment.id;
-      setDbAppointments((prev) =>
-        prev.map((a) => (a.id === cancelledId ? { ...a, rawStatus: 'cancelled', status: 'CANCELLED' } : a))
-      );
-      setShowCancelModal(false);
-    } catch {
-      setCancelError('We could not cancel this consultation. Please try again.');
-    } finally {
-      setIsCancelling(false);
+    const id = currentAppointment.id;
+    const result = await cancelSubmission.run(() =>
+      settle(() => cancelConsultationAction(id), 'We could not cancel this consultation. Please try again.')
+    );
+    if (result?.ok) setCancelledId(id);
+  };
+
+  const closeCancelModal = () => {
+    if (isCancelling) return;
+    if (cancelSubmission.phase === 'success' && cancelledId) {
+      const id = cancelledId;
+      setDbAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, rawStatus: 'cancelled', status: 'CANCELLED' } : a)));
+      setCancelledId(null);
     }
+    setShowCancelModal(false);
+    cancelSubmission.reset();
   };
 
   // Calendar follows the month of the selected consultation, but allows explicit month browsing.
@@ -585,7 +581,6 @@ Reason: ${last.responseReason}` : ''}`,
           disabled: !cancelPending && !!ax && !ax.cancellation.canRequest,
           onClick: () => {
             setShowDetailsModal(false);
-            setCancelError(null);
             setCancelRequest({ mode: cancelPending ? 'withdraw' : 'request', id: a.id });
           },
         },
@@ -725,7 +720,7 @@ Reason: ${last.responseReason}` : ''}`,
         <motion.div
           key={`empty-${entranceKey}`}
           initial={{ opacity: 0, y: 22, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
+          animate={revealed ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 22, scale: 0.97 }}
           transition={{ type: 'spring', stiffness: 240, damping: 24 }}
         >
           <EmptyState
@@ -754,7 +749,7 @@ Reason: ${last.responseReason}` : ''}`,
           className="flex flex-col lg:flex-row items-start gap-6 lg:gap-7 xl:gap-8"
           variants={PAGE_STAGGER}
           initial="hidden"
-          animate="show"
+          animate={revealed ? 'show' : 'hidden'}
         >
           {/* ─── Left Column: Calendar & Reminders ─── */}
           {/* lg+: same one-screen height as the right column; the calendar keeps its natural
@@ -1235,10 +1230,19 @@ Reason: ${last.responseReason}` : ''}`,
       {/* ─── Cancel Consultation Modal ─────────────────────────────────────── */}
       <AnimatePresence>
       {showCancelModal && currentAppointment && (
-        <NeuModal
+        <SubmitModal
           key="cancel-modal"
-          onClose={() => setShowCancelModal(false)}
-          dismissible={!isCancelling}
+          submission={cancelSubmission}
+          onClose={closeCancelModal}
+          processing={{ title: 'Cancelling your consultation', message: `Letting ${currentAppointment.lawyerName} know.` }}
+          success={{
+            title: 'Consultation cancelled',
+            message:
+              currentAppointment.payment.state === 'verified'
+                ? `${currentAppointment.lawyerName} has been notified, and your payment is marked for a refund.`
+                : `${currentAppointment.lawyerName} has been notified.`,
+          }}
+          failure={{ title: "We couldn't cancel this consultation" }}
           size="sm"
           icon={<AlertIcon className="w-5 h-5" />}
           iconTone="danger"
@@ -1246,11 +1250,11 @@ Reason: ${last.responseReason}` : ''}`,
           subtitle="The attorney is notified right away. This can't be undone."
           footer={
             <>
-              <NeuButton variant="secondary" onClick={() => setShowCancelModal(false)} disabled={isCancelling}>
+              <NeuButton variant="secondary" onClick={closeCancelModal} disabled={isCancelling}>
                 Keep Consultation
               </NeuButton>
-              <NeuButton variant="danger" onClick={handleConfirmCancel} loading={isCancelling}>
-                {isCancelling ? 'Cancelling…' : 'Cancel Consultation'}
+              <NeuButton variant="danger" onClick={handleConfirmCancel} disabled={isCancelling}>
+                Cancel Consultation
               </NeuButton>
             </>
           }
@@ -1271,8 +1275,7 @@ Reason: ${last.responseReason}` : ''}`,
           {currentAppointment.payment.state === 'verified' && (
             <NeuAlert tone="info">Your payment was confirmed, so cancelling marks it for a refund.</NeuAlert>
           )}
-          {cancelError && <NeuAlert tone="error">{cancelError}</NeuAlert>}
-        </NeuModal>
+        </SubmitModal>
       )}
       </AnimatePresence>
 

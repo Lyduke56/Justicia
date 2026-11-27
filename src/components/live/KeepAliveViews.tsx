@@ -11,9 +11,20 @@
  *   animation replays each time a tab is shown again.
  * - Route-driven pages (`fallback`, i.e. the layout's children) are not kept:
  *   Next.js's children element always renders the current route.
+ * - With a `gate` (useScreenGate), every tab and the route page is a ScreenSlot: what loads inside
+ *   it holds the shell's loading screen, and its entrance waits for the reveal.
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ViewActiveContext } from './LiveProvider';
+import { ScreenSlot, type ScreenReveal, type ScreenStore } from '@/components/shared/loading/ScreenReadiness';
+
+/** Slot name of the route page (the shell's active slot when no kept-alive tab is shown). */
+export const ROUTE_SLOT = '__route__';
+
+interface ScreenGateLink {
+  store: ScreenStore;
+  revealFor: (slot: string) => ScreenReveal;
+}
 
 interface KeepAliveViewsProps {
   /** Key of the kept-alive view to show, or null to show `fallback`. */
@@ -28,11 +39,12 @@ interface KeepAliveViewsProps {
   scrollContainerId: string;
   /** Mount the other tabs in the background (default true). */
   preload?: boolean;
+  /** The shell's screen gate (loading screen until loaded, entrance after it lifts). */
+  gate?: ScreenGateLink;
 }
 
 const FIRST_PRELOAD_DELAY_MS = 900;
 const BETWEEN_PRELOADS_MS = 450;
-const ROUTE_SLOT = '__route__';
 
 export function KeepAliveViews({
   activeKey,
@@ -41,7 +53,16 @@ export function KeepAliveViews({
   fallbackKey = '',
   scrollContainerId,
   preload = true,
+  gate,
 }: KeepAliveViewsProps) {
+  const slotted = (slot: string, node: React.ReactNode) =>
+    gate ? (
+      <ScreenSlot store={gate.store} slot={slot} reveal={gate.revealFor(slot)}>
+        {node}
+      </ScreenSlot>
+    ) : (
+      node
+    );
   const [mounted, setMounted] = useState<string[]>(() => (activeKey ? [activeKey] : []));
   const viewKeys = Object.keys(views);
   const viewKeysId = viewKeys.join('|');
@@ -103,13 +124,13 @@ export function KeepAliveViews({
           const active = key === activeKey;
           return (
             <div key={key} hidden={!active} className="client-view-enter" data-keep-alive={key}>
-              <ViewActiveContext.Provider value={active}>{views[key]()}</ViewActiveContext.Provider>
+              <ViewActiveContext.Provider value={active}>{slotted(key, views[key]())}</ViewActiveContext.Provider>
             </div>
           );
         })}
       {activeKey === null && (
         <div key={`${ROUTE_SLOT}${fallbackKey}`} className="client-view-enter">
-          {fallback}
+          {slotted(ROUTE_SLOT, fallback)}
         </div>
       )}
     </>

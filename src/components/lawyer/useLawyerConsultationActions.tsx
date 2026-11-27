@@ -353,6 +353,7 @@ export function useLawyerConsultationActions({
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
       {reschedule && rescheduleTarget?.reschedule && (
         <RescheduleModal
           key={`${reschedule.mode}-${reschedule.id}`}
@@ -371,6 +372,7 @@ export function useLawyerConsultationActions({
           }}
         />
       )}
+      </AnimatePresence>
 
       <CancellationRequestModal
         open={!!cancelReviewTarget}
