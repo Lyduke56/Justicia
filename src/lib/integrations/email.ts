@@ -224,5 +224,5 @@ export function emailTemplateNeedsResubmission(lawyerName: string, message: stri
 }
 
 function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://justicia.ph').replace(/\/$/, '');
+  return (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://justicia-chi.vercel.app').replace(/\/$/, '');
 }

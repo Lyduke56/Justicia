@@ -43,7 +43,7 @@ const emails = load('src/lib/email/notificationEmails.ts', {
   '@/lib/utils/attorneyName': attorney,
 });
 
-const site = (process.env.NEXT_PUBLIC_SITE_URL || 'https://justicia.ph').replace(/\/$/, '');
+const site = (process.env.NEXT_PUBLIC_SITE_URL || 'https://justicia-chi.vercel.app').replace(/\/$/, '');
 const sample = emails.buildNotificationEmail({
   type: 'meeting_starting',
   title: 'Consultation starting soon',
