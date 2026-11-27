@@ -7,13 +7,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { sendEmail } from '@/lib/integrations/email';
 import { renderEmailHtml, renderEmailText, type EmailContent } from '@/lib/email/layout';
 import { createVerifyToken } from '@/lib/auth/verifyToken';
-
-function siteUrl(): string {
-  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://justicia-chi.vercel.app').replace(/\/$/, '');
-}
+import { publicSiteUrl } from '@/lib/siteUrl';
 
 export function verificationLink(userId: string, email: string): string {
-  return `${siteUrl()}/auth/verify?token=${encodeURIComponent(createVerifyToken(userId, email))}`;
+  return `${publicSiteUrl()}/auth/verify?token=${encodeURIComponent(createVerifyToken(userId, email))}`;
 }
 
 function verificationContent(email: string, link: string): EmailContent {

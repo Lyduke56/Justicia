@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { writeAuditLog } from '@/lib/notifications';
 import { syncAuthClaims } from '@/lib/auth/roles';
+import { publicSiteUrl } from '@/lib/siteUrl';
 import type { AdminUserAccount, AdminAuditEntry, AdminAccountStatus } from '@/types/admin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -346,7 +347,7 @@ export async function sendUserPasswordResetAction(email: string) {
     await requireAdmin();
     const supabase = await createServiceClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://justicia-chi.vercel.app'}/auth/reset-password`,
+      redirectTo: `${publicSiteUrl()}/auth/reset-password`,
     });
     if (error) return { error: error.message };
     return { success: true };

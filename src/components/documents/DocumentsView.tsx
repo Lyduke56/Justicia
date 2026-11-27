@@ -20,6 +20,7 @@ import {
   renameDocumentFolderAction,
 } from '@/app/actions/consultationActions';
 import { getDocumentDownloadUrlAction } from '@/app/actions/documentFeatureActions';
+import { deleteDocumentFilesAction } from '@/app/actions/documentBulkActions';
 import type { DocumentFolderView } from '@/lib/documents/types';
 import { useLiveRefresh } from '@/components/live/LiveProvider';
 import { PanelLoader, useScreenLoading, useScreenReveal } from '@/components/shared/loading';
@@ -78,6 +79,22 @@ export interface FolderItem {
   sharedLabel?: string | null;
   files: DocumentItem[];
 }
+
+/**
+ * "Client Vault & Uploaded Records" is not a folder row: the server groups the files that are in
+ * no folder under this id. It cannot be renamed; deleting it deletes the files in it.
+ */
+const VAULT_FOLDER_ID = 'uploaded-records';
+
+/**
+ * A folder the user created (a row in public.documents): the only kind that can be renamed or
+ * deleted as a folder. Shared folders are consultations, not folders.
+ */
+const isOwnFolder = (folder: FolderItem) => folder.kind === 'owned' && folder.id !== VAULT_FOLDER_ID;
+
+type DeleteTarget =
+  | { type: 'file' | 'folder'; id: string; name: string }
+  | { type: 'vault'; id: string; name: string; fileIds: string[] };
 
 /** Under a folder's name: who shared it, or how many documents it holds. */
 const folderSubtitle = (folder: FolderItem) =>
@@ -516,11 +533,14 @@ interface FolderMenuProps {
   onToggle: () => void;
   onClose: () => void;
   onOpenFolder: () => void;
-  onRename: () => void;
-  onDelete: () => void;
+  /** Omitted when the folder cannot be renamed (shared folders, the vault). */
+  onRename?: () => void;
+  /** Omitted when there is nothing this menu can delete. */
+  onDelete?: () => void;
+  deleteLabel?: string;
 }
 
-function FolderMenu({ open, folderName, subtitle, onToggle, onClose, onOpenFolder, onRename, onDelete }: FolderMenuProps) {
+function FolderMenu({ open, folderName, subtitle, onToggle, onClose, onOpenFolder, onRename, onDelete, deleteLabel = 'Delete folder' }: FolderMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -632,35 +652,41 @@ function FolderMenu({ open, folderName, subtitle, onToggle, onClose, onOpenFolde
                 <ChevronRightIcon className="docs-mi-arrow w-3.5 h-3.5 text-[#C58B3C]" />
               </motion.button>
 
-              <motion.button
-                type="button"
-                role="menuitem"
-                tabIndex={-1}
-                variants={folderMenuItemVariants}
-                onClick={select(onRename)}
-                className={`${itemBase} text-[#34150F] hover:bg-[#DCCBB7]/60 focus-visible:bg-[#DCCBB7]/60`}
-              >
-                <span className={`${tileBase} bg-[#DCCBB7]/55 text-[#7A604D] group-hover/mi:bg-[#C58B3C]/15 group-hover/mi:text-[#A8742E] group-focus-visible/mi:bg-[#C58B3C]/15 group-focus-visible/mi:text-[#A8742E]`}>
-                  <PencilIcon className="docs-mi-glyph docs-mi-glyph--rename w-4 h-4" />
-                </span>
-                <span className="flex-1">Rename</span>
-              </motion.button>
+              {onRename && (
+                <motion.button
+                  type="button"
+                  role="menuitem"
+                  tabIndex={-1}
+                  variants={folderMenuItemVariants}
+                  onClick={select(onRename)}
+                  className={`${itemBase} text-[#34150F] hover:bg-[#DCCBB7]/60 focus-visible:bg-[#DCCBB7]/60`}
+                >
+                  <span className={`${tileBase} bg-[#DCCBB7]/55 text-[#7A604D] group-hover/mi:bg-[#C58B3C]/15 group-hover/mi:text-[#A8742E] group-focus-visible/mi:bg-[#C58B3C]/15 group-focus-visible/mi:text-[#A8742E]`}>
+                    <PencilIcon className="docs-mi-glyph docs-mi-glyph--rename w-4 h-4" />
+                  </span>
+                  <span className="flex-1">Rename</span>
+                </motion.button>
+              )}
 
-              <div className="mx-2 my-1 h-px bg-[#D6C3AD]/70" />
+              {onDelete && (
+                <>
+                  <div className="mx-2 my-1 h-px bg-[#D6C3AD]/70" />
 
-              <motion.button
-                type="button"
-                role="menuitem"
-                tabIndex={-1}
-                variants={folderMenuItemVariants}
-                onClick={select(onDelete)}
-                className={`${itemBase} text-[#B42318] hover:bg-[#B42318]/[0.08] focus-visible:bg-[#B42318]/[0.08]`}
-              >
-                <span className={`${tileBase} bg-[#B42318]/10 text-[#B42318] group-hover/mi:bg-[#B42318]/15 group-focus-visible/mi:bg-[#B42318]/15`}>
-                  <TrashIcon className="docs-mi-glyph docs-mi-glyph--delete w-4 h-4" />
-                </span>
-                <span className="flex-1">Delete folder</span>
-              </motion.button>
+                  <motion.button
+                    type="button"
+                    role="menuitem"
+                    tabIndex={-1}
+                    variants={folderMenuItemVariants}
+                    onClick={select(onDelete)}
+                    className={`${itemBase} text-[#B42318] hover:bg-[#B42318]/[0.08] focus-visible:bg-[#B42318]/[0.08]`}
+                  >
+                    <span className={`${tileBase} bg-[#B42318]/10 text-[#B42318] group-hover/mi:bg-[#B42318]/15 group-focus-visible/mi:bg-[#B42318]/15`}>
+                      <TrashIcon className="docs-mi-glyph docs-mi-glyph--delete w-4 h-4" />
+                    </span>
+                    <span className="flex-1">{deleteLabel}</span>
+                  </motion.button>
+                </>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -1087,7 +1113,7 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const [showUploadFileModal, setShowUploadFileModal] = useState<boolean>(false);
   const [showRenameFolderModal, setShowRenameFolderModal] = useState<FolderItem | null>(null);
   const [previewDocument, setPreviewDocument] = useState<DocumentItem | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{ type: 'file' | 'folder'; id: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
   // Form states
   const [newFolderName, setNewFolderName] = useState<string>('');
@@ -1153,6 +1179,17 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
 
   // Active folder object
   const currentFolder = folders.find((f) => f.id === currentFolderId) || null;
+  // A lawyer's shared folders hold the client's files: the lawyer can view them but not delete them.
+  const canDeleteFiles = !(role === 'lawyer' && currentFolder?.kind === 'shared');
+
+  /** What "Delete" does on a folder card: delete a real folder, empty the vault, or nothing. */
+  const folderDeleteAction = (folder: FolderItem): (() => void) | null => {
+    if (isOwnFolder(folder)) return () => setDeleteTarget({ type: 'folder', id: folder.id, name: folder.name });
+    if (folder.id === VAULT_FOLDER_ID && folder.files.length > 0) {
+      return () => setDeleteTarget({ type: 'vault', id: folder.id, name: folder.name, fileIds: folder.files.map((f) => f.id) });
+    }
+    return null;
+  };
 
   // Folder click handler: navigate into folder to see files
   const openCreateFolder = () => {
@@ -1358,16 +1395,34 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
   const handleConfirmDelete = async () => {
     if (!deleteTarget || isSubmitting) return;
     const target = deleteTarget;
-    const what = target.type === 'file' ? 'file' : 'folder';
+    const what = target.type === 'file' ? 'file' : target.type === 'vault' ? 'files' : 'folder';
 
     await runDocTask(
       {
         processing: { title: `Deleting the ${what}`, message: `Removing “${target.name}”.` },
-        success: { title: target.type === 'file' ? 'File deleted' : 'Folder deleted', message: `“${target.name}” was removed from your documents.` },
+        success:
+          target.type === 'vault'
+            ? { title: 'Files deleted', message: `The files in “${target.name}” were removed from your documents.` }
+            : { title: target.type === 'file' ? 'File deleted' : 'Folder deleted', message: `“${target.name}” was removed from your documents.` },
         failure: `We couldn't delete the ${what}`,
       },
       async () => {
-        if (target.type === 'file') {
+        if (target.type === 'vault') {
+          const res = await deleteDocumentFilesAction(target.fileIds);
+          if (!res.success) return { ok: false, error: res.error || 'Failed to delete the documents.' };
+          const removed = new Set(target.fileIds);
+          // The vault folder disappears with its files; shared folders listing them drop them too.
+          setFolders((prev) =>
+            prev
+              .map((f) => ({ ...f, files: f.files.filter((file) => !removed.has(file.id)) }))
+              .filter((f) => f.id !== VAULT_FOLDER_ID || f.files.length > 0)
+          );
+          if (previewDocument && removed.has(previewDocument.id)) setPreviewDocument(null);
+          if (currentFolderId === VAULT_FOLDER_ID) {
+            setNavDirection('back');
+            setCurrentFolderId(null);
+          }
+        } else if (target.type === 'file') {
           const res = await deleteDocumentFileAction(target.id);
           if (!res.success) return { ok: false, error: res.error || 'Failed to delete the document.' };
           setFolders((prev) => prev.map((f) => ({ ...f, files: f.files.filter((file) => file.id !== target.id) })));
@@ -1605,12 +1660,17 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                             onToggle={() => setActiveMenuFolderId(menuOpen ? null : folder.id)}
                             onClose={() => setActiveMenuFolderId(null)}
                             onOpenFolder={() => handleEnterFolder(folder)}
-                            onRename={() => {
-                              setModalError(null);
-                              setRenameFolderName(folder.name);
-                              setShowRenameFolderModal(folder);
-                            }}
-                            onDelete={() => setDeleteTarget({ type: 'folder', id: folder.id, name: folder.name })}
+                            onRename={
+                              isOwnFolder(folder)
+                                ? () => {
+                                  setModalError(null);
+                                  setRenameFolderName(folder.name);
+                                  setShowRenameFolderModal(folder);
+                                }
+                                : undefined
+                            }
+                            onDelete={folderDeleteAction(folder) ?? undefined}
+                            deleteLabel={folder.id === VAULT_FOLDER_ID ? 'Delete all files' : 'Delete folder'}
                           />
 
                           {/* Layered folder: flap swings open and papers fan out on hover */}
@@ -1692,18 +1752,35 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                         </div>
                         <div className="flex items-center gap-4 text-xs font-inter text-[#7D6855]">
                           <span>{folderSubtitle(folder)}</span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setModalError(null);
-                              setRenameFolderName(folder.name);
-                              setShowRenameFolderModal(folder);
-                            }}
-                            className="hover:text-[#34150F] p-1 font-medium transition-colors duration-200"
-                          >
-                            Rename
-                          </button>
+                          {isOwnFolder(folder) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setModalError(null);
+                                setRenameFolderName(folder.name);
+                                setShowRenameFolderModal(folder);
+                              }}
+                              className="hover:text-[#34150F] p-1 font-medium transition-colors duration-200"
+                            >
+                              Rename
+                            </button>
+                          )}
+                          {(() => {
+                            const onDelete = folderDeleteAction(folder);
+                            return onDelete ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDelete();
+                                }}
+                                className="text-[#B42318] hover:text-[#7A1A12] hover:underline p-1 transition-colors duration-200"
+                              >
+                                {folder.id === VAULT_FOLDER_ID ? 'Delete all' : 'Delete'}
+                              </button>
+                            ) : null;
+                          })()}
                           <span className="docs-row-arrow text-[#C58B3C] text-base leading-none" aria-hidden="true">
                             ›
                           </span>
@@ -1865,16 +1942,18 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
                         >
                           {downloadingId === file.id ? 'Downloading…' : 'Download'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteTarget({ type: 'file', id: file.id, name: file.name });
-                          }}
-                          className="font-inter text-xs text-[#B42318] hover:text-[#7A1A12] hover:underline p-1 transition-colors duration-200"
-                        >
-                          Delete
-                        </button>
+                        {canDeleteFiles && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteTarget({ type: 'file', id: file.id, name: file.name });
+                            }}
+                            className="font-inter text-xs text-[#B42318] hover:text-[#7A1A12] hover:underline p-1 transition-colors duration-200"
+                          >
+                            Delete
+                          </button>
+                        )}
                         <span className="docs-row-arrow text-[#C58B3C] text-base leading-none" aria-hidden="true">
                           ›
                         </span>
@@ -2187,15 +2266,17 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
               )}
 
               <div className="flex items-center gap-8">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeleteTarget({ type: 'file', id: previewDocument.id, name: previewDocument.name });
-                  }}
-                  className="text-xs font-inter text-[#B42318] hover:text-[#7A1A12] hover:underline transition-colors duration-200 cursor-pointer"
-                >
-                  Delete Document
-                </button>
+                {canDeleteFiles && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteTarget({ type: 'file', id: previewDocument.id, name: previewDocument.name });
+                    }}
+                    className="text-xs font-inter text-[#B42318] hover:text-[#7A1A12] hover:underline transition-colors duration-200 cursor-pointer"
+                  >
+                    Delete Document
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setPreviewDocument(null)}
@@ -2295,8 +2376,18 @@ export function DocumentsView({ role = 'client' }: DocumentsViewProps) {
               Confirm Deletion
             </h2>
             <p className="font-inter text-[13px] text-[#5A4537] text-center leading-relaxed mb-7 break-words">
-              Are you sure you want to remove &quot;{deleteTarget.name}&quot;? This {deleteTarget.type} will be
-              deleted from your case documents vault.
+              {deleteTarget.type === 'vault' ? (
+                <>
+                  Are you sure you want to delete the {deleteTarget.fileIds.length}{' '}
+                  {deleteTarget.fileIds.length === 1 ? 'document' : 'documents'} in &quot;{deleteTarget.name}&quot;? They
+                  will be deleted from your case documents vault.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to remove &quot;{deleteTarget.name}&quot;? This {deleteTarget.type} will be
+                  deleted from your case documents vault.
+                </>
+              )}
             </p>
 
             <div className="flex flex-col items-center space-y-4">

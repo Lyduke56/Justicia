@@ -9,6 +9,7 @@ import {
   isAuthorizedForRoute,
 } from '@/lib/utils/rbac';
 import { DEMO_COOKIE, isDemoEnabled } from '@/lib/auth/demo';
+import { safeReturnPath } from '@/lib/auth/returnPath';
 import { isAppRole, roleFromAppMetadata, statusFromAppMetadata } from '@/lib/auth/roles';
 
 /**
@@ -42,9 +43,9 @@ export async function proxy(request: NextRequest) {
     // If already authenticated, redirect away from auth pages to their dashboard
     if (user && (pathname === '/login' || pathname === '/register')) {
       const role = await getUserRole(request, user);
-      const dashboardUrl = request.nextUrl.clone();
-      dashboardUrl.pathname = getDashboardForRole(role);
-      return NextResponse.redirect(dashboardUrl);
+      // Already signed in (e.g. in another tab): go straight to the page the link was for.
+      const back = pathname === '/login' ? safeReturnPath(request.nextUrl.searchParams.get('redirectTo'), role) : null;
+      return NextResponse.redirect(new URL(back ?? getDashboardForRole(role), request.nextUrl));
     }
     return supabaseResponse;
   }
@@ -63,9 +64,12 @@ export async function proxy(request: NextRequest) {
     if (isApi) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    // Keep the query too (e.g. ?thread=… from an email's "Open conversation" button), so
+    // sign-in can return to exactly that page.
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';
-    loginUrl.searchParams.set('redirectTo', pathname);
+    loginUrl.search = '';
+    loginUrl.searchParams.set('redirectTo', `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
   }
 

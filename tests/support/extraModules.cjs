@@ -20,6 +20,7 @@ function loadReal(file, extraRequire = {}) {
     exports,
     process: { env: {} },
     Buffer,
+    URL,
     console,
     require: (name) => {
       if (name in extraRequire) return extraRequire[name];
@@ -76,6 +77,10 @@ function extraModule(name) {
     case '@/lib/auth/verificationEmail':
       // The sign-up verification email goes through the network too.
       return { sendSignupVerificationEmail: async () => false, resendSignupVerificationEmail: async () => {} };
+    case '@/lib/siteUrl':
+      return loadReal('src/lib/siteUrl.ts');
+    case '@/lib/auth/returnPath':
+      return loadReal('src/lib/auth/returnPath.ts', { '@/lib/utils/rbac': loadReal('src/lib/utils/rbac.ts') });
     case '@/lib/auth/verifyToken':
       return loadReal('src/lib/auth/verifyToken.ts');
     case '@/lib/support':

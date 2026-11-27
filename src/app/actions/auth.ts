@@ -20,6 +20,8 @@ import { recordConsent } from '@/lib/legal';
 import { DEMO_COOKIE } from '@/lib/auth/demo';
 import { DELETION_GRACE_DAYS } from '@/lib/support';
 import { resendSignupVerificationEmail, sendSignupVerificationEmail } from '@/lib/auth/verificationEmail';
+import { publicSiteUrl } from '@/lib/siteUrl';
+import { safeReturnPath } from '@/lib/auth/returnPath';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,7 +37,7 @@ export type AuthState = {
 const PENDING_EMAIL_COOKIE = 'justicia_pending_email';
 
 function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? 'https://justicia-chi.vercel.app';
+  return publicSiteUrl();
 }
 
 async function serviceDb(): Promise<SupabaseClient> {
@@ -298,7 +300,8 @@ export async function signInAction(
     }
   }
 
-  redirect(getDashboardForRole(resolvedRole));
+  // Back to the page they were opening (e.g. an email's button), when it is theirs to open.
+  redirect(safeReturnPath(formData.get('redirectTo'), resolvedRole) ?? getDashboardForRole(resolvedRole));
 }
 
 /** Explains why a banned account cannot sign in (suspended until …, or terminated). */

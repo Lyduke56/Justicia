@@ -20,6 +20,7 @@ import { renderEmailHtml, renderEmailText } from '@/lib/email/layout';
 import { accountPreferences, isMandatoryEmail, wantsEmailFor } from '@/lib/account/preferences';
 import { buildNotificationEmail, type EmailRole } from '@/lib/email/notificationEmails';
 import { attorneyNameOr } from '@/lib/utils/attorneyName';
+import { publicSiteUrl } from '@/lib/siteUrl';
 
 export interface NotificationEmailParams {
   userId: string;
@@ -32,8 +33,9 @@ export interface NotificationEmailParams {
 /** Types whose code path already sends its own email (lib/moderation/accountStatus.ts). */
 const EMAILED_ELSEWHERE = new Set(['account_suspended', 'account_reinstated', 'account_terminated']);
 
+/** Site origin for email buttons (cleaned up: see lib/siteUrl). */
 export function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://justicia-chi.vercel.app').replace(/\/$/, '');
+  return publicSiteUrl();
 }
 
 function manilaWhen(iso: string | null | undefined): string {
