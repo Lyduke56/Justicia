@@ -76,8 +76,28 @@ function createFakeDb(seed = {}, options = {}) {
       lte(k, v) { filters.push((r) => getPath(r, k) != null && getPath(r, k) <= v); return q; },
       lt(k, v) { filters.push((r) => getPath(r, k) != null && getPath(r, k) < v); return q; },
       or(expr) {
-        const parts = expr.split(',').map((p) => /^(\w+)\.eq\.(.+)$/.exec(p)).filter(Boolean);
-        filters.push((r) => parts.some(([, k, v]) => String(r[k]) === v));
+        // Top-level alternatives: `k.eq.v` or `and(k.eq.v,k2.eq.v2)` groups (other operators are ignored).
+        const split = (text) => {
+          const out = [];
+          let depth = 0;
+          let cur = '';
+          for (const ch of text) {
+            if (ch === '(') depth++;
+            if (ch === ')') depth--;
+            if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+          }
+          if (cur) out.push(cur);
+          return out;
+        };
+        const eqOf = (p) => /^(\w+)\.eq\.(.+)$/.exec(p);
+        const alternatives = split(expr)
+          .map((p) => {
+            const group = /^and\((.*)\)$/.exec(p);
+            const conds = (group ? split(group[1]) : [p]).map(eqOf);
+            return conds.every(Boolean) ? conds : null;
+          })
+          .filter(Boolean);
+        filters.push((r) => alternatives.some((conds) => conds.every(([, k, v]) => String(r[k]) === v)));
         return q;
       },
       order(k, opts = {}) { order = { k, asc: opts.ascending !== false }; return q; },

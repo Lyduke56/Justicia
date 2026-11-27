@@ -8,6 +8,7 @@
  * dashboard already loaded are remembered here so the profile opens without a second fetch.
  */
 import { createClient } from '@/lib/supabase/client';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
 import type { PublicLawyerProfile } from './LawyerGrid';
 
 /** Columns Find a Lawyer reads from `lawyer_profiles`. */
@@ -41,7 +42,7 @@ const fee = (v: number | string | null | undefined) => (v === null || v === unde
 function toPublicLawyer(l: DirectoryRow): PublicLawyerProfile {
   return {
     userId: l.user_id,
-    fullName: l.full_name ?? '',
+    fullName: attorneyNameOr(l.full_name, ''),
     rollNumber: l.roll_number ?? '',
     ibpChapter: l.ibp_chapter ?? '',
     practiceAreas: l.practice_areas ?? [],

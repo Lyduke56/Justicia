@@ -11,6 +11,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emitLive } from '@/lib/realtime/live';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
 
 const HOUR = 60 * 60 * 1000;
 const STARTING_SOON = 15 * 60 * 1000;
@@ -69,7 +70,9 @@ export async function ensureConsultationReminders(db: SupabaseClient, userId: st
       const key = `${slot.type}|${row.id}|${new Date(row.scheduled_start).getTime()}`;
       if (sent.has(key)) continue;
       const isLawyer = row.lawyer_id === userId;
-      const other = nameOf.get(isLawyer ? row.client_id : row.lawyer_id) || (isLawyer ? 'your client' : 'your attorney');
+      const other = isLawyer
+        ? nameOf.get(row.client_id) || 'your client'
+        : attorneyNameOr(nameOf.get(row.lawyer_id), 'your attorney');
       const kind = row.method === 'audio' ? 'audio call' : 'video consultation';
       const { error } = await db.from('notifications').insert({
         user_id: userId,

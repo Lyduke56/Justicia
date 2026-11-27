@@ -6,7 +6,9 @@ import Link from 'next/link';
 import { KeepAliveViews, ROUTE_SLOT } from '@/components/live/KeepAliveViews';
 import { adminTabViews } from './AdminTabs';
 import './admin.css';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { NotificationBell } from '@/components/client/ClientTopbar';
+import { getAdminNotificationsAction, type AdminNotification } from '@/app/actions/adminNotificationActions';
 import { SignOutConfirmModal } from '@/components/shared/SignOutConfirmModal';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import { useMyAvatar, useMyAvatarSync } from '@/components/account/avatarStore';
@@ -31,6 +33,7 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
   useMyAvatarSync(user.avatarUrl);
   const myAvatar = useMyAvatar(user.avatarUrl);
   const pathname = usePathname();
+  const router = useRouter();
   // The loading screen covers the content area until the screen has everything it needs; the
   // screen's entrance plays once it lifts. Kept-alive tabs and the route page are its slots.
   const activeSlot = Object.hasOwn(adminTabViews, pathname) ? pathname : ROUTE_SLOT;
@@ -44,6 +47,29 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
     setSignOutOpen(true);
   };
   const accountRef = useRef<HTMLDivElement>(null);
+
+  // ─── Notification bell: reports, lawyer applications and updates, deletion requests ───
+  // Built on the server from recent audit events; refreshed every 30 s and when the tab regains focus.
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      if (document.visibilityState === 'hidden') return;
+      getAdminNotificationsAction()
+        .then((res) => {
+          if (active && res.success) setNotifications(res.notifications);
+        })
+        .catch(() => {});
+    };
+    load();
+    const timer = window.setInterval(load, 30_000);
+    window.addEventListener('focus', load);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', load);
+    };
+  }, []);
   const accountTrigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -77,6 +103,15 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
     setAccountOpen(false);
   };
 
+  /** Opens what a notification is about (tabs switch in place, like the sidebar). */
+  const openNotification = (n: AdminNotification) => {
+    const href = n.metadata?.href;
+    if (!href || href === pathname) return;
+    startScreenTransition(href);
+    if (Object.hasOwn(adminTabViews, href)) window.history.pushState(null, '', href);
+    else router.push(href);
+  };
+
   const links = (mobile = false) => navigation.map(({ name, href, icon: Icon, active }) => {
     const selected = active(pathname);
     return <Link key={href} href={href} onNavigate={(event) => navigateTab(event, href)} onClick={mobile ? () => setMobileOpen(false) : undefined} aria-current={selected ? 'page' : undefined} className={navClass(selected)}>
@@ -93,6 +128,15 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
         </button>
         <Link href="/admin/dashboard" onNavigate={(event) => navigateTab(event, "/admin/dashboard")} className="truncate rounded-sm font-cinzel text-sm tracking-[0.16em] hover:text-[#C58B3C] focus-visible:outline-2 focus-visible:outline-[#C58B3C] sm:text-base"><JusticiaLogo className="inline-block w-32 h-auto align-middle" /> <span className="text-[#C58B3C]">ADMIN</span></Link>
       </div>
+      <div className="flex items-center gap-1 sm:gap-2">
+      <NotificationBell
+        notifications={notifications}
+        seenKey="justicia:admin:notifications-seen-at"
+        onNotificationClick={(n) => openNotification(n as AdminNotification)}
+        emptyHint="Reports, lawyer applications, document and profile updates, and account deletion requests will appear here."
+        popoverClassName="w-[min(400px,calc(100vw-2rem))] -mr-[52px] [--caret:68px] sm:mr-0 sm:[--caret:16px]"
+        badgeRingClassName="ring-[#23150F]"
+      />
       <div ref={accountRef} className="relative">
         <button type="button" ref={accountTrigger} aria-label="Account menu" aria-expanded={accountOpen} aria-controls="admin-account-menu" onClick={() => setAccountOpen((open) => !open)} className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-[#352219] focus-visible:outline-2 focus-visible:outline-[#C58B3C]">
           <span className="hidden max-w-40 truncate text-xs sm:block">{user.fullName}</span><ProfilePhoto src={myAvatar} className="h-7 w-7 ring-2 ring-[#C58B3C]" fallback={<UserCircleIcon className="h-7 w-7 text-[#C58B3C]" />} />
@@ -103,6 +147,7 @@ export function AdminShell({ user, children }: { user: { id: string; email?: str
           <Link href="/admin/settings" onNavigate={(event) => navigateTab(event, '/admin/settings')} onClick={() => setAccountOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><GearIcon className="h-4 w-4 text-[#C58B3C]" />Settings</Link>
           <div className="border-t border-[#CBB6A1] pt-1"><button type="button" onClick={openSignOut} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[#DCC9B5] focus-visible:outline-2 focus-visible:outline-[#C58B3C]"><LogoutIcon className="h-4 w-4 text-[#C58B3C]" />Sign out</button></div>
         </div>}
+      </div>
       </div>
     </header>
     <div className="relative flex min-h-0 flex-1">

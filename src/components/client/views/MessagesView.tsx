@@ -30,6 +30,7 @@ import {
   ChevronRightIcon,
   CloseIcon,
   FileIcon,
+  FolderIcon,
   PhoneIcon,
   SearchIcon,
   SendIcon,
@@ -53,7 +54,8 @@ import {
   type MessageAttachment,
   type MessageExtras,
 } from '@/lib/messaging/types';
-import { MessageAttachments, PendingAttachmentChip, type PendingAttachment } from '@/components/messages/MessageAttachments';
+import { MessageAttachments, PendingAttachmentChip, SharedFolderCard, type PendingAttachment } from '@/components/messages/MessageAttachments';
+import { FolderShareModal } from '@/components/messages/FolderShareModal';
 import {
   CheckIcon,
   DoubleCheckIcon,
@@ -627,6 +629,8 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
   useDismiss(pinsOpen, pinsRef, setPinsOpen);
 
   const [attachOpen, setAttachOpen] = useState(false);
+  /** "Folder from My Documents" dialog (share a whole folder, view only). */
+  const [folderShareOpen, setFolderShareOpen] = useState(false);
   const attachRef = useRef<HTMLDivElement>(null);
   useDismiss(attachOpen, attachRef, setAttachOpen);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -1415,8 +1419,9 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
     const pending = msg.id.startsWith('m-');
     const corner = endsRun ? (isMe ? 'rounded-br-md' : 'rounded-bl-md') : '';
     const atts = ex?.attachments ?? [];
-    const hideText = !!ex?.autoCaption && atts.length > 0;
-    const mediaOnly = hideText && atts.every((a) => a.kind === 'image' || a.kind === 'video');
+    const sharedFolder = ex?.folder ?? null;
+    const hideText = !!ex?.autoCaption && (atts.length > 0 || !!sharedFolder);
+    const mediaOnly = hideText && !sharedFolder && atts.length > 0 && atts.every((a) => a.kind === 'image' || a.kind === 'video');
     const isReply = !!ex?.replyToId;
     const replied = ex?.replyToId ? messageById.get(ex.replyToId) : undefined;
     const isPinned = !!ex?.pinned;
@@ -1528,6 +1533,11 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
             {atts.length > 0 && (
               <div className={hideText ? '' : 'mb-2'}>
                 <MessageAttachments attachments={atts} mine={isMe} />
+              </div>
+            )}
+            {sharedFolder && (
+              <div className={hideText ? '' : 'mb-2'}>
+                <SharedFolderCard folder={sharedFolder} mine={isMe} />
               </div>
             )}
             {!hideText && (
@@ -1921,12 +1931,23 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
                   index={1}
                   onSelect={pickDocuments}
                 />
+                <AttachMenuItem
+                  icon={<FolderIcon className="w-4 h-4" />}
+                  title="Folder from My Documents"
+                  hint="Share a whole folder · view only"
+                  index={2}
+                  onSelect={() => {
+                    setAttachOpen(false);
+                    setChatError(null);
+                    setFolderShareOpen(true);
+                  }}
+                />
                 {isVoiceRecordingSupported() && (
                   <AttachMenuItem
                     icon={<MicIcon className="w-4 h-4" />}
                     title="Voice message"
                     hint="Record with your microphone"
-                    index={2}
+                    index={3}
                     onSelect={() => void startVoice()}
                   />
                 )}
@@ -2139,6 +2160,28 @@ export function MessagesView({ role = 'client' }: { role?: 'client' | 'lawyer' }
             )}
           </motion.section>
         </motion.div>
+
+        <AnimatePresence>
+          {folderShareOpen && activeThreadId && activeThread && (
+            <FolderShareModal
+              key={`folder-share-${activeThreadId}`}
+              threadId={activeThreadId}
+              counterpartName={activeThread.name}
+              onClose={() => setFolderShareOpen(false)}
+              onShared={(saved, savedExtras) => {
+                const threadId = activeThreadId;
+                setFolderShareOpen(false);
+                setInstantIds((prev) => new Set(prev).add(saved.id));
+                setMessages((prev) => ({ ...prev, [threadId]: [...(prev[threadId] || []), saved] }));
+                setExtras((prev) => ({ ...prev, [threadId]: { ...(prev[threadId] ?? {}), [saved.id]: savedExtras } }));
+                setThreads((prev) =>
+                  prev.map((t) => (t.id === threadId ? { ...t, lastMessage: `You: ${saved.content}`, time: saved.time } : t))
+                );
+                setSendTick((t) => t + 1);
+              }}
+            />
+          )}
+        </AnimatePresence>
 
         {reportTarget && (
           <ReportAccountModal

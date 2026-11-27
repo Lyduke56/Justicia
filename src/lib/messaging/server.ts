@@ -161,6 +161,7 @@ export function toExtras(meta: StoredMessageMeta, userId: string, urls: Map<stri
     replyToId: meta.replyToId ?? null,
     attachments: (meta.attachments ?? []).map((a) => ({ ...a, url: urls.get(a.id) ?? null })),
     autoCaption: !!meta.autoCaption,
+    folder: meta.folder ?? null,
     pinned: meta.pinnedAt ? { byMe: meta.pinnedBy === userId, at: meta.pinnedAt } : null,
     seenAt: meta.seenAt ?? null,
   };

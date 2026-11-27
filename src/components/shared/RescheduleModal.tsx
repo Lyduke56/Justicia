@@ -8,7 +8,7 @@
  *  - respond:  accept or decline the other party's proposal (optional reason when declining)
  *  - withdraw: cancel your own open request
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   getRescheduleOptionsAction,
   requestRescheduleAction,
@@ -17,16 +17,15 @@ import {
   type RescheduleInfo,
   type RescheduleOptions,
 } from '@/app/actions/consultationActions';
-import { AnimatePresence, motion, type Variants } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { PanelLoader } from '@/components/shared/loading';
+import { ScheduleCalendar, ScheduleSlotList } from '@/components/shared/ScheduleCalendar';
 import { SubmitModal, settle, useSubmission, type SubmissionResult, type SubmissionState } from '@/components/shared/feedback';
 import {
   NeuButton,
   NeuAlert,
   EmptyState,
   CalendarClockIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   ArrowDownIcon,
   SendIcon,
   ClockIcon,
@@ -52,30 +51,11 @@ interface RescheduleModalProps {
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const WEEKDAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const REASON_MIN = 5;
 const REASON_MAX = 500;
 const pad = (n: number) => String(n).padStart(2, '0');
 
 const EASE_OUT = [0.2, 0.8, 0.2, 1] as const;
-const GRID_SLIDE: Variants = {
-  enter: (d: number) => ({ opacity: 0, x: d * 30 }),
-  center: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 340, damping: 32 } },
-  exit: (d: number) => ({ opacity: 0, x: -d * 30, transition: { duration: 0.14 } }),
-};
-const TITLE_SWAP: Variants = {
-  enter: (d: number) => ({ opacity: 0, y: d * 10 }),
-  center: { opacity: 1, y: 0, transition: { duration: 0.22, ease: EASE_OUT } },
-  exit: (d: number) => ({ opacity: 0, y: -d * 10, transition: { duration: 0.14 } }),
-};
-const SLOT_LIST: Variants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.045, delayChildren: 0.02 } },
-};
-const SLOT_ITEM: Variants = {
-  hidden: { opacity: 0, x: 14 },
-  show: { opacity: 1, x: 0, transition: { duration: 0.28, ease: EASE_OUT } },
-};
 
 /** Today's date in Asia/Manila as YYYY-MM-DD. */
 function manilaToday(): string {
@@ -131,6 +111,11 @@ const labelClass = 'block font-lora text-[11px] font-bold uppercase tracking-[0.
 
 // ─── Request: choose a new date & time ─────────────────────────────────────
 
+/**
+ * The calendar and time slots look like the Consultation Booking calendar (ScheduleCalendar),
+ * with the same day indicators: a dot on days that already have bookings (either calendar),
+ * crossed out when no time is free (not a consultation day, fully booked, blocked or too soon).
+ */
 function RequestStep({
   consultationId,
   counterpartName,
@@ -154,17 +139,23 @@ function RequestStep({
   });
   const [view, setView] = useState(() => monthOf(initialIso));
   const [monthDir, setMonthDir] = useState(1);
+  const [dayDir, setDayDir] = useState(1);
   const [selectedDate, setSelectedDate] = useState<string | null>(initialIso);
   const [options, setOptions] = useState<RescheduleOptions | null>(null);
   const [bounds, setBounds] = useState<{ min: string; max: string } | null>(null);
-  const [blockedDays, setBlockedDays] = useState<{ key: string; days: number[] }>({ key: '', days: [] });
+  /** Day indicators of the last month loaded (from getRescheduleOptionsAction). */
+  const [monthDays, setMonthDays] = useState<{ key: string; days: RescheduleOptions['days']; blocked: number[] }>({
+    key: '',
+    days: [],
+    blocked: [],
+  });
   const [loadingSlots, setLoadingSlots] = useState(true);
   const [slot, setSlot] = useState<number | null>(null);
   const [reason, setReason] = useState('');
   const requestSeq = useRef(0);
 
   const fetchOptions = useCallback(
-    async (iso: string, seq: number) => {
+    async function run(iso: string, seq: number, skipClosed = true): Promise<void> {
       try {
         const res = await getRescheduleOptionsAction(consultationId, iso);
         if (seq !== requestSeq.current) return;
@@ -173,9 +164,30 @@ function RequestStep({
           setError(('error' in res && res.error) || 'Available times could not be loaded.');
           return;
         }
+        // The chosen day has no free time (e.g. the 1st of the month is a Sunday): move on to the
+        // next day of that month that has some.
+        const o = res.options;
+        const prefix = iso.slice(0, 8);
+        const open = (d: number) => {
+          const di = `${prefix}${pad(d)}`;
+          if (di < o.minDate || di > o.maxDate || o.blockedDays.includes(d)) return false;
+          const mark = o.days?.find((m) => m.day === d);
+          return !mark || mark.state === 'open';
+        };
+        const day = Number(iso.slice(8, 10));
+        if (skipClosed && !open(day)) {
+          const last = new Date(Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)), 0)).getUTCDate();
+          for (let d = day + 1; d <= last; d++) {
+            if (open(d)) {
+              setSelectedDate(`${prefix}${pad(d)}`);
+              setDayDir(1);
+              return run(`${prefix}${pad(d)}`, seq, false);
+            }
+          }
+        }
         setOptions(res.options);
         setBounds({ min: res.options.minDate, max: res.options.maxDate });
-        setBlockedDays({ key: iso.slice(0, 7), days: res.options.blockedDays });
+        setMonthDays({ key: iso.slice(0, 7), days: res.options.days ?? [], blocked: res.options.blockedDays });
       } catch {
         if (seq === requestSeq.current) setError('Available times could not be loaded. Please try again.');
       } finally {
@@ -188,6 +200,7 @@ function RequestStep({
   /** Selects a date and loads its slots. */
   const loadDate = (iso: string) => {
     const seq = ++requestSeq.current;
+    if (selectedDate) setDayDir(iso >= selectedDate ? 1 : -1);
     setSelectedDate(iso);
     setSlot(null);
     setLoadingSlots(true);
@@ -200,25 +213,29 @@ function RequestStep({
     void fetchOptions(initialIso, seq);
   }, [fetchOptions, initialIso]);
 
+  const monthKey = `${view.year}-${pad(view.month + 1)}`;
+  const marks = monthDays.key === monthKey ? monthDays : null;
+  const minIso = bounds?.min ?? today;
+  const outOfRange = (iso: string) => iso < minIso || (!!bounds && iso > bounds.max);
+  const markOf = (day: number) => marks?.days.find((m) => m.day === day) ?? null;
+  const dayOpen = (day: number) => {
+    const iso = dayIso(view.year, view.month, day);
+    if (outOfRange(iso) || marks?.blocked.includes(day)) return false;
+    const mark = markOf(day);
+    return !mark || mark.state === 'open';
+  };
+
   /** First selectable day of a month (respecting the earliest / latest allowed dates). */
   const firstSelectable = (year: number, month: number) => {
     const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-    const min = bounds?.min ?? today;
     for (let d = 1; d <= lastDay; d++) {
       const iso = dayIso(year, month, d);
-      if (iso >= min && (!bounds || iso <= bounds.max)) return iso;
+      if (iso >= minIso && (!bounds || iso <= bounds.max)) return iso;
     }
     return null;
   };
 
-  const cells = useMemo(() => {
-    const first = new Date(Date.UTC(view.year, view.month, 1)).getUTCDay();
-    const total = new Date(Date.UTC(view.year, view.month + 1, 0)).getUTCDate();
-    return [...Array(first).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)] as Array<number | null>;
-  }, [view]);
-
-  const monthKey = `${view.year}-${pad(view.month + 1)}`;
-  const minMonth = (bounds?.min ?? today).slice(0, 7);
+  const minMonth = minIso.slice(0, 7);
   const maxMonth = bounds?.max.slice(0, 7) ?? '9999-12';
   const changeMonth = (delta: number) => {
     setMonthDir(delta > 0 ? 1 : -1);
@@ -227,6 +244,13 @@ function RequestStep({
     setView(next);
     const iso = firstSelectable(next.year, next.month);
     if (iso) loadDate(iso);
+  };
+  const jumpToToday = () => {
+    const target = monthOf(today);
+    const delta = target.year * 12 + target.month - (view.year * 12 + view.month);
+    if (delta !== 0) setMonthDir(delta > 0 ? 1 : -1);
+    setView(target);
+    loadDate(firstSelectable(target.year, target.month) ?? today);
   };
 
   const chosen = options?.slots.find((s) => s.startMinutes === slot) ?? null;
@@ -247,6 +271,19 @@ function RequestStep({
   };
 
   const newLabel = selectedDate && chosen ? `${longDate(selectedDate)} · ${chosen.label.replace(' • PST, GMT+8', '')}` : null;
+  const selectedInView = selectedDate && selectedDate.slice(0, 7) === monthKey ? Number(selectedDate.slice(8, 10)) : null;
+  const slotTag = (state: RescheduleOptions['slots'][number]['state']) =>
+    state === 'current' ? 'Current' : state === 'booked' ? 'Booked' : state === 'unavailable' ? 'Unavailable' : state === 'past' ? 'Too soon' : null;
+  const dayTitle = (day: number): string | undefined => {
+    const iso = dayIso(view.year, view.month, day);
+    const mark = markOf(day);
+    if (iso < minIso) return 'Too soon to move to';
+    if (bounds && iso > bounds.max) return 'Too far ahead';
+    if (marks?.blocked.includes(day)) return 'Attorney unavailable';
+    if (mark && mark.state !== 'open') return mark.reason ?? 'Not available';
+    if (mark && mark.bookings > 0) return `${mark.bookings} booking${mark.bookings === 1 ? '' : 's'} on this day`;
+    return undefined;
+  };
 
   return (
     <SubmitModal
@@ -291,165 +328,60 @@ function RequestStep({
       {/* Current → new schedule, updated live as the user picks */}
       <ScheduleChange from={currentLabel} to={newLabel} toPlaceholder="Choose a date and time below" />
 
-      <div className="grid gap-8 lg:gap-10 lg:grid-cols-[1.1fr_1fr] items-start">
-        {/* Calendar */}
-        <section aria-label="Choose a date" className="neu-raised bg-[#E5D8CB] rounded-[26px] p-5 sm:p-7">
-          <div className="flex items-center justify-between gap-3 mb-5 sm:mb-6">
-            <div className="leading-none overflow-hidden">
-              <AnimatePresence mode="popLayout" initial={false} custom={monthDir}>
-                <motion.div key={monthKey} custom={monthDir} variants={TITLE_SWAP} initial="enter" animate="center" exit="exit">
-                  <p className="font-lora text-lg font-bold text-[#341512]">{MONTHS[view.month]}</p>
-                  <p className="font-lora text-[11px] font-bold tracking-[0.2em] text-[#C58B3C] mt-1">{view.year}</p>
-                </motion.div>
-              </AnimatePresence>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => changeMonth(-1)}
-                disabled={monthKey <= minMonth || submitting}
-                aria-label="Previous month"
-                className="neu-raised-sm size-9 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] active:scale-95 transition-all disabled:opacity-35 disabled:pointer-events-none cursor-pointer"
-              >
-                <ChevronLeftIcon className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => changeMonth(1)}
-                disabled={monthKey >= maxMonth || submitting}
-                aria-label="Next month"
-                className="neu-raised-sm size-9 rounded-full flex items-center justify-center text-[#5C4535] hover:text-[#C58B3C] active:scale-95 transition-all disabled:opacity-35 disabled:pointer-events-none cursor-pointer"
-              >
-                <ChevronRightIcon className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          <div className="neu-recessed rounded-[20px] px-3 sm:px-4 py-4 sm:py-5 overflow-hidden">
-            <div className="grid grid-cols-7 text-center font-inter text-[10.5px] font-semibold uppercase text-[#9E8E7D] pb-3">
-              {WEEKDAY_INITIALS.map((d, i) => (
-                <span key={i}>{d}</span>
-              ))}
-            </div>
-            <AnimatePresence mode="popLayout" initial={false} custom={monthDir}>
-            <motion.div
-              key={monthKey}
-              custom={monthDir}
-              variants={GRID_SLIDE}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              className="grid grid-cols-7 gap-y-2.5 text-center"
-            >
-              {cells.map((day, idx) => {
-                if (!day) return <span key={`e-${idx}`} className="h-9" />;
-                const iso = dayIso(view.year, view.month, day);
-                const outOfRange = iso < (bounds?.min ?? today) || (!!bounds && iso > bounds.max);
-                const blocked = blockedDays.key === monthKey && blockedDays.days.includes(day);
-                const disabled = outOfRange || blocked || submitting;
-                const selected = iso === selectedDate;
-                const isToday = iso === today;
-                return (
-                  <motion.button
-                    key={iso}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => loadDate(iso)}
-                    whileHover={disabled || selected ? undefined : { scale: 1.12 }}
-                    whileTap={disabled ? undefined : { scale: 0.88 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 22 }}
-                    aria-pressed={selected}
-                    aria-current={isToday ? 'date' : undefined}
-                    aria-label={`${longDate(iso)}${blocked ? ' (attorney unavailable)' : ''}`}
-                    title={blocked ? 'Attorney unavailable' : undefined}
-                    className={`relative mx-auto size-9 rounded-full flex items-center justify-center font-inter text-[12.5px] transition-colors select-none ${selected
-                      ? 'font-bold text-[#341512]'
-                      : disabled
-                        ? 'text-[#B5A391] line-through decoration-[#C8B59E] cursor-not-allowed'
-                        : 'text-[#341512] hover:bg-[#D39758]/18 cursor-pointer'
-                      } ${isToday ? 'outline-[1.5px] outline-solid outline-[#C58B3C] outline-offset-2' : ''}`}
-                  >
-                    {selected && (
-                      <motion.span
-                        layoutId="reschedule-selected-day"
-                        transition={{ type: 'spring', stiffness: 520, damping: 34 }}
-                        className="absolute inset-0 rounded-full neu-btn-caramel"
-                      />
-                    )}
-                    <span className="relative">{day}</span>
-                  </motion.button>
-                );
-              })}
-            </motion.div>
-            </AnimatePresence>
-          </div>
-          <p className="pt-4 font-inter text-[11px] text-[#7D6855] text-center">Crossed-out days are unavailable.</p>
+      {/* Calendar & time slots, laid out like Consultation Booking */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
+        <section aria-label="Choose a date" className="lg:col-span-8 flex">
+          <ScheduleCalendar
+            className="w-full"
+            year={view.year}
+            month={view.month}
+            selectedDay={selectedInView}
+            fallbackDay={1}
+            todayIso={today}
+            layoutId="reschedule-selected-day"
+            monthDir={monthDir}
+            dayDir={dayDir}
+            disabled={submitting}
+            canPrev={monthKey > minMonth}
+            canNext={monthKey < maxMonth}
+            onPrevMonth={() => changeMonth(-1)}
+            onNextMonth={() => changeMonth(1)}
+            onToday={jumpToToday}
+            onSelectDay={(day) => loadDate(dayIso(view.year, view.month, day))}
+            dayInfo={(day) => ({ disabled: !dayOpen(day), bookings: markOf(day)?.bookings ?? 0, title: dayTitle(day) })}
+          />
         </section>
 
-        {/* Time slots */}
-        <section aria-label="Choose a time" className="flex flex-col gap-4 sm:gap-5 lg:pt-2">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className={labelClass}>{selectedDate ? longDate(selectedDate) : 'Choose a date'}</p>
-            <span className="font-inter text-[10.5px] text-[#7D6855] shrink-0">PST (GMT+8)</span>
-          </div>
-          <div className="flex flex-col gap-3.5" aria-busy={loadingSlots}>
-            {loadingSlots || !options ? (
-              <PanelLoader srLabel="Loading open times" />
-            ) : noOpenSlots ? (
-              <div className="neu-recessed rounded-[20px]">
+        <section aria-label="Choose a time" className="lg:col-span-4 flex flex-col gap-2">
+          <ScheduleSlotList
+            className="flex-1"
+            layoutId="reschedule-slot-pill"
+            loading={loadingSlots}
+            disabled={submitting}
+            selectedKey={slot}
+            onSelect={(key) => setSlot(Number(key))}
+            slots={(options?.slots ?? []).map((s) => ({
+              key: s.startMinutes,
+              label: s.label.replace(' • PST, GMT+8', ''),
+              selectable: s.state === 'available',
+              tag: slotTag(s.state),
+            }))}
+            empty={
+              loadingSlots || !options ? (
+                <PanelLoader srLabel="Loading open times" />
+              ) : noOpenSlots ? (
                 <EmptyState
                   size="sm"
                   icon={<ClockIcon />}
                   title="No open times this day"
                   description="Every slot is booked or unavailable. Try another date on the calendar."
                 />
-              </div>
-            ) : (
-              <motion.div key={selectedDate ?? 'none'} variants={SLOT_LIST} initial="hidden" animate="show" className="flex flex-col gap-3.5">
-              {options.slots.map((s) => {
-                const selectable = s.state === 'available';
-                const isChosen = slot === s.startMinutes;
-                const tag =
-                  s.state === 'current' ? 'Current' : s.state === 'booked' ? 'Booked' : s.state === 'unavailable' ? 'Unavailable' : s.state === 'past' ? 'Too soon' : null;
-                return (
-                  <motion.button
-                    key={s.startMinutes}
-                    type="button"
-                    variants={SLOT_ITEM}
-                    whileHover={selectable && !isChosen ? { x: 3 } : undefined}
-                    whileTap={selectable ? { scale: 0.98 } : undefined}
-                    disabled={!selectable || submitting}
-                    onClick={() => setSlot(s.startMinutes)}
-                    aria-pressed={isChosen}
-                    className={`h-12 w-full rounded-2xl px-5 flex items-center justify-between gap-3 font-inter text-xs sm:text-[13px] transition-all select-none ${isChosen
-                      ? 'neu-btn-caramel font-bold text-[#341512]'
-                      : selectable
-                        ? 'neu-raised-sm bg-[#E5D8CB] font-semibold text-[#3E2A1E] hover:text-[#A8742E] active:scale-[0.99] cursor-pointer'
-                        : 'neu-recessed text-[#A08E7C] cursor-not-allowed'
-                      }`}
-                  >
-                    <span className={`flex items-center gap-2.5 ${selectable ? '' : 'line-through decoration-[#C8B59E]'}`}>
-                      <AnimatePresence mode="wait" initial={false}>
-                        <motion.span
-                          key={isChosen ? 'check' : 'clock'}
-                          initial={{ scale: 0.4, opacity: 0, rotate: isChosen ? -30 : 0 }}
-                          animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                          exit={{ scale: 0.4, opacity: 0 }}
-                          transition={{ type: 'spring', stiffness: 520, damping: 20 }}
-                          className="flex"
-                        >
-                          {isChosen ? <CheckCircleIcon className="w-4 h-4" /> : <ClockIcon className="w-4 h-4 opacity-70" />}
-                        </motion.span>
-                      </AnimatePresence>
-                      {s.label.replace(' • PST, GMT+8', '')}
-                    </span>
-                    {tag && <span className="text-[10px] font-bold uppercase tracking-wider">{tag}</span>}
-                  </motion.button>
-                );
-              })}
-              </motion.div>
-            )}
-          </div>
+              ) : undefined
+            }
+          />
+          <p className="text-center font-inter text-[10.5px] text-[#7D6855]">
+            {selectedDate ? longDate(selectedDate) : 'Choose a date'} · PST (GMT+8)
+          </p>
         </section>
       </div>
 

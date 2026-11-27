@@ -7,13 +7,14 @@
  *    only a join inside that window counts.
  *  - Cancellation requests for paid (confirmed) bookings: the client asks, the lawyer accepts
  *    (the booking is cancelled and the payment marked for refund) or declines (it stays booked).
- *    A request nobody answered lapses when the session starts.
+ *    A request nobody answered lapses 24 hours before the session starts, when cancelling closes.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { guardMessage, requireConsultationParticipant } from '@/lib/auth/guards';
 import { checkRateLimit } from '@/lib/security/rateLimit';
 import { formatAttorneyName } from '@/lib/utils/attorneyName';
 import {
+  CANCELLATION_CLOSED_MESSAGE,
   CANCELLATION_REASON_MAX,
   CANCELLATION_REASON_MIN,
   JOIN_LEAD_MS,
@@ -108,7 +109,7 @@ export async function requestCancellationAction(consultationId: string, reason: 
     const nowIso = new Date().toISOString();
     const res = await updateConsultationMeta(db, consultationId, (row, meta) => {
       if (row.status !== 'confirmed') return { error: 'Only confirmed (paid) consultations need a cancellation request.' };
-      if (cancellationExpired(row)) return { error: 'This consultation has already started, so it can no longer be cancelled.' };
+      if (cancellationExpired(row)) return { error: CANCELLATION_CLOSED_MESSAGE };
       if (storedCancellation(meta)) return { error: 'You already asked to cancel this consultation. Please wait for the attorney to answer.' };
       return { meta: { ...meta, cancellationRequest: { status: 'pending', requestedById: user.id, requestedAt: nowIso, reason: text } } };
     });
@@ -192,7 +193,9 @@ export async function respondToCancellationRequestAction(
       const pending = storedCancellation(meta);
       if (!pending) return { error: 'This cancellation request is no longer open.' };
       if (row.status !== 'confirmed') return { error: 'This consultation is no longer confirmed.' };
-      if (cancellationExpired(row)) return { error: 'The session has already started, so this request has lapsed.' };
+      if (cancellationExpired(row)) {
+        return { error: 'The session starts in less than 24 hours, so this cancellation request has lapsed and the booking stays.' };
+      }
       requestReason = pending.reason;
       const entry: StoredCancellationHistory = {
         ...pending,

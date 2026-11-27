@@ -272,6 +272,32 @@ export async function getPublicLawyerDetailsAction(lawyerId: string): Promise<La
 
 // ─── About tab: Edit Information ──────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyDb = any;
+
+/** Audit record of a lawyer's profile save (shown to admins as "Lawyer profile updated"). Best effort. */
+async function recordProfileUpdate(db: AnyDb, userId: string, before: Record<string, unknown> | null, after: Record<string, unknown>) {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null) || Number(a) === Number(b) && a != null && b != null;
+  const fields: Array<[string, string[]]> = [
+    ['consultation fees', ['fee_initial_30min', 'fee_standard_60min', 'fee_extended_120min']],
+    ['areas of practice', ['practice_areas']],
+    ['IBP chapter', ['ibp_chapter']],
+    ['years of practice', ['experience_years']],
+    ['bar passer year', ['bar_passer_year']],
+    ['languages', ['languages']],
+    ['About section', ['about']],
+  ];
+  const changed = before ? fields.filter(([, cols]) => cols.some((c) => !same(before[c], after[c]))).map(([label]) => label) : [];
+  const { error } = await db.from('audit_log').insert({
+    actor_id: userId,
+    action: 'lawyer.profile.updated',
+    target_type: 'lawyer_profile',
+    target_id: userId,
+    details: { changed },
+  });
+  if (error) console.warn('[updateLawyerProfileAction] audit', error.message);
+}
+
 export async function updateLawyerProfileAction(input: UpdateLawyerProfileInput): Promise<ActionResult> {
   try {
     const ctx = await requireLawyer();
@@ -338,6 +364,13 @@ export async function updateLawyerProfileAction(input: UpdateLawyerProfileInput)
       updated_at: new Date().toISOString(),
     };
 
+    // What changed, for the admins' bell (recorded in audit_log once the save succeeds).
+    const { data: before } = await db
+      .from('lawyer_profiles')
+      .select('about, ibp_chapter, languages, experience_years, bar_passer_year, fee_initial_30min, fee_standard_60min, fee_extended_120min, practice_areas')
+      .eq('user_id', userId)
+      .maybeSingle();
+
     const { error: profileError } = await db.from('lawyer_profiles').update(profileUpdate).eq('user_id', userId);
     if (profileError) throw profileError;
 
@@ -358,6 +391,7 @@ export async function updateLawyerProfileAction(input: UpdateLawyerProfileInput)
     }
 
     revalidateProfilePaths(userId);
+    await recordProfileUpdate(db, userId, before as Record<string, unknown> | null, profileUpdate);
     return { success: true };
   } catch (error) {
     if (error instanceof ValidationError) return { success: false, error: error.message };

@@ -15,6 +15,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
 import { checkRateLimit } from '@/lib/security/rateLimit';
 import { FILE_CONTENT_MISMATCH, fileMatchesExtension } from '@/lib/security/fileType';
 import { revalidatePath } from 'next/cache';
@@ -209,7 +210,7 @@ export async function submitAccountReportAction(formData: FormData): Promise<Sub
     let targetName = target.full_name || target.email?.split('@')[0] || 'this user';
     if (target.role === 'lawyer') {
       const { data: lawyer } = await db.from('lawyer_profiles').select('full_name').eq('user_id', target.id).maybeSingle();
-      if (lawyer?.full_name) targetName = lawyer.full_name;
+      if (lawyer?.full_name) targetName = attorneyNameOr(lawyer.full_name, targetName);
     }
 
     // ── Abuse limits ──
@@ -638,7 +639,7 @@ export async function moderateReportAction(
     let targetName = targetAccount?.full_name || targetAccount?.email?.split('@')[0] || 'the account';
     if (targetAccount?.role === 'lawyer') {
       const { data: lawyer } = await db.from('lawyer_profiles').select('full_name').eq('user_id', report.target_id).maybeSingle();
-      if (lawyer?.full_name) targetName = lawyer.full_name;
+      if (lawyer?.full_name) targetName = attorneyNameOr(lawyer.full_name, targetName);
     }
     for (const reporterId of reportersToTell) {
       await notifyAccount(

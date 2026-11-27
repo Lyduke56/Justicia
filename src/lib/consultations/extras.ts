@@ -22,6 +22,21 @@ export const CANCELLATION_NOTICE_MS = 3 * 24 * 60 * 60 * 1000;
 export const CANCELLATION_REASON_MIN = 5;
 export const CANCELLATION_REASON_MAX = 500;
 
+/**
+ * Neither the client nor the lawyer can cancel a booking (or ask to cancel it) once its start
+ * is less than this far away. An unanswered cancellation request lapses at the same moment.
+ */
+export const CANCELLATION_CUTOFF_MS = 24 * 60 * 60 * 1000;
+
+export const CANCELLATION_CLOSED_MESSAGE =
+  'This consultation starts in less than 24 hours, so it can no longer be cancelled.';
+
+/** True once a booking that starts at `start` (ISO or epoch ms) is inside the 24-hour window. */
+export function cancellationClosed(start: string | number | null | undefined, now = Date.now()): boolean {
+  const startMs = typeof start === 'number' ? start : start ? Date.parse(start) : NaN;
+  return Number.isFinite(startMs) && startMs - now < CANCELLATION_CUTOFF_MS;
+}
+
 export interface ConsultationAttendance {
   /** First join inside the window [start − 1 hour, end). */
   clientJoinedAt: string | null;
@@ -54,7 +69,7 @@ export interface CancellationRequestInfo {
     /** Answered within the last 3 days (worth showing as a notice). */
     recent: boolean;
   } | null;
-  /** The client may send a request now (paid booking, before the session starts, none open). */
+  /** The client may send a request now (paid booking, more than 24 hours before the start, none open). */
   canRequest: boolean;
 }
 

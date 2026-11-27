@@ -222,7 +222,6 @@ export function ClientShell({ user, children }: ClientShellProps) {
       <ClientTopbar
         user={user}
         homeActive={activeView === 'dashboard'}
-        settingsActive={settingsActive}
         notifications={liveNotifs}
         onHome={navigateToDashboard}
         onSettings={() => goTo('/client/settings')}

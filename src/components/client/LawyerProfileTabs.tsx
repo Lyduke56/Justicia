@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useLawyerReviews } from './useLawyerReviews';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
 import type {
   LawyerProfileRow,
   LawyerPracticeAreaDetailRow,
@@ -74,7 +75,7 @@ export function LawyerProfileTabs({
           />
         )}
         {activeTab === 'reviews' && (
-          <ReviewsTab lawyerId={profile.user_id} lawyerName={profile.full_name} />
+          <ReviewsTab lawyerId={profile.user_id} lawyerName={attorneyNameOr(profile.full_name, 'Attorney')} />
         )}
         {activeTab === 'availability' && <ComingSoonTab label="Availability" />}
         {activeTab === 'cases' && <CasesTab caseSummaries={caseSummaries} />}

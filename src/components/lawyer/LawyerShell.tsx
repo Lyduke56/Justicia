@@ -214,7 +214,6 @@ export function LawyerShell({ user, children }: LawyerShellProps) {
         accountDetail={user.rollNumber ? `Roll #${user.rollNumber} · ${user.ibpChapter || 'IBP Member'}` : undefined}
         seenKey="justicia:lawyer:notifications-seen-at"
         homeActive={activeView === 'dashboard'}
-        settingsActive={settingsActive}
         notifications={liveLawyerNotifs}
         onHome={navigateToDashboard}
         onSettings={() => navigate('settings')}

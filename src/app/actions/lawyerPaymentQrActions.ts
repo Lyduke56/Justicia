@@ -16,12 +16,13 @@ import { getPaymentChannelAction, type PaymentChannel } from '@/app/actions/cons
 import { guardMessage, requireConsultationParticipant, requireRole } from '@/lib/auth/guards';
 import { checkRateLimit } from '@/lib/security/rateLimit';
 import { FILE_CONTENT_MISMATCH, contentMatchesExtension, extensionOf, mimeForExtension } from '@/lib/security/fileType';
+import { hasOwnPaymentQr, paymentQrKeyFor } from '@/lib/lawyer/paymentQr';
 
 const BUCKET = 'lawyer-credentials';
 const MAX_BYTES = 5 * 1024 * 1024;
 const EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
 const SIGNED_SECONDS = 60 * 60;
-const keyFor = (lawyerId: string) => `payment_qr:lawyer:${lawyerId}`;
+const keyFor = paymentQrKeyFor;
 
 interface StoredQr {
   storagePath: string;
@@ -133,9 +134,27 @@ export async function saveMyPaymentQrAction(formData: FormData): Promise<Result<
     if (hasFile && previous?.storagePath && previous.storagePath !== storagePath) {
       await db.storage.from(BUCKET).remove([previous.storagePath]);
     }
+    // Shown to admins as "Lawyer profile updated" (best effort).
+    await db.from('audit_log').insert({
+      actor_id: user.id,
+      action: 'lawyer.payment_qr.updated',
+      target_type: 'lawyer_profile',
+      target_id: user.id,
+      details: { channel, newImage: hasFile },
+    });
     return { success: true, qr: await toView(db, stored) };
   } catch (err) {
     return { success: false, error: guardMessage(err, 'Your payment QR could not be saved.') };
+  }
+}
+
+/** Whether the signed-in lawyer has uploaded a payment QR (required before approving requests). */
+export async function hasMyPaymentQrAction(): Promise<Result<{ hasQr: boolean }>> {
+  try {
+    const { user, db } = await requireRole('lawyer');
+    return { success: true, hasQr: await hasOwnPaymentQr(db, user.id) };
+  } catch (err) {
+    return { success: false, error: guardMessage(err, 'Your payment QR could not be checked.') };
   }
 }
 

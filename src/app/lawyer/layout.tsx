@@ -9,6 +9,7 @@ import { LiveProvider } from '@/components/live/LiveProvider';
 import { liveTopicFor } from '@/lib/realtime/live';
 import { DEMO_COOKIE, isDemoFor } from '@/lib/auth/demo';
 import { roleFromAppMetadata } from '@/lib/auth/roles';
+import { attorneyNameOr } from '@/lib/utils/attorneyName';
 
 export const metadata = {
   title: {
@@ -85,6 +86,7 @@ export default async function LawyerLayout({
 
       if (userAcc?.role) role = userAcc.role;
       if (userAcc?.full_name) fullName = userAcc.full_name;
+      fullName = attorneyNameOr(fullName, fullName);
 
       if (prof) {
         rollNumber = prof.roll_number || rollNumber;

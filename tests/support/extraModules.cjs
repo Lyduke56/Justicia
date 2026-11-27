@@ -46,6 +46,19 @@ function extraModule(name) {
     case '@/lib/lawyer/dashboardSchedule':
       // Pure date helpers (consultation start / end, "soonest first" ordering).
       return loadReal('src/lib/lawyer/dashboardSchedule.ts');
+    case '@/lib/utils/attorneyName':
+      return loadReal('src/lib/utils/attorneyName.ts');
+    case '@/lib/consultations/extras':
+      // Pure helpers; callers pass `now` explicitly, so the sandbox clock is respected.
+      return loadReal('src/lib/consultations/extras.ts');
+    case '@/lib/lawyer/consultationHours':
+      return loadReal('src/lib/lawyer/consultationHours.ts');
+    case '@/lib/lawyer/consultationHoursServer':
+      return loadReal('src/lib/lawyer/consultationHoursServer.ts');
+    case '@/lib/lawyer/paymentQr':
+      return loadReal('src/lib/lawyer/paymentQr.ts');
+    case '@/lib/consultations/monthAvailability':
+      return loadReal('src/lib/consultations/monthAvailability.ts');
     case '@/lib/legal':
       return loadReal('src/lib/legal.ts');
     case '@/lib/auth/roles':

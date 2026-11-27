@@ -4,8 +4,8 @@
 
 import React, { useRef, useState } from 'react';
 import { getDocumentAccessUrlAction } from '@/app/actions/consultationActions';
-import { CloseIcon, FileIcon, Spinner } from '@/components/shared/neu';
-import { formatBytes, formatDuration, type AttachmentKind, type MessageAttachment } from '@/lib/messaging/types';
+import { ChevronRightIcon, CloseIcon, FileIcon, FolderIcon, Spinner } from '@/components/shared/neu';
+import { attachmentKind, formatBytes, formatDuration, type AttachmentKind, type MessageAttachment, type SharedFolder } from '@/lib/messaging/types';
 import { MicIcon, PauseIcon, PlayIcon } from './MessageIcons';
 
 /** Opens a file in a new tab, asking the server for a fresh link when we don't have one. */
@@ -220,6 +220,64 @@ export function MessageAttachments({ attachments, mine }: { attachments: Message
         ) : (
           <FileChip key={a.id} attachment={a} mine={mine} />
         )
+      )}
+    </div>
+  );
+}
+
+// ─── A shared My Documents folder ────────────────────────────────────────────
+
+/**
+ * A folder shared in the conversation: its name and file count, opening into the list of its
+ * files (each opens in a new tab; the recipient has view-only access).
+ */
+export function SharedFolderCard({ folder, mine }: { folder: SharedFolder; mine: boolean }) {
+  const [open, setOpen] = useState(false);
+  const count = folder.files.length;
+  const totalBytes = folder.files.reduce((sum, f) => sum + (f.size || 0), 0);
+  return (
+    <div className="w-[260px] sm:w-[300px] max-w-full space-y-1.5">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className={`w-full flex items-center gap-3 rounded-[14px] px-3 py-2.5 text-left cursor-pointer transition ${
+          mine ? 'bg-[#FAF6F0]/10 hover:bg-[#FAF6F0]/15' : 'neu-recessed hover:brightness-[1.02]'
+        }`}
+      >
+        <span
+          className={`size-9 shrink-0 rounded-[10px] flex items-center justify-center ${
+            mine ? 'bg-[#E5D8CB] text-[#34150F]' : 'neu-raised-sm text-[#C58B3C]'
+          }`}
+        >
+          <FolderIcon className="w-4 h-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={`block font-inter text-[12.5px] font-semibold truncate ${mine ? 'text-[#FAF6F0]' : 'text-[#341512]'}`}>
+            {folder.name}
+          </span>
+          <span className={`block font-inter text-[10.5px] mt-0.5 ${mine ? 'text-[#FAF6F0]/65' : 'text-[#7D6855]'}`}>
+            Shared folder · {count} file{count === 1 ? '' : 's'} · {formatBytes(totalBytes)}
+          </span>
+        </span>
+        <ChevronRightIcon
+          className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${open ? 'rotate-90' : ''} ${mine ? 'text-[#FAF6F0]/70' : 'text-[#7D6855]'}`}
+        />
+      </button>
+      {open && (
+        <ul className="space-y-1.5 pl-2" aria-label={`Files in ${folder.name}`}>
+          {folder.files.map((f) => (
+            <li key={f.id}>
+              <FileChip
+                attachment={{ id: f.id, name: f.name, mimeType: f.mimeType, size: f.size, kind: attachmentKind(f.mimeType, f.name), url: null }}
+                mine={mine}
+              />
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

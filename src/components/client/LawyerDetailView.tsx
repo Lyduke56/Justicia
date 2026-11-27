@@ -7,6 +7,10 @@ import { useLawyerReviews } from './useLawyerReviews';
 import { getPublicLawyerDetailsAction, type LawyerOwnProfileDetails } from '@/app/actions/lawyerProfileActions';
 import { getLawyerUnavailabilityAction, type UnavailabilityBlock } from '@/app/actions/availabilityActions';
 import { LawyerUnavailabilityManager } from '@/components/lawyer/LawyerUnavailabilityManager';
+import { ConsultationHoursEditor } from '@/components/lawyer/ConsultationHoursEditor';
+import { getBookingMonthAction } from '@/app/actions/consultationHoursActions';
+import { DEFAULT_CONSULTATION_HOURS, slotLabel, slotStartsFor, type ConsultationHours } from '@/lib/lawyer/consultationHours';
+import type { CalendarDayMark } from '@/lib/consultations/monthAvailability';
 
 const LAWYER_UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMPTY_DETAILS: LawyerOwnProfileDetails = {
@@ -85,15 +89,6 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 const MONTH_SHORT_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEPT', 'OCT', 'NOV', 'DEC'];
-
-const TIME_SLOTS = [
-  '9:00 AM - 10:00 AM • PST, GMT+8',
-  '10:00 AM - 11:00 AM • PST, GMT+8',
-  '1:00 PM - 2:00 PM • PST, GMT+8',
-  '2:00 PM - 3:00 PM • PST, GMT+8',
-  '3:00 PM - 4:00 PM • PST, GMT+8',
-  '4:00 PM - 5:00 PM • PST, GMT+8',
-];
 
 /** Parses "2:00 PM - 3:00 PM • …" into minutes-from-midnight. */
 function parseSlotMinutes(slot: string): { start: number; end: number } | null {
@@ -937,7 +932,8 @@ export function LawyerDetailView({
     setSelectedDay(t.day);
   }, []);
 
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>(DEFAULT_TIME_SLOT);
+  // The slot the user picked; `selectedTimeSlot` (below) is it, or the day's first free slot.
+  const [pickedTimeSlot, setSelectedTimeSlot] = useState<string>(DEFAULT_TIME_SLOT);
   const [communicationMode, setCommunicationMode] = useState<'video' | 'audio'>('video');
   const [subject, setSubject] = useState<string>('');
   const [description, setDescription] = useState<string>('');
@@ -1301,12 +1297,8 @@ export function LawyerDetailView({
     getBookedSlotsForLawyer(lawyer.userId, dateStr)
       .then((slots) => {
         if (stale) return;
-        const booked = slots || [];
-        setBookedSlots(booked);
-        setSelectedTimeSlot((current) => {
-          if (!booked.some((b) => slotsOverlap(b, current))) return current;
-          return TIME_SLOTS.find((s) => !booked.some((b) => slotsOverlap(b, s))) ?? current;
-        });
+        // The chosen time moves to a free slot in the effect below.
+        setBookedSlots(slots || []);
       })
       .finally(() => {
         if (!stale) setLoadingSlots(false);
@@ -1336,6 +1328,57 @@ export function LawyerDetailView({
     }
     return slots;
   }, [firstDayOfWeek, totalDaysInMonth]);
+
+  // ─── Regular consultation hours + the month's day indicators ─────────────────
+  // Slots come from the attorney's weekly hours; each day is marked open, fully booked or not
+  // available, and days that already have bookings get a dot (getBookingMonthAction).
+  const [hours, setHours] = useState<ConsultationHours>(DEFAULT_CONSULTATION_HOURS);
+  const [monthMarks, setMonthMarks] = useState<{ key: string; days: CalendarDayMark[] } | null>(null);
+  const [hoursRefreshKey, setHoursRefreshKey] = useState<number>(0);
+  const monthMarksKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+  useEffect(() => {
+    if (!LAWYER_UUID_REGEX.test(lawyer.userId)) return;
+    let stale = false;
+    getBookingMonthAction(lawyer.userId, monthMarksKey)
+      .then((res) => {
+        if (stale) return;
+        if (res.success) {
+          setHours(res.hours);
+          setMonthMarks({ key: monthMarksKey, days: res.days });
+        } else {
+          setMonthMarks(null);
+        }
+      })
+      .catch(() => {
+        if (!stale) setMonthMarks(null);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [lawyer.userId, monthMarksKey, availabilityRefreshKey, slotsRefreshKey, hoursRefreshKey]);
+  const currentMarks = monthMarks?.key === monthMarksKey ? monthMarks.days : null;
+  const markForDay = (day: number) => currentMarks?.find((m) => m.day === day) ?? null;
+  const selectedWeekday = new Date(currentYear, currentMonth, Math.min(selectedDay, totalDaysInMonth)).getDay();
+  const daySlots = useMemo(() => slotStartsFor(hours, selectedWeekday).map((s) => slotLabel(s)), [hours, selectedWeekday]);
+
+  // The chosen time is always one of the day's free slots (the owner may pick any unbooked one).
+  const slotIsFree = (s: string) => !bookedSlots.some((b) => slotsOverlap(b, s)) && (isOwner || !isSlotUnavailable(s));
+  const selectedTimeSlot =
+    daySlots.includes(pickedTimeSlot) && (loadingSlots || slotIsFree(pickedTimeSlot))
+      ? pickedTimeSlot
+      : daySlots.find(slotIsFree) ?? daySlots[0] ?? '';
+
+  // Clients land on a bookable day: when a month's indicators arrive and the selected day can't
+  // be booked, move to the next open day (state adjusted during render, once per load).
+  const [marksSeen, setMarksSeen] = useState<CalendarDayMark[] | null>(null);
+  if (currentMarks !== marksSeen) {
+    setMarksSeen(currentMarks);
+    const current = !isOwner && currentMarks ? currentMarks.find((m) => m.day === selectedDay) : null;
+    if (current && current.state !== 'open') {
+      const next = currentMarks!.find((m) => m.day > selectedDay && m.state === 'open');
+      if (next) setSelectedDay(next.day);
+    }
+  }
 
   const selectedDateObj = useMemo(() => {
     const validDay = Math.min(selectedDay, totalDaysInMonth);
@@ -1453,6 +1496,14 @@ export function LawyerDetailView({
     }
     if (!agreedToTerms) {
       flagInvalid('terms', 'Please agree to the attorney-client privilege review terms.');
+      return;
+    }
+    if (!daySlots.includes(selectedTimeSlot) || markForDay(selectedDay)?.state === 'closed') {
+      setBookingError(
+        daySlots.length === 0
+          ? 'The attorney does not take consultations on this day. Please choose another date.'
+          : 'Please choose one of the available time slots.'
+      );
       return;
     }
     if (isSlotBooked(selectedTimeSlot)) {
@@ -2472,8 +2523,25 @@ export function LawyerDetailView({
                                   currentYear === todayPH.year;
                                 const fullyBlocked = isDayFullyUnavailable(item.day);
                                 const hasBlocks = fullyBlocked || blocksForDay(item.day).length > 0;
-                                // Clients cannot pick a day the attorney blocked entirely; the owner can (to review / remove it).
-                                const clientDisabled = !isOwner && fullyBlocked;
+                                // Not bookable: blocked entirely, not a consultation day, fully booked or past.
+                                const mark = markForDay(item.day);
+                                // Days outside the weekly hours (e.g. Sunday) are known before the month's marks load.
+                                const offDay = slotStartsFor(hours, new Date(currentYear, currentMonth, item.day).getDay()).length === 0;
+                                const notBookable = fullyBlocked || offDay || (!!mark && mark.state !== 'open');
+                                const bookingCount = mark?.bookings ?? 0;
+                                // Clients cannot pick a day that can't be booked; the owner can (to review / manage it).
+                                const clientDisabled = !isOwner && notBookable;
+                                const dayTitle = fullyBlocked
+                                  ? 'Unavailable'
+                                  : offDay && !(mark && mark.state !== 'open')
+                                    ? 'Not a consultation day'
+                                    : mark && mark.state !== 'open'
+                                    ? mark.reason ?? 'Not available'
+                                    : hasBlocks && isOwner
+                                      ? 'Partly unavailable'
+                                      : bookingCount > 0
+                                        ? `${bookingCount} booking${bookingCount === 1 ? '' : 's'} on this day`
+                                        : undefined;
 
                                 return (
                                   <Key
@@ -2481,13 +2549,13 @@ export function LawyerDetailView({
                                     aria-pressed={isSelected}
                                     aria-current={isToday ? 'date' : undefined}
                                     disabled={clientDisabled}
-                                    title={fullyBlocked ? 'Unavailable' : hasBlocks && isOwner ? 'Partly unavailable' : undefined}
+                                    title={dayTitle}
                                     onClick={() => !clientDisabled && setSelectedDay(item.day!)}
                                     className={`size-7 sm:size-8 lg:size-9 flex items-center justify-center rounded-full font-lora text-xs sm:text-[15px] select-none transition-colors ${clientDisabled
                                       ? 'text-[#341512]/30 line-through cursor-not-allowed'
                                       : isSelected
                                         ? 'text-[#D39758] font-bold cursor-pointer'
-                                        : `${isOwner && fullyBlocked ? 'text-rose-800/70 line-through' : 'text-[#341512]/80'} hover:bg-[#DDCFC0]/60 cursor-pointer`
+                                        : `${isOwner && fullyBlocked ? 'text-rose-800/70 line-through' : isOwner && notBookable ? 'text-[#341512]/30 line-through' : 'text-[#341512]/80'} hover:bg-[#DDCFC0]/60 cursor-pointer`
                                       }`}
                                   >
                                     {isSelected && <HighlightPill layoutId="booking-day-pill" radius={9999} variant="neu-raised-sm" />}
@@ -2498,11 +2566,32 @@ export function LawyerDetailView({
                                     {isOwner && hasBlocks && (
                                       <span className="absolute top-[2px] right-[2px] z-10 h-1.5 w-1.5 rounded-full bg-rose-700/80" />
                                     )}
+                                    {bookingCount > 0 && (
+                                      <span aria-hidden="true" className="absolute top-[2px] left-[2px] z-10 h-1.5 w-1.5 rounded-full bg-[#946525]" />
+                                    )}
                                   </Key>
                                 );
                               })}
                             </motion.div>
                           </AnimatePresence>
+
+                          {/* Day indicators */}
+                          <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 font-inter text-[10.5px] text-[#341512]/60 select-none">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#946525]" />
+                              Has bookings
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <span aria-hidden="true" className="font-lora text-[11px] text-[#341512]/30 line-through">00</span>
+                              Not available for booking
+                            </span>
+                            {isOwner && (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-rose-700/80" />
+                                Unavailability set
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2530,7 +2619,14 @@ export function LawyerDetailView({
                           variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
                           className="flex flex-col gap-5 justify-start"
                         >
-                          {TIME_SLOTS.map((slot) => {
+                          {daySlots.length === 0 && (
+                            <p className="py-6 text-center font-lora text-xs text-[#341512]/70 leading-relaxed">
+                              {isOwner
+                                ? 'You don’t take consultations on this day. Change it under Regular Consultation Hours below.'
+                                : 'The attorney doesn’t take consultations on this day. Please choose another date.'}
+                            </p>
+                          )}
+                          {daySlots.map((slot) => {
                             const isSelected = selectedTimeSlot === slot;
                             const isBookedSlot = isSlotBooked(slot);
                             const isUnavailableSlot = !isBookedSlot && isSlotUnavailable(slot);
@@ -2579,11 +2675,13 @@ export function LawyerDetailView({
                 </Reveal>
 
                 {isOwner ? (
-                  /* Owner: block off days / time ranges + list of all upcoming unavailability */
+                  /* Owner: weekly consultation hours, then block off days / time ranges + list of all upcoming unavailability */
+                  <>
+                  <ConsultationHoursEditor onSaved={() => setHoursRefreshKey((k) => k + 1)} />
                   <LawyerUnavailabilityManager
                     selectedDateIso={isoForDay(Math.min(selectedDay, totalDaysInMonth))}
                     selectedDateLabel={`${selectedDayOfWeek.charAt(0)}${selectedDayOfWeek.slice(1).toLowerCase()}, ${selectedMonthName} ${selectedDay}, ${currentYear}`}
-                    selectedSlot={selectedTimeSlot}
+                    selectedSlot={pickedTimeSlot}
                     onChanged={() => setAvailabilityRefreshKey((k) => k + 1)}
                     onJumpToDate={(iso) => {
                       const [y, m, d] = iso.split('-').map(Number);
@@ -2592,6 +2690,7 @@ export function LawyerDetailView({
                       setSelectedDay(d);
                     }}
                   />
+                  </>
                 ) : (
                 <>
                 {/* Mode of Communication Section */}
