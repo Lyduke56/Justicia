@@ -280,7 +280,7 @@ export function buildSampleConsultations(now: number = Date.now()): LawyerConsul
         size: '240 KB',
         mimeType: 'application/pdf',
       })),
-      meetingLink: seed.status === 'confirmed' ? 'https://meet.google.com/' : null,
+      meetingLink: seed.status === 'confirmed' ? `/call/demo-${seed.key}` : null,
       declineReason: seed.status === 'declined' ? seed.reason ?? null : null,
       cancellationReason: seed.status === 'cancelled' ? seed.reason ?? null : null,
       dateLong: `${weekday}, ${longDate}`,

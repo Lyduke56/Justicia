@@ -58,27 +58,43 @@ test('message emails never include the message text', () => {
   assert.equal(e.content.action.url, `${APP}/client/messages?thread=lawyer-1`);
 });
 
-test('confirmed-payment and starting-soon emails point to Messages, not the raw Meet link', () => {
+test('confirmed-payment, starting-soon and "waiting" emails point to the in-app call', () => {
+  const id = '33333333-0001-4333-8333-000000000001';
   const confirmed = build({
     type: 'payment_confirmed',
     title: 'Payment Confirmed — Consultation Confirmed',
-    body: 'Atty. Maria Santos confirmed your payment. Your consultation on Dec 1 (9:00 AM) is confirmed. Join via Google Meet: https://meet.google.com/abc-defg-hij',
+    body: 'Atty. Maria Santos confirmed your payment. Your consultation on Dec 1 (9:00 AM) is confirmed. Join the call in Justicia from 1 hour before the start.',
+    payload: { consultationId: id, callPath: `/call/${id}` },
   });
-  assert.equal(JSON.stringify(confirmed.content).includes('meet.google.com'), false);
-  assert.match(confirmed.content.paragraphs[0], /is confirmed\.$/);
+  assert.equal(/google meet|meet\.google/i.test(JSON.stringify(confirmed.content)), false);
+  assert.match(confirmed.content.callout.body, /Join Call/);
 
   const soon = build({
     type: 'meeting_starting',
     role: 'lawyer',
     recipientName: 'Maria Santos',
     title: 'Consultation starting soon',
-    body: 'Your video consultation with Juan starts in 12 minutes (9:00 AM - 10:00 AM). Open Messages to join the meeting.',
-    payload: { consultationId: 'c1', threadId: 'client-1', meetingUrl: 'https://meet.google.com/x' },
+    body: 'Your video consultation with Juan starts in 12 minutes (9:00 AM - 10:00 AM). Join the call from Consultations or Messages.',
+    payload: { consultationId: id, threadId: 'client-1', meetingUrl: `/call/${id}` },
   });
   assert.match(soon.subject, /starting soon/i);
   assert.equal(soon.content.greeting, 'Dear Atty. Maria Santos,');
-  assert.equal(soon.content.action.url, `${APP}/lawyer/messages?thread=client-1`);
-  assert.equal(JSON.stringify(soon.content).includes('meet.google.com'), false);
+  assert.equal(soon.content.action.url, `${APP}/call/${id}`);
+  assert.match(soon.content.paragraphs[0], /\(9:00 AM - 10:00 AM\)\.$/);
+
+  const waiting = build({
+    type: 'consultation_call_waiting',
+    title: 'Atty. Maria Santos joined the call',
+    body: 'Atty. Maria Santos is in the video consultation for Monday, December 1, 2026 · 9:00 AM - 10:00 AM and is waiting for you. Open Consultations and press Join Call.',
+    payload: { consultationId: id, threadId: 'lawyer-1', callPath: `/call/${id}` },
+  });
+  assert.equal(waiting.subject, 'Atty. Maria Santos joined the call');
+  assert.equal(waiting.content.action.url, `${APP}/call/${id}`);
+  assert.match(waiting.content.paragraphs[0], /waiting for you\.$/);
+
+  // A payload without a real consultation id falls back to the Consultations screen.
+  const noId = build({ type: 'reminder_1h', title: 'Starts in 1 hour', body: 'Soon.', payload: {} });
+  assert.equal(noId.content.action.url, `${APP}/client/consultations`);
 });
 
 test('decline reasons move into a callout and links match the reader role', () => {

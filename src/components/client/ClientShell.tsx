@@ -169,12 +169,15 @@ export function ClientShell({ user, children }: ClientShellProps) {
 
   const handleNotificationClick = useCallback(
     (n: LiveResources['notifications'][number]) => {
-      if (n.type === 'meeting_starting' || n.type === 'new_message') {
+      if (n.type === 'consultation_call_waiting' && typeof n.metadata?.consultationId === 'string') {
+        // The other side is already in the call: go straight to it.
+        router.push(`/call/${n.metadata.consultationId}`);
+      } else if (n.type === 'meeting_starting' || n.type === 'new_message') {
         const thread = n.metadata?.threadId;
         goTo(thread ? `/client/messages?thread=${thread}` : '/client/messages');
       } else if (n.type?.includes('consultation')) navigate('consultations');
     },
-    [goTo, navigate]
+    [goTo, navigate, router]
   );
 
   const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);

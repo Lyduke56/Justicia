@@ -79,7 +79,7 @@ export async function ensureConsultationReminders(db: SupabaseClient, userId: st
         user_id: userId,
         type: slot.type,
         title: slot.title,
-        body: `Your ${kind} with ${other} starts ${slot.when} (${manilaTime(row.scheduled_start)}). The meeting link will be in Messages.`,
+        body: `Your ${kind} with ${other} starts ${slot.when} (${manilaTime(row.scheduled_start)}). You can join the call in Justicia from 1 hour before the start.`,
         data: { consultationId: row.id, scheduledStart: row.scheduled_start },
         metadata: { consultationId: row.id, scheduledStart: row.scheduled_start, threadId: isLawyer ? row.client_id : row.lawyer_id },
         channel: 'in_app',

@@ -2,9 +2,8 @@
 
 /**
  * Consultation extras (new code only; the original consultation actions are reused as-is):
- *  - recordMeetingJoinAction: who pressed Join (attendance, used for "missed" consultations).
- *    The client may join from 1 hour before the start until the end; the lawyer any time, but
- *    only a join inside that window counts.
+ *  - Attendance is recorded when a participant enters the in-app call inside the join window
+ *    (joinConsultationCallAction in consultationCallActions.ts).
  *  - Cancellation requests for paid (confirmed) bookings: the client asks, the lawyer accepts
  *    (the booking is cancelled and the payment marked for refund) or declines (it stays booked).
  *    A request nobody answered lapses 24 hours before the session starts, when cancelling closes.
@@ -17,8 +16,6 @@ import {
   CANCELLATION_CLOSED_MESSAGE,
   CANCELLATION_REASON_MAX,
   CANCELLATION_REASON_MIN,
-  JOIN_LEAD_MS,
-  joinOpensLabel,
 } from '@/lib/consultations/extras';
 import {
   cancellationExpired,
@@ -28,10 +25,8 @@ import {
   postSystemMessage,
   revokeSharedDocuments,
   sessionLabel,
-  sessionWindow,
   signalLive,
   storedCancellation,
-  storedJoins,
   updateConsultationMeta,
   type StoredCancellationHistory,
 } from '@/lib/consultations/extrasServer';
@@ -56,42 +51,6 @@ function cleanReason(reason: unknown): string | { error: string } {
   if (text.length < CANCELLATION_REASON_MIN) return { error: `Please give a reason (at least ${CANCELLATION_REASON_MIN} characters).` };
   if (text.length > CANCELLATION_REASON_MAX) return { error: `The reason must be ${CANCELLATION_REASON_MAX} characters or fewer.` };
   return text;
-}
-
-// ─── Attendance ──────────────────────────────────────────────────────────────
-
-/**
- * Records that the signed-in participant pressed Join for a confirmed consultation (the first
- * press inside the window counts). The browser opens the Meet link itself; for the client this
- * also refuses presses outside the join window.
- */
-export async function recordMeetingJoinAction(consultationId: string): Promise<Result & { recorded?: boolean }> {
-  try {
-    const { db, side, consultation } = await requireConsultationParticipant(consultationId);
-    if (consultation.status !== 'confirmed') return { error: 'Only confirmed consultations can be joined.' };
-
-    const now = Date.now();
-    let recorded = false;
-    const res = await updateConsultationMeta(db, consultationId, (row, meta) => {
-      if (!row.meeting_url) return { error: 'The meeting link has not been shared yet.' };
-      const w = sessionWindow(row);
-      const inWindow = !!w && now >= w.start - JOIN_LEAD_MS && now < w.end;
-      if (side === 'client' && w && !inWindow) {
-        return now < w.start - JOIN_LEAD_MS
-          ? { error: `You can join from ${joinOpensLabel(new Date(w.start - JOIN_LEAD_MS).toISOString(), now)}, 1 hour before the session.` }
-          : { error: 'This consultation has already ended.' };
-      }
-      const joins = storedJoins(meta);
-      if (!inWindow || joins[side]) return { error: '' }; // nothing to record
-      recorded = true;
-      return { meta: { ...meta, meetingJoins: { ...joins, [side]: new Date(now).toISOString() } } };
-    });
-    if ('error' in res && res.error) return { error: res.error };
-    if (recorded) signalLive([consultation.client_id, consultation.lawyer_id], ['consultations']);
-    return { success: true, recorded };
-  } catch (err) {
-    return { error: guardMessage(err, 'We could not open the meeting. Please try again.') };
-  }
 }
 
 // ─── Cancellation requests (paid bookings) ───────────────────────────────────

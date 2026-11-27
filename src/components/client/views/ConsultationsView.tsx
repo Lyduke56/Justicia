@@ -159,7 +159,7 @@ function baseRemindersOf(a: ClientConsultation, extras: ConsultationExtras | nul
     ];
   }
   if (a.rawStatus === 'confirmed') {
-    return [a.reminders[0], 'The Join Meet button opens 1 hour before the session starts.', ...a.reminders.slice(1)].filter(Boolean);
+    return [a.reminders[0], 'The Join Call button opens 1 hour before the session starts. The call takes place here in Justicia.', ...a.reminders.slice(1)].filter(Boolean);
   }
   return a.reminders;
 }
@@ -290,7 +290,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
   };
 
   // Attendance (join window, missed) and cancellation requests for paid bookings.
-  const { extrasFor, now, joinMeeting, reload: reloadExtras } = useConsultationExtras();
+  const { extrasFor, now, joinCall, reload: reloadExtras } = useConsultationExtras();
   // Attorneys' profile photos (cards and View Details), kept live.
   const lawyerPhotos = usePeopleAvatars(allAppointments.map((a) => a.lawyerId));
   const [cancelRequest, setCancelRequest] = useState<{ mode: CancellationModalMode; id: string } | null>(null);
@@ -315,10 +315,10 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
     else setShowCancelModal(true);
   };
 
-  /** The client may join from 1 hour before the start until the end. */
+  /** Opens the in-app call; it can be entered from 1 hour before the start until the end. */
   const enterMeeting = (a: Appointment) => {
     if (!a.meetingLink || joinState(extrasFor(a.id)?.attendance, now) === 'not_yet') return;
-    joinMeeting(a.id, a.meetingLink);
+    joinCall(a.id);
   };
 
   const handleConfirmCancel = async () => {
@@ -507,7 +507,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
       lawyerName: a.lawyerName,
       lawyerMeta: `Roll No. ${a.rollNumber}  |  IBP ${a.ibpChapter}`,
       modeLabel: a.communicationMode === 'video' ? 'Video Conference' : 'Audio Call',
-      modeMeta: `Platform: Google Meet  |  Duration: ${a.durationLabel}`,
+      modeMeta: `Platform: Justicia in-app call  |  Duration: ${a.durationLabel}`,
       dateLong: a.dateLong,
       timeRange: a.timeRange,
       sessionFee: a.payment.sessionFee,
@@ -528,7 +528,7 @@ export function ConsultationsView({ onNavigate }: ConsultationsViewProps) {
       notice = {
         tone: 'amber',
         title: 'Payment under review',
-        text: 'Your attorney is verifying your proof of payment. The Google Meet link will be shared once confirmed.',
+        text: 'Your attorney is verifying your proof of payment. You can join the call here once it is confirmed.',
       };
     } else if (missed) {
       notice = { tone: 'red', title: 'Missed consultation', text: missedSummary(missed, 'client', a.lawyerName) };
@@ -575,7 +575,7 @@ Reason: ${last.responseReason}` : ''}`,
       notice = {
         tone: 'amber',
         title: `Join opens ${joinOpensLabel(ax.attendance.joinOpensAt, now).includes(' at ') ? 'on ' : 'at '}${joinOpensLabel(ax.attendance.joinOpensAt, now)}`,
-        text: 'You can join the meeting from 1 hour before the scheduled start.',
+        text: 'You can join the call from 1 hour before the scheduled start.',
       };
     }
 
@@ -615,7 +615,7 @@ Reason: ${last.responseReason}` : ''}`,
           },
         },
         {
-          label: 'Join Meet',
+          label: 'Join Call',
           variant: 'caramel',
           icon: 'video',
           disabled: !a.meetingLink || join === 'not_yet',
@@ -689,7 +689,7 @@ Reason: ${last.responseReason}` : ''}`,
         processing: { title: 'Submitting your payment', message: `Sending your proof of payment to ${a.lawyerName}.` },
         success: {
           title: 'Payment submitted',
-          message: `${a.lawyerName} will check your payment and confirm the appointment. The Google Meet link is shared once it's confirmed.`,
+          message: `${a.lawyerName} will check your payment and confirm the appointment. You can join the call in Justicia once it's confirmed.`,
         },
         failure: { title: "We couldn't submit your payment", retryLabel: 'Review Payment' },
       },
@@ -1157,7 +1157,7 @@ Reason: ${last.responseReason}` : ''}`,
                       View Details
                     </button>
 
-                    {/* Join Meet Button: a soft beacon pulses once the Meet link is ready */}
+                    {/* Join Call button: a soft beacon pulses once the call can be entered */}
                     {canJoinMeet && (
                       <button
                         type="button"
@@ -1171,7 +1171,7 @@ Reason: ${last.responseReason}` : ''}`,
                           </span>
                         )}
                         <VideoIcon className="w-3.5 h-3.5 text-[#341512]" />
-                        <span>Join Meet</span>
+                        <span>Join Call</span>
                       </button>
                     )}
                   </motion.div>
@@ -1356,7 +1356,7 @@ Reason: ${last.responseReason}` : ''}`,
         );
       })()}
 
-      {/* ─── Join Meet Preview Modal (Neumorphic Design) ───────────────────── */}
+      {/* ─── Join Call Preview Modal (Neumorphic Design) ───────────────────── */}
       <AnimatePresence>
       {showMeetModal && currentAppointment && (
         <NeuModal
@@ -1365,7 +1365,7 @@ Reason: ${last.responseReason}` : ''}`,
           size="md"
           icon={currentAppointment.communicationMode === 'audio' ? <PhoneIcon className="w-5 h-5" /> : <VideoIcon className="w-5 h-5" />}
           title={currentAppointment.communicationMode === 'audio' ? 'Join Audio Call' : 'Join Video Consultation'}
-          subtitle={`Your session with ${currentAppointment.lawyerName} opens in Google Meet in a new tab.`}
+          subtitle={`Your session with ${currentAppointment.lawyerName} takes place here in Justicia.`}
           footer={
             <>
               <NeuButton variant="secondary" onClick={() => setShowMeetModal(false)}>
@@ -1381,7 +1381,7 @@ Reason: ${last.responseReason}` : ''}`,
                   setShowMeetModal(false);
                 }}
               >
-                Enter Meeting
+                Enter Call
               </NeuButton>
             </>
           }
@@ -1407,15 +1407,15 @@ Reason: ${last.responseReason}` : ''}`,
               tone="warning"
               title={`Join opens ${joinOpensLabel(currentExtras.attendance.joinOpensAt, now).includes(' at ') ? 'on ' : 'at '}${joinOpensLabel(currentExtras.attendance.joinOpensAt, now)}`}
             >
-              You can enter the meeting from 1 hour before the scheduled start. Come back then to join.
+              You can enter the call from 1 hour before the scheduled start. Come back then to join.
             </NeuAlert>
           ) : currentAppointment.meetingLink ? (
-            <NeuAlert tone="success" title="Meeting link ready">
-              Join a few minutes early and check your {currentAppointment.communicationMode === 'audio' ? 'microphone and speakers' : 'camera and microphone'}.
+            <NeuAlert tone="success" title="Ready to join">
+              Join a few minutes early. Your browser will ask to use your {currentAppointment.communicationMode === 'audio' ? 'microphone' : 'camera and microphone'}.
             </NeuAlert>
           ) : (
-            <NeuAlert tone="warning" title="Link not shared yet">
-              Your attorney hasn&apos;t added the Google Meet link. It will appear here once it&apos;s available.
+            <NeuAlert tone="warning" title="Not available yet">
+              The call opens once your booking is confirmed.
             </NeuAlert>
           )}
         </NeuModal>

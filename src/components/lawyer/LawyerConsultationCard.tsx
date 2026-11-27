@@ -10,7 +10,7 @@ import {
 } from '@/components/shared/ConsultationDetailsModal';
 import { NeuAlert, NeuButton, VideoIcon } from '@/components/shared/neu';
 import { canMessage, clientLines, isSample, statusLabelOf, statusToneOf } from './useLawyerConsultationActions';
-import { CANCELLATION_CLOSED_MESSAGE, cancellationClosed, joinState, type ConsultationExtras } from '@/lib/consultations/extras';
+import { CANCELLATION_CLOSED_MESSAGE, cancellationClosed, joinOpensLabel, joinState, type ConsultationExtras } from '@/lib/consultations/extras';
 import { usePeopleAvatars } from '@/components/account/avatarStore';
 import { CARD_ITEM, CARD_POP } from './motion';
 
@@ -19,7 +19,7 @@ import { CARD_ITEM, CARD_POP } from './motion';
  * row, person banner and case block), with the lawyer's actions for its status:
  *   pending          → Decline · View Details · Approve
  *   payment_review   → Review Payment
- *   confirmed        → Cancel · View Details · Join Meet
+ *   confirmed        → Cancel · View Details · Join Call (in-app; opens 1 hour before the start)
  *   anything else    → View Details
  *
  * Sizing: `previewLines` clamps the description to that many lines (natural height, used by the
@@ -73,6 +73,15 @@ export function LawyerConsultationCard({
   const ax = c.status === 'confirmed' ? extras : null;
   // Once the session is over (or missed) there is nothing left to cancel or join.
   const sessionOver = !!ax?.attendance.missed || (!!now && joinState(ax?.attendance, now) === 'ended');
+  // The call opens 1 hour before the start (for both sides).
+  const joinNotYet = !!now && joinState(ax?.attendance, now) === 'not_yet';
+  const joinTitle = sample
+    ? 'Sample consultation: the call is unavailable'
+    : !c.meetingLink
+      ? 'The call is not available yet'
+      : joinNotYet && ax?.attendance.joinOpensAt
+        ? `The call opens ${joinOpensLabel(ax.attendance.joinOpensAt, now)}`
+        : undefined;
   const cancelRequest = !sessionOver ? ax?.cancellation.pending ?? null : null;
   // Cancelling closes 24 hours before the start (the button stays, disabled).
   const cancelClosed = !sample && !!now && cancellationClosed(c.scheduledStart, now);
@@ -183,18 +192,18 @@ export function LawyerConsultationCard({
             <button
               type="button"
               onClick={() => h.onJoin(c)}
-              disabled={sample || !c.meetingLink}
-              title={sample ? 'Sample consultation: the meeting is unavailable' : !c.meetingLink ? 'The meeting link is not set yet' : undefined}
+              disabled={sample || !c.meetingLink || joinNotYet}
+              title={joinTitle}
               className={CARAMEL}
             >
-              {c.meetingLink && (
+              {c.meetingLink && !joinNotYet && (
                 <span aria-hidden="true" className="absolute -right-1 -top-1 size-2.5">
                   <span className="neu-beacon absolute inset-0 rounded-full bg-[#1FAA00]" />
                   <span className="absolute inset-0 rounded-full bg-[#1FAA00] ring-2 ring-[#E5D8CB]" />
                 </span>
               )}
               <VideoIcon className="h-3.5 w-3.5 text-[#341512]" />
-              <span>Join Meet</span>
+              <span>Join Call</span>
             </button>
           )}
         </div>

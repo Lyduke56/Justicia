@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * The lawyer's consultation decisions in one dialog: approve, decline, confirm payment (with the
- * Google Meet link), decline payment and cancel.
+ * The lawyer's consultation decisions in one dialog: approve, decline, confirm payment, decline
+ * payment and cancel. Sessions are held as in-app calls, so confirming needs no meeting link.
  *
  *  1. Review   – what is being decided (client, schedule, subject, payment) and what happens next.
- *  2. Input    – modes that need it: the reason, or the meeting link (with paste + validation).
+ *  2. Input    – modes that need it: the reason.
  *  3. Submit   – the dialog morphs into the shared submission card: the line circles while the
  *                request runs, then writes a check (done) or an X (failed, with "Try Again").
  *
@@ -22,11 +22,9 @@ import {
   AlertIcon,
   CalendarIcon,
   CheckCircleIcon,
-  ClipboardIcon,
   CloseIcon,
   ExternalLinkIcon,
   FileIcon,
-  LinkIcon,
   PhoneIcon,
   UserIcon,
   VideoIcon,
@@ -67,14 +65,14 @@ export interface DecisionSummary {
 interface ConsultationDecisionModalProps {
   mode: DecisionMode;
   summary: DecisionSummary;
-  /** Runs the server action with the reason or meeting link; resolves with its result. */
+  /** Runs the server action (with the reason, for modes that ask for one); resolves with its result. */
   onSubmit: (value?: string) => Promise<SubmissionResult>;
   /** `succeeded` is true when the dialog closes after a successful submission. */
   onClose: (succeeded: boolean) => void;
 }
 
 interface InputConfig {
-  kind: 'reason' | 'meetLink';
+  kind: 'reason';
   title: string;
   subtitle: (client: string) => string;
   label: string;
@@ -98,8 +96,6 @@ interface ModeConfig {
   failure: string;
 }
 
-/** Any Google Meet link: must start with https://meet.google.com; whatever follows is accepted. */
-const MEET_REGEX = /^https:\/\/meet\.google\.com(?:[/?#]\S*)?$/i;
 const REASON_MIN = 5;
 const REASON_MAX = 1000;
 
@@ -127,7 +123,7 @@ const MODES: Record<DecisionMode, ModeConfig> = {
       </>,
       <>The time slot stays reserved for {c} while payment is pending.</>,
       <>A private message thread with {c} opens right away so you can coordinate before the session.</>,
-      <>You will share the Google Meet link when you confirm the payment.</>,
+      <>Once you confirm the payment, the session is held as a call here in Justicia. No meeting link is needed.</>,
     ],
     processing: (c) => ({ title: 'Approving consultation', message: `Letting ${c} know their request was accepted.` }),
     success: (c) => ({
@@ -160,27 +156,22 @@ const MODES: Record<DecisionMode, ModeConfig> = {
     subtitle: (c) => `Make sure ${c}'s payment was received in full.`,
     icon: <WalletIcon className="w-5 h-5" />,
     tone: 'caramel',
-    confirmLabel: 'Continue',
+    confirmLabel: 'Confirm Payment',
     destructive: false,
     outcomes: (c) => [
       <>Check the amount against your account before confirming.</>,
       <>
         The booking becomes a <strong>Confirmed Appointment</strong> and {c} is notified.
       </>,
-      <>Next, you will paste the Google Meet link. It is sent to {c} and shown on both of your consultation pages.</>,
+      <>
+        The session is held as a call in Justicia. You and {c} can press <strong>Join Call</strong> from 1 hour before
+        the start.
+      </>,
     ],
-    input: {
-      kind: 'meetLink',
-      title: 'Add the meeting link',
-      subtitle: (c) => `${c} receives this link with the confirmation.`,
-      label: 'Google Meet link',
-      placeholder: 'https://meet.google.com/abc-defg-hij',
-      validate: (v) => MEET_REGEX.test(v.trim()),
-    },
-    processing: (c) => ({ title: 'Confirming payment', message: `Sending the meeting link to ${c}.` }),
+    processing: (c) => ({ title: 'Confirming payment', message: `Letting ${c} know the appointment is confirmed.` }),
     success: (c) => ({
       title: 'Payment confirmed',
-      message: `The appointment is confirmed and ${c} has the Google Meet link.`,
+      message: `The appointment is confirmed. You and ${c} can join the call from 1 hour before the start.`,
     }),
     failure: "We couldn't confirm this payment",
   },
@@ -254,7 +245,7 @@ function DecisionSummaryCard({ summary, showPayment }: { summary: DecisionSummar
         {summary.communicationMode && (
           <SummaryRow icon={isAudio ? <PhoneIcon className="w-4 h-4" /> : <VideoIcon className="w-4 h-4" />} label="Session">
             {isAudio ? 'Audio Call' : 'Video Consultation'}
-            {summary.durationLabel && <span className="block text-[#5C4535]">Google Meet · {summary.durationLabel}</span>}
+            {summary.durationLabel && <span className="block text-[#5C4535]">In-app call · {summary.durationLabel}</span>}
           </SummaryRow>
         )}
         {summary.subjectTitle && (
@@ -313,105 +304,6 @@ function OutcomeList({ items }: { items: React.ReactNode[] }) {
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-function MeetLinkField({
-  id,
-  config,
-  value,
-  onChange,
-  client,
-}: {
-  id: string;
-  config: InputConfig;
-  value: string;
-  onChange: (v: string) => void;
-  client: string;
-}) {
-  const [pasteFailed, setPasteFailed] = useState(false);
-  const trimmed = value.trim();
-  const valid = config.validate(value);
-  const state: 'empty' | 'valid' | 'invalid' = !trimmed ? 'empty' : valid ? 'valid' : 'invalid';
-  const canPaste = typeof navigator !== 'undefined' && !!navigator.clipboard?.readText;
-
-  const paste = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) onChange(text.trim());
-      setPasteFailed(false);
-    } catch {
-      setPasteFailed(true);
-    }
-  };
-
-  return (
-    <div className="space-y-3">
-      <label htmlFor={id} className="block font-lora text-[13px] font-semibold text-[#341512]">
-        {config.label}
-      </label>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1 min-w-0">
-          <LinkIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9A8270]" />
-          <input
-            id={id}
-            type="url"
-            inputMode="url"
-            autoComplete="off"
-            spellCheck={false}
-            value={value}
-            autoFocus
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={config.placeholder}
-            aria-invalid={state === 'invalid' || undefined}
-            aria-describedby={`${id}-hint`}
-            className={`neu-input w-full h-12 rounded-2xl pl-11 pr-11 font-inter text-[13px] text-[#341512] ${state === 'invalid' ? 'neu-input-error' : ''}`}
-          />
-          <AnimatePresence>
-            {state === 'valid' && (
-              <motion.span
-                key="ok"
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 22 }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#1F7A3A]"
-              >
-                <CheckCircleIcon className="w-4.5 h-4.5" />
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </div>
-        {canPaste && (
-          <NeuButton variant="secondary" size="sm" icon={<ClipboardIcon className="w-3.5 h-3.5" />} onClick={paste} className="h-12 sm:w-auto">
-            Paste
-          </NeuButton>
-        )}
-      </div>
-      <p
-        id={`${id}-hint`}
-        aria-live="polite"
-        className={`font-inter text-[11.5px] sm:text-xs leading-relaxed ${
-          state === 'invalid' ? 'text-[#B42318] font-medium' : state === 'valid' ? 'text-[#1F7A3A] font-medium' : 'text-[#7A6756]'
-        }`}
-      >
-        {state === 'invalid'
-          ? 'Use a Google Meet link that starts with https://meet.google.com/'
-          : state === 'valid'
-            ? `Looks good. This link will be sent to ${client}.`
-            : pasteFailed
-              ? 'Your browser blocked pasting from the clipboard. Paste the link into the field instead.'
-              : 'Create the meeting in Google Meet or Google Calendar, then paste its link here.'}
-      </p>
-      <a
-        href="https://meet.google.com/new"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 font-inter text-xs font-semibold text-[#946525] underline underline-offset-2 hover:text-[#C58B3C] transition-colors"
-      >
-        Create a new Google Meet <ExternalLinkIcon className="w-3.5 h-3.5" />
-      </a>
     </div>
   );
 }
@@ -509,8 +401,8 @@ export function ConsultationDecisionModal({ mode, summary, onSubmit, onClose }: 
             titleId={titleId}
             title={onInputStep && config.input ? config.input.title : config.title}
             subtitle={onInputStep && config.input ? config.input.subtitle(client) : config.subtitle(client)}
-            icon={onInputStep && config.input?.kind === 'meetLink' ? <LinkIcon className="w-5 h-5" /> : config.icon}
-            iconTone={onInputStep && config.input?.kind === 'meetLink' ? 'caramel' : config.tone}
+            icon={config.icon}
+            iconTone={config.tone}
             onClose={close}
             footerStart={
               config.input ? (
@@ -550,11 +442,7 @@ export function ConsultationDecisionModal({ mode, summary, onSubmit, onClose }: 
               </NeuAlert>
             )}
             {onInputStep && config.input ? (
-              config.input.kind === 'meetLink' ? (
-                <MeetLinkField id={fieldId} config={config.input} value={value} onChange={setValue} client={client} />
-              ) : (
-                <ReasonField id={fieldId} config={config.input} value={value} onChange={setValue} />
-              )
+              <ReasonField id={fieldId} config={config.input} value={value} onChange={setValue} />
             ) : (
               <>
                 <DecisionSummaryCard summary={summary} showPayment={showPayment} />

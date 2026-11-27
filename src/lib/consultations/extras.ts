@@ -1,17 +1,17 @@
 /**
  * Consultation extras shared by the client and lawyer portals (browser + server safe):
- *  - attendance: who pressed Join, the client's join window and "missed" consultations;
+ *  - attendance: who entered the in-app call, the join window and "missed" consultations;
  *  - cancellation requests: a client asks to cancel a paid (confirmed) booking and the lawyer
  *    accepts or declines.
  * Stored in the consultation's concern_summary JSON (meetingJoins, cancellationRequest,
  * cancellationRequestHistory) and served by GET /api/live/consultation-extras.
  */
 
-/** The client can join from this long before the scheduled start. */
+/** The client and the lawyer can enter the call from this long before the scheduled start. */
 export const JOIN_LEAD_MS = 60 * 60 * 1000;
 
 /**
- * Join presses are recorded from this moment on. Sessions that started earlier were never
+ * Joins are recorded from this moment on. Sessions that started earlier were never
  * tracked, so they are never marked missed.
  */
 export const ATTENDANCE_TRACKED_FROM = '2026-11-25T13:00:00.000Z';
@@ -41,12 +41,12 @@ export interface ConsultationAttendance {
   /** First join inside the window [start − 1 hour, end). */
   clientJoinedAt: string | null;
   lawyerJoinedAt: string | null;
-  /** When the client's Join button opens (start − 1 hour); null when the time is unknown. */
+  /** When the Join Call button opens (start − 1 hour); null when the time is unknown. */
   joinOpensAt: string | null;
   /** End of the session; joining closes then. */
   endsAt: string | null;
   /**
-   * Set once a confirmed session has ended and at least one side never pressed Join
+   * Set once a confirmed session has ended and at least one side never entered the call
    * (sessions before tracking began are never missed).
    */
   missed: { client: boolean; lawyer: boolean } | null;
@@ -84,7 +84,7 @@ export type ConsultationExtrasMap = Record<string, ConsultationExtras>;
 
 export type JoinState = 'unscheduled' | 'not_yet' | 'open' | 'ended';
 
-/** Where `now` falls in the client's join window. */
+/** Where `now` falls in the join window (both sides). */
 export function joinState(attendance: ConsultationAttendance | null | undefined, now: number): JoinState {
   if (!attendance?.joinOpensAt || !attendance.endsAt) return 'unscheduled';
   if (now < Date.parse(attendance.joinOpensAt)) return 'not_yet';

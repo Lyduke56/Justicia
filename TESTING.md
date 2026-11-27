@@ -228,6 +228,20 @@ This permanently erases the test account, so only do it with an account you don'
 - [ ] In Messages, replies, pins and "Seen" now load (they were blocked before this work).
 - [ ] Attaching a renamed file is refused; a voice note still sends.
 
+### In-app consultation calls (two devices: a phone on mobile data and a laptop)
+
+- [ ] Lawyer confirms a payment. **Expected:** no meeting-link step; the client is told to join in Justicia.
+- [ ] More than 1 hour before the start, **Join Call** is disabled for both sides and shows when it opens.
+- [ ] From 1 hour before: the lawyer joins first. **Expected:** "Waiting for <client>", and the client gets a
+      "<lawyer> joined the call" notification (bell + email) that opens the call.
+- [ ] The client joins. **Expected:** both see and hear each other; the timer runs.
+- [ ] Mute and camera off on one side show on the other; camera on resumes video. On a laptop, **Share your screen** works.
+- [ ] Refresh the page on one side, then rejoin. **Expected:** the call reconnects.
+- [ ] Open the same call on a second device as the same person. **Expected:** the first window says the call is open elsewhere.
+- [ ] A third account opening `/call/<id>` sees "This call is not available".
+- [ ] After the end time: nobody can join; a side that never entered is shown as **Missed**.
+- [ ] Try the phone on mobile data. If it stays on "Connecting…", set up a TURN relay (see `OPERATIONS.md`).
+
 ## 10. Before release
 
 - [ ] `npm run typecheck`, `npm run lint`, `npm test` and `npm run build` all pass (GitHub Actions runs the same).

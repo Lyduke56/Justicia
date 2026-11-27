@@ -18,7 +18,8 @@ const LAWYER = '22222222-2222-4222-8222-000000000001';
 const LAWYER_2 = '22222222-2222-4222-8222-000000000002';
 const CLIENT = '11111111-1111-4111-8111-000000000001';
 const CLIENT_2 = '11111111-1111-4111-8111-000000000002';
-const MEET = 'https://meet.google.com/abc-defg-hij';
+/** Confirmed bookings hold their in-app call link (set when the lawyer confirms the payment). */
+const callLink = (id) => `/call/${id}`;
 
 // ─── Live schema facts (from the project's PostgREST spec) ─────────────────
 const SCHEMA = {
@@ -510,7 +511,7 @@ function fixture({ now = '2026-11-21T02:00:00Z' } = {}) {
         ...(paid ? { paymentProof: { status: 'verified', documentId: null, fileName: 'r.png', reviewedAt: new clock.Date().toISOString() } } : {}),
         ...extraMeta,
       }),
-      meeting_url: status === 'confirmed' ? MEET : null,
+      meeting_url: status === 'confirmed' ? callLink(id) : null,
       cancelled_by: null,
       created_at: new clock.Date().toISOString(),
       updated_at: new clock.Date().toISOString(),
@@ -572,7 +573,7 @@ test('client requests a reschedule: proposal stored, lawyer notified, both views
   assert.deepEqual(f.errors(), []);
 });
 
-test('lawyer accepts: schedule moves, payment and Meet link unchanged, requester notified', async () => {
+test('lawyer accepts: schedule moves, payment and call link unchanged, requester notified', async () => {
   const f = fixture({ now: NOW });
   const id = f.seedConsultation({ start: ph('2026-11-25', 14) });
   const paymentBefore = JSON.stringify(f.state.tables.payments);
@@ -587,7 +588,7 @@ test('lawyer accepts: schedule moves, payment and Meet link unchanged, requester
   assert.equal(row.scheduled_time, '2026-11-27');
   assert.equal(row.proposed_start, null);
   assert.equal(row.status, 'confirmed');
-  assert.equal(row.meeting_url, MEET);
+  assert.equal(row.meeting_url, callLink(id));
   assert.equal(JSON.stringify(f.state.tables.payments), paymentBefore, 'ledger untouched');
   const m = f.meta(id);
   assert.equal(m.reschedule, null);

@@ -8,8 +8,9 @@
  * Two rules on content:
  *  - Message contents are never put in an email (attorney-client confidentiality); the email only
  *    says that a message arrived.
- *  - Google Meet links are not put in emails. Joining from Messages in Justicia is what records
- *    attendance (see the missed-consultation rule), so emails always point there.
+ *  - Consultations are held as in-app calls (/call/<id>). Entering the call in Justicia is what
+ *    records attendance (see the missed-consultation rule), so emails point to it; the page asks
+ *    the reader to sign in and only opens for the two participants.
  */
 import type { EmailContent, EmailTone } from '@/lib/email/layout';
 import { isMandatoryEmail } from '@/lib/account/preferences';
@@ -49,7 +50,7 @@ const PREPARE_STEPS = [
   'Find a quiet, private place for the call.',
   'Check your internet connection, camera and microphone.',
   'Keep the documents you want to discuss close at hand.',
-  'Join from **Messages** in Justicia, so your attendance is recorded.',
+  'Join the call in Justicia (**Join Call**, from 1 hour before the start), so your attendance is recorded.',
 ];
 
 function str(value: unknown): string {
@@ -61,13 +62,6 @@ function cleanTitle(title: string): string {
   return title.replace(/^[^\p{L}\p{N}]+/u, '').trim() || 'Justicia update';
 }
 
-/** Removes a raw meeting link sentence ("Join via Google Meet: https://…") from a body. */
-function withoutMeetLink(body: string): string {
-  return body
-    .replace(/\s*(Join via )?Google Meet( link)?:\s*\S+/gi, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-}
 
 /** When the reason is shown in its own callout, drop the "Reason: …" tail from the body. */
 function withoutReason(body: string, reason: string): string {
@@ -80,6 +74,12 @@ function messagesPath(role: EmailRole, payload: Record<string, unknown>): string
   const thread = str(payload.threadId) || str(payload.consultationId);
   const base = `/${role === 'lawyer' ? 'lawyer' : 'client'}/messages`;
   return thread ? `${base}?thread=${encodeURIComponent(thread)}` : base;
+}
+
+/** The consultation's in-app call page (sign-in required), else the fallback screen. */
+function callPath(payload: Record<string, unknown>, fallback: string): string {
+  const id = str(payload.consultationId);
+  return /^[0-9a-f-]{36}$/i.test(id) ? `/call/${id}` : fallback;
 }
 
 function specFor(input: NotificationEmailInput): Spec {
@@ -156,11 +156,10 @@ function specFor(input: NotificationEmailInput): Spec {
       return {
         subject: 'Your consultation is confirmed',
         heading: 'Your consultation is confirmed',
-        paragraphs: [withoutMeetLink(body)],
         callout: {
           tone: 'success',
           title: 'How to join',
-          body: "When it's time, open **Messages** in Justicia and press Join. We'll remind you 24 hours, 1 hour and 15 minutes before it starts.",
+          body: "The consultation is a call in Justicia. From 1 hour before the start, open **Consultations** and press **Join Call**. We'll remind you 24 hours, 1 hour and 15 minutes before it starts.",
         },
         action: { label: 'View consultation', path: '/client/consultations' },
       };
@@ -209,15 +208,23 @@ function specFor(input: NotificationEmailInput): Spec {
         subject: 'Your consultation starts in 1 hour',
         heading: 'Your consultation starts in 1 hour',
         steps: PREPARE_STEPS,
-        action: { label: 'Open Messages', path: messagesPath(role, payload) },
+        action: { label: 'Join the call', path: callPath(payload, consultations) },
       };
     case 'meeting_starting':
       return {
         subject: 'Your consultation is starting soon. Please prepare',
         heading: 'Your consultation is starting soon',
-        paragraphs: [body.replace(/\s*Open Messages to join the meeting\.?$/, '')],
-        callout: { tone: 'warning', title: 'Please get ready', body: 'Open Messages in Justicia and press **Join** when the meeting opens. Joining there is what records your attendance.' },
-        action: { label: 'Open Messages to join', path: messagesPath(role, payload) },
+        paragraphs: [body.replace(/\s*Join the call from Consultations or Messages\.?$/, '')],
+        callout: { tone: 'warning', title: 'Please get ready', body: 'Press **Join the call** below, or **Join Call** in Justicia. Entering the call is what records your attendance.' },
+        action: { label: 'Join the call', path: callPath(payload, consultations) },
+      };
+    case 'consultation_call_waiting':
+      return {
+        subject: cleanTitle(title),
+        heading: cleanTitle(title),
+        paragraphs: [body.replace(/\s*Open Consultations and press Join Call\.?$/, '')],
+        callout: { tone: 'warning', title: 'They are waiting for you', body: 'Join now so the consultation can start. Entering the call records your attendance.' },
+        action: { label: 'Join the call', path: callPath(payload, consultations) },
       };
 
     // ── Lawyer verification ──────────────────────────────────────────────────

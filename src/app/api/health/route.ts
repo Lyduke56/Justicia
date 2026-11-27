@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { emailTransport } from '@/lib/integrations/email';
 import { geminiApiKeys } from '@/lib/ai/geminiKeys';
+import { turnProvider } from '@/lib/consultations/callServer';
 
 /**
  * GET /api/health — liveness for uptime monitors. Reports only whether each dependency is
@@ -28,6 +29,8 @@ export async function GET() {
     email: emailTransport() !== 'none' ? 'configured' : 'missing',
     ai: geminiApiKeys().length > 0 ? 'configured' : 'missing',
     cron: process.env.CRON_SECRET ? 'configured' : 'missing',
+    // Consultation calls work without a TURN relay on most networks; it only helps strict ones.
+    callRelay: turnProvider() ? 'configured' : 'stun_only',
   };
   const status = database === 'ok' ? (Object.values(checks).includes('missing') ? 'degraded' : 'ok') : 'down';
   const requestId = (await headers()).get('x-request-id');

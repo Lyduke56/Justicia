@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useLiveRefresh, useViewActive } from '@/components/live/LiveProvider';
-import { recordMeetingJoinAction } from '@/app/actions/consultationExtrasActions';
+import { consultationCallPath } from '@/lib/consultations/call';
 import type { ConsultationExtras, ConsultationExtrasMap } from '@/lib/consultations/extras';
 import { useScreenLoading } from '@/components/shared/loading/ScreenReadiness';
 
@@ -14,6 +15,7 @@ const TICK_MS = 30_000;
  * on time, and the data reloads when a session ends so "missed" appears without a refresh.
  */
 export function useConsultationExtras(enabled = true) {
+  const router = useRouter();
   const active = useViewActive();
   const [extras, setExtras] = useState<ConsultationExtrasMap>({});
   const [now, setNow] = useState(() => Date.now());
@@ -62,22 +64,17 @@ export function useConsultationExtras(enabled = true) {
   }, [active, enabled, reload]);
 
   /**
-   * Opens the Meet link in a new tab (right away, so pop-up blockers allow it) and records the
-   * join in the background.
+   * Opens the in-app call page. Entering the call there (inside the join window) is what
+   * records attendance.
    */
-  const joinMeeting = useCallback(
-    (consultationId: string, url: string) => {
-      window.open(url, '_blank', 'noopener,noreferrer');
-      void recordMeetingJoinAction(consultationId)
-        .then((res) => {
-          if ('recorded' in res && res.recorded) void reload();
-        })
-        .catch(() => undefined);
+  const joinCall = useCallback(
+    (consultationId: string) => {
+      router.push(consultationCallPath(consultationId));
     },
-    [reload]
+    [router]
   );
 
   const extrasFor = useCallback((id: string | null | undefined): ConsultationExtras | null => (id ? extras[id] ?? null : null), [extras]);
 
-  return { extras, extrasFor, now, reload, joinMeeting };
+  return { extras, extrasFor, now, reload, joinCall };
 }

@@ -20,6 +20,15 @@ Written for whoever on the team is on call. Keep it short and current.
      `GEMINI_API_KEY_4`. Use keys from different Google Cloud projects; keys in the same project
      share one quota. `npm run check:gemini` tests each one.
    - Optional: `NEXT_PUBLIC_SUPPORT_EMAIL` (defaults to support@justicia.ph), `REALTIME_TOPIC_SECRET`.
+   - Consultation calls (TURN relay, strongly recommended): calls are held in Justicia at
+     `/call/<consultationId>` (WebRTC, signalling over Supabase Realtime; no Google Meet). Without a
+     TURN relay most home and office Wi-Fi still connects, but some mobile data networks block
+     direct calls. Set ONE of:
+     - Cloudflare Realtime TURN (free allowance): `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_API_TOKEN`
+       (Cloudflare dashboard → Realtime → TURN Server → create a key).
+     - Metered Open Relay (free tier): `METERED_TURN_DOMAIN` (e.g. `yourapp.metered.live`) + `METERED_TURN_API_KEY`.
+     - Any TURN server: `TURN_URLS` (comma-separated), `TURN_USERNAME`, `TURN_CREDENTIAL`.
+     Credentials are fetched per call on the server and never put in the page source.
    - Never set `JUSTICIA_DEMO` in production (demo portals are ignored in production builds anyway).
 3. Consultation reminders (24 h, 1 h and 15 minutes before; "request still pending" after 12 h)
    need a scheduler that calls the site every 5 minutes. Vercel's Hobby plan only allows daily
